@@ -1,0 +1,4 @@
+# Shell scripts are executed on Linux (helper containers, service images, git-bash).
+# Keep them LF regardless of core.autocrlf on Windows checkouts: CRLF breaks
+# `bash -s` payloads and container entrypoints (e.g. `bun run app:up` mongo init).
+*.sh text eol=lf
