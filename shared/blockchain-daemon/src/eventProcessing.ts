@@ -14,17 +14,9 @@ import { errorChain } from '@shared/rabbitmq/src/reliability';
  *   2. run the handler - every DB operation inside joins the transaction;
  *   3. commit; only then acknowledge the message.
  *
- * - duplicate delivery -> the marker insert fails -> the transaction rolls
- *   back -> nothing is applied and the message is acknowledged as a duplicate;
- * - crash/failure anywhere before commit -> everything rolls back -> the
- *   redelivered message starts from a clean slate.
- *
  * Requires MongoDB to run as a replica set (multi-document transactions).
  */
 
-// Mongoose >= 8.4: propagate the transaction session to every operation
-// executed inside `connection.transaction(...)` via AsyncLocalStorage, so the
-// repositories never have to pass a session around manually.
 mongoose.set('transactionAsyncLocalStorage', true);
 
 const PROCESSED_EVENT_MODEL_NAME = 'ProcessedEvent';
@@ -40,10 +32,8 @@ const processedEventSchema = new Schema(
   { collection: 'processed_events', versionKey: false },
 );
 
-// The unique index is what rejects duplicate deliveries.
 processedEventSchema.index({ chainId: 1, transactionHash: 1, logIndex: 1 }, { unique: true });
 
-/** Bound to the service's default mongoose connection. */
 function getProcessedEventModel(): Model<any> {
   return (
     (mongoose.models[PROCESSED_EVENT_MODEL_NAME] as Model<any>) ??
@@ -58,31 +48,17 @@ export interface ProcessableEvent {
   name?: string;
 }
 
-/** True when a unique index rejected the write (Mongo duplicate key). */
 export function isDuplicateKeyError(error: unknown): boolean {
   return errorChain(error).some((e) => e.code === 11000);
 }
 
 /**
- * True when the rejected index was an event-dedup key
- * (transactionHash/txHash + logIndex), i.e. this event was already processed.
- */
-export function isEventDuplicateKeyError(error: unknown): boolean {
-  return errorChain(error).some((e) => {
-    if (e.code !== 11000) return false;
-    const keyValue = (e.keyValue ?? {}) as Record<string, unknown>;
-    const hasTransaction = typeof keyValue.transactionHash === 'string' || typeof keyValue.txHash === 'string';
-    return hasTransaction && keyValue.logIndex !== undefined;
-  });
-}
-
-/**
- * Applies `handler` exactly once for the given event.
+ * The old implementation classified *any* duplicate-key error with
+ * transactionHash/logIndex as "duplicate delivery". That is unsafe when the
+ * handler itself has a unique index using the same business key.
  *
- * Returns `true` when the event was applied by this call, `false` when it had
- * already been processed earlier (a duplicate delivery: nothing changed).
- * Throws on real failures - in that case the marker and every partial write
- * are rolled back, so a retry starts from a clean slate.
+ * After rollback, verify the committed processed-events marker. Only a real
+ * marker means the event was already successfully accepted by another worker.
  */
 export async function processEventExactlyOnce(
   event: ProcessableEvent,
@@ -102,9 +78,23 @@ export async function processEventExactlyOnce(
 
     return true;
   } catch (error) {
-    if (isEventDuplicateKeyError(error)) {
+    if (!isDuplicateKeyError(error)) {
+      throw error;
+    }
+
+    // The transaction is already rolled back here. If the marker does not
+    // exist, this duplicate key came from the handler or another collection
+    // and the message must be retried rather than acknowledged as processed.
+    const processedEvent = await getProcessedEventModel().exists({
+      chainId: event.chainId,
+      transactionHash: event.transactionHash,
+      logIndex: event.logIndex,
+    });
+
+    if (processedEvent) {
       return false;
     }
+
     throw error;
   }
 }

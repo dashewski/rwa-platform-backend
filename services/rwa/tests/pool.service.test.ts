@@ -877,6 +877,58 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(result.incomingTranches?.[1]?.returnedAmount).toBe('150');
     expect(result.id).toBe(pool._id.toString());
   });
+  
+  test('syncPoolIncomingTrancheUpdate: accumulates partial returns for the same tranche', async () => {
+    const pool = await pools.createPool({
+      ...POOL,
+      poolAddress: POOL_ADDRESS,
+      incomingTranches: [
+        { amount: '200', expiredAt: 1717171717, returnedAmount: '50' },
+      ],
+    });
+
+    const result = await service.syncPoolIncomingTrancheUpdate({
+      emittedFrom: POOL_ADDRESS,
+      trancheIndex: 0,
+      amountAppliedToTranche: '150',
+      isNowComplete: true,
+      wasOnTime: true,
+    });
+
+    expect(pools.updatePoolByAddress).toHaveBeenCalledWith(POOL_ADDRESS, {
+      incomingTranches: [
+        { amount: '200', expiredAt: 1717171717, returnedAmount: '200' },
+      ],
+    });
+    expect(result.incomingTranches?.[0]?.returnedAmount).toBe('200');
+    expect(result.id).toBe(pool._id.toString());
+  });
+
+  test('syncPoolIncomingTrancheUpdate: rejects a tranche update that would exceed the on-chain tranche amount', async () => {
+    await pools.createPool({
+      ...POOL,
+      poolAddress: POOL_ADDRESS,
+      incomingTranches: [
+        { amount: '100', expiredAt: 1717171717, returnedAmount: '90' },
+      ],
+    });
+
+    await expect(
+      service.syncPoolIncomingTrancheUpdate({
+        emittedFrom: POOL_ADDRESS,
+        trancheIndex: 0,
+        amountAppliedToTranche: '20',
+        isNowComplete: true,
+        wasOnTime: true,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'BLOCKCHAIN_ERROR',
+      message: 'Incoming tranche 0 returned amount exceeds tranche amount',
+    });
+
+    expect(pools.updatePoolByAddress).toHaveBeenCalledTimes(0);
+  });
 
   test('syncPoolIncomingTrancheUpdate: rejects an out-of-range tranche index with 400 VALIDATION_ERROR', async () => {
     await pools.createPool({

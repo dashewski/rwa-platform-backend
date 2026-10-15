@@ -50,6 +50,7 @@ function stubExactlyOncePersistence() {
 
   (mongoose.models as any)['ProcessedEvent'] = {
     create: async () => ({}),
+    exists: async () => null,
   };
 }
 
@@ -381,6 +382,59 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client and fake service)', (
     expect(rabbit.ack).toHaveBeenCalledWith(message);
     expect(rabbit.nack).not.toHaveBeenCalled();
     expect(rabbit.sendToQueue).not.toHaveBeenCalled();
+  });
+  
+  test('consume callback: a committed duplicate marker is acknowledged without rerunning the handler', async () => {
+    await daemon.initialize();
+    const consumer = rabbit.consumerFor(QUEUE_NAME)!;
+    const processedEventModel = (mongoose.models as any)['ProcessedEvent'];
+
+    processedEventModel.create = async () => {
+      const error: any = new Error('E11000 duplicate key error');
+      error.code = 11000;
+      throw error;
+    };
+    processedEventModel.exists = async () => ({ _id: 'already-processed' });
+
+    const event = blockchainEvent('Governance_VoteCast', VOTE_CAST_DATA);
+    const message = messageFor(event);
+
+    await consumer(message);
+
+    expect(daoService.processVoteCast).toHaveBeenCalledTimes(0);
+    expect(rabbit.ack).toHaveBeenCalledTimes(1);
+    expect(rabbit.ack).toHaveBeenCalledWith(message);
+    expect(rabbit.nack).not.toHaveBeenCalled();
+  });
+
+  test('consume callback: a handler E11000 is retried when no processed-event marker exists', async () => {
+    await daemon.initialize();
+    const consumer = rabbit.consumerFor(QUEUE_NAME)!;
+    const processedEventModel = (mongoose.models as any)['ProcessedEvent'];
+
+    processedEventModel.create = async () => ({});
+    processedEventModel.exists = async () => null;
+
+    const event = blockchainEvent('Governance_VoteCast', VOTE_CAST_DATA);
+    const message = messageFor(event);
+    daoService.processVoteCast.mockImplementationOnce(async () => {
+      const error: any = new Error('E11000 handler unique index violation');
+      error.code = 11000;
+      error.keyValue = {
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+      };
+      throw error;
+    });
+
+    await consumer(message);
+
+    // The first E11000 came from the handler, not the processed-events marker,
+    // so it must be retried instead of being mistaken for a duplicate delivery.
+    expect(daoService.processVoteCast).toHaveBeenCalledTimes(2);
+    expect(rabbit.ack).toHaveBeenCalledTimes(1);
+    expect(rabbit.ack).toHaveBeenCalledWith(message);
+    expect(rabbit.nack).not.toHaveBeenCalled();
   });
 
   test('consume callback: a held event blocks the queue — no ack, no nack, no later event until it succeeds', async () => {

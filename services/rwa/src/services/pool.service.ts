@@ -1040,7 +1040,23 @@ Example response:
       });
     }
 
-    incomingTranches[event.trancheIndex].returnedAmount = event.amountAppliedToTranche;
+    // Pool_IncomingTrancheUpdate carries the amount applied by this call, not
+    // the cumulative tranche state. Accumulate it in the read model so a
+    // tranche returned in multiple calls is represented correctly.
+    const tranche = incomingTranches[event.trancheIndex];
+    const currentReturnedAmount = BigInt(tranche.returnedAmount || '0');
+    const appliedAmount = BigInt(event.amountAppliedToTranche);
+    const nextReturnedAmount = currentReturnedAmount + appliedAmount;
+
+    if (nextReturnedAmount > BigInt(tranche.amount)) {
+      throw new AppError({
+        message: `Incoming tranche ${event.trancheIndex} returned amount exceeds tranche amount`,
+        statusCode: 502,
+        code: 'BLOCKCHAIN_ERROR',
+      });
+    }
+
+    tranche.returnedAmount = nextReturnedAmount.toString();
 
     const updated = await this.poolRepository.updatePoolByAddress(event.emittedFrom, {
       incomingTranches,
