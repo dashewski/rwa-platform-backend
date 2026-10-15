@@ -11,6 +11,7 @@
     "mongoose": "8.16.4"
   },
   "devDependencies": {
-    "@types/bun": "1.2.19"
+    "@types/bun": "1.2.19",
+    "@types/amqplib": "^0.10.8"
   }
 }
