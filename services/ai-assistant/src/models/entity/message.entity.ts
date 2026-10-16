@@ -16,6 +16,14 @@ const messageSchemaDefinition = {
     enum: MessageSenderList,
     required: true,
   },
+  createdAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
 } as const;
 
 const messageSchema = new Schema(messageSchemaDefinition, {

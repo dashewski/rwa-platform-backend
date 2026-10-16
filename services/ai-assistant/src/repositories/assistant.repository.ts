@@ -9,7 +9,7 @@ export class AssistantRepository {
 
   @TraceDecorator()
   async create(data: Pick<IAssistantEntity, 'userId' | 'name' | 'contextPreferences'>) {
-    const doc = await this.model.create<typeof this.model>(data);
+    const doc = await this.model.create(data);
 
     return doc.toObject();
   }

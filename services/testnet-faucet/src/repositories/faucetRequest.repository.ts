@@ -1,5 +1,4 @@
 import { FaucetRequestEntity } from '../models/entity/faucet.entity';
-import type { IFaucetRequestEntity } from '../models/entity/faucet.entity';
 import type { FaucetTokenType } from '../models/shared/enums.model';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 
@@ -12,7 +11,7 @@ export class FaucetRequestRepository {
     amount: number;
     transactionHash: string;
   }) {
-    const request = await FaucetRequestEntity.create<IFaucetRequestEntity>(data);
+    const request = await FaucetRequestEntity.create(data);
     return request.toObject();
   }
 

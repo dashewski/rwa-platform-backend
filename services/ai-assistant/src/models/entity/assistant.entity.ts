@@ -16,6 +16,14 @@ const assistantSchemaDefinition = {
     type: [{ type: String, enum: AssistantContextList }],
     required: true,
   },
+  createdAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
 } as const;
 
 const assistantSchema = new Schema(assistantSchemaDefinition, {

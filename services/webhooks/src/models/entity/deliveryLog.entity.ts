@@ -27,7 +27,7 @@ const deliveryLogSchemaDefinition = {
   attempts: {
     type: [
       {
-        timestamp: { type: Number, default: Math.floor(Date.now() / 1000) },
+        timestamp: { type: Number, default: () => Math.floor(Date.now() / 1000) },
         statusCode: { type: Number },
         responseBody: { type: String, default: '' },
         error: { type: String, default: '' },
@@ -41,11 +41,17 @@ const deliveryLogSchemaDefinition = {
   },
   createdAt: {
     type: Number,
-    default: Math.floor(Date.now() / 1000),
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
   },
 } as const;
 
-const deliveryLogSchema = new Schema(deliveryLogSchemaDefinition);
+const deliveryLogSchema = new Schema(deliveryLogSchemaDefinition, {
+  timestamps: { currentTime: () => Math.floor(Date.now() / 1000) },
+});
 
 deliveryLogSchema.index({ endpointId: 1, eventId: 1 }, { unique: true });
 deliveryLogSchema.index({ status: 1, nextRetryAt: 1 });

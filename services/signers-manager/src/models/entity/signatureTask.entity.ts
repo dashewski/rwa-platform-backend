@@ -31,8 +31,14 @@ const signatureTaskSchemaDefinition = {
     required: true,
     default: false,
   },
-  createdAt: Number,
-  updatedAt: Number,
+  createdAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
 } as const;
 
 const signatureTaskSchema = new Schema(signatureTaskSchemaDefinition, {

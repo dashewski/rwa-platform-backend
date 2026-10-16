@@ -16,8 +16,14 @@ const signatureSchemaDefinition = {
     required: true,
     trim: true,
   },
-  createdAt: Number,
-  updatedAt: Number,
+  createdAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
 } as const;
 
 const signatureSchema = new Schema(signatureSchemaDefinition, {

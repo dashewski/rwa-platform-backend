@@ -9,7 +9,7 @@ export class MessageRepository {
 
   @TraceDecorator()
   async create(data: Pick<IMessageEntity, 'assistantId' | 'text' | 'sender'>) {
-    const doc = await this.model.create<typeof this.model>(data);
+    const doc = await this.model.create(data);
     return doc.toObject();
   }
 

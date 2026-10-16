@@ -27,8 +27,14 @@ const faucetRequestSchemaDefinition = {
     type: String,
     required: true,
   },
-  createdAt: Number,
-  updatedAt: Number,
+  createdAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
+  updatedAt: {
+    type: Number,
+    default: () => Math.floor(Date.now() / 1000),
+  },
 } as const;
 
 const faucetRequestSchema = new Schema(faucetRequestSchemaDefinition, {
