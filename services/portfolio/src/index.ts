@@ -6,10 +6,7 @@ const app = await withTraceAsync('portfolio.init.main', async () => {
     Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
-    Number(process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS),
-    Number(process.env.RABBITMQ_RECONNECT_INTERVAL),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

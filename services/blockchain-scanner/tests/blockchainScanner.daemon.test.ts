@@ -4,9 +4,9 @@
  * The daemon creates its ethers provider and EventEmitter contract in its own
  * constructor, so this harness swaps both fields for in-memory fakes right
  * after construction (see tests/fakes/ethers.fake.ts). The scanner service
- * runs for real, over fake repositories and a fake RabbitMQ client, so a scan
+ * runs for real, over fake repositories and a fake ordered publisher, so a scan
  * cycle exercises the whole chain: provider -> contract logs -> block grouping
- * -> service (persist + publish) -> scanner state. Polling is driven
+ * -> service (persist + queue) -> scanner state. Polling is driven
  * explicitly; no RPC endpoint and no broker is ever contacted. Run with
  * `bun test` from services/blockchain-scanner.
  */
@@ -16,13 +16,16 @@ import { BlockchainScannerDaemon } from '../src/daemons/blockchainScanner.daemon
 import { BlockchainScannerService } from '../src/services/blockchainScanner.service';
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
 import { createFakeEventRepository, type FakeEventRepository } from './fakes/event.repository.fake';
 import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
+import {
+  createFakeOrderedPublisher,
+  type FakeOrderedPublisher,
+} from './fakes/orderedPublisher.fake';
 import {
   createFakeEthersProvider,
   createFakeEventEmitterContract,
@@ -134,7 +137,7 @@ function rwaDeployedLog(blockNumber: number, index: number, entityId: string, bl
 function buildHarness(initScanBlockNumber: number = 0) {
   const events = createFakeEventRepository();
   const scannerState = createFakeScannerStateRepository();
-  const rabbitMQClient = createFakeRabbitMQClient();
+  const publisher = createFakeOrderedPublisher();
   const provider = createFakeEthersProvider();
   const contract = createFakeEventEmitterContract();
 
@@ -143,7 +146,7 @@ function buildHarness(initScanBlockNumber: number = 0) {
   const service = new BlockchainScannerService(
     events as unknown as EventRepository,
     scannerState as unknown as ScannerStateRepository,
-    rabbitMQClient as unknown as RabbitMQClient,
+    publisher as unknown as OrderedPublisherService,
     CHAIN_ID,
   );
 
@@ -164,7 +167,7 @@ function buildHarness(initScanBlockNumber: number = 0) {
   internals.provider = provider;
   internals.eventEmitterContract = contract;
 
-  return { daemon, internals, service, events, scannerState, rabbitMQClient, provider, contract };
+  return { daemon, internals, service, events, scannerState, publisher, provider, contract };
 }
 
 function seedScannerState(scannerState: FakeScannerStateRepository, lastScannedBlock: number): void {
@@ -191,12 +194,12 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
   let internals: DaemonInternals;
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let rabbitMQClient: FakeRabbitMQClient;
+  let publisher: FakeOrderedPublisher;
   let provider: FakeEthersProvider;
   let contract: FakeEventEmitterContract;
 
   beforeEach(() => {
-    ({ daemon, internals, events, scannerState, rabbitMQClient, provider, contract } = buildHarness());
+    ({ daemon, internals, events, scannerState, publisher, provider, contract } = buildHarness());
   });
 
   test('initialize: starts one block behind the genesis block when no state is stored yet', async () => {
@@ -358,7 +361,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
     expect(contract.queryFilter).toHaveBeenCalledTimes(1);
     expect(contract.queryFilter).toHaveBeenCalledWith('*', 1000, 1049); // batchSize 50, capped by the confirmed block
     expect(events.createEvents).toHaveBeenCalledTimes(0);
-    expect(rabbitMQClient.publish).toHaveBeenCalledTimes(0);
+    expect(publisher.publish).toHaveBeenCalledTimes(0);
     expect(internals.lastProcessedBlock).toBe(1049);
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledWith(CHAIN_ID, 1049);
     expect(await scannerState.getLastScannedBlock(CHAIN_ID)).toBe(1049);
@@ -416,13 +419,13 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
       expect(doc.address).toBe(CONTRACT_ADDRESS);
     }
 
-    expect(rabbitMQClient.published.map((message) => message.routingKey)).toEqual([
+    expect(publisher.queued.map((message) => message.routingKey)).toEqual([
       'RWA_Deployed',
       'DaoStaking_TokensStaked',
       'Pool_ReservesUpdated',
     ]);
 
-    const [first, second, third] = rabbitMQClient.published.map((message) => message.content);
+    const [first, second, third] = publisher.queued.map((message) => message.payload);
     expect(first).toMatchObject({
       chainId: CHAIN_ID,
       name: 'RWA_Deployed',
@@ -521,7 +524,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
     const testState = scannerState;
     const testProvider = provider;
     const testContract = contract;
-    const testRabbitMQ = rabbitMQClient;
+    const testPublisher = publisher;
     const testEvents = events;
 
     testInternals.lastProcessedBlock = 999;
@@ -541,9 +544,9 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
       expect(testState.updateLastScannedBlock.mock.calls).toContainEqual([CHAIN_ID, 1049]);
       expect(testInternals.lastProcessedBlock).toBeGreaterThanOrEqual(1049);
       expect(testEvents.store.size).toBe(1);
-      expect(testRabbitMQ.publish).toHaveBeenCalledTimes(1);
-      expect(testRabbitMQ.published[0].routingKey).toBe('RWA_Deployed');
-      expect(testRabbitMQ.published[0].content).toMatchObject({ blockNumber: 1000, data: { entityId: 'business-1' } });
+      expect(testPublisher.publish).toHaveBeenCalledTimes(1);
+      expect(testPublisher.queued[0].routingKey).toBe('RWA_Deployed');
+      expect(testPublisher.queued[0].payload).toMatchObject({ blockNumber: 1000, data: { entityId: 'business-1' } });
     } finally {
       await testDaemon.stop();
     }
@@ -554,10 +557,10 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
     await testDaemon.stop();
     expect(testInternals.isRunning).toBe(false);
 
-    // Let the loop drain its sleeping timer, then confirm no further publishes.
-    const publishedAfterStop = testRabbitMQ.published.length;
+    // Let the loop drain its sleeping timer, then confirm nothing else was queued.
+    const queuedAfterStop = testPublisher.queued.length;
     await Bun.sleep(SCAN_INTERVAL_MS * 4);
-    expect(testRabbitMQ.published.length).toBe(publishedAfterStop);
+    expect(testPublisher.queued.length).toBe(queuedAfterStop);
   });
 
   test('stop: is a no-op when the daemon was never started', async () => {

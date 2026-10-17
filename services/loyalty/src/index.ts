@@ -6,8 +6,6 @@ const app = await withTraceAsync('loyalty.init.main', async () => {
     Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
-    Number(process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS),
-    Number(process.env.RABBITMQ_RECONNECT_INTERVAL),
     String(process.env.SIGNERS_MANAGER_URL),
     Number(process.env.LOYALTY_REFERRAL_REWARD_PERCENTAGE),
     [
@@ -18,7 +16,6 @@ const app = await withTraceAsync('loyalty.init.main', async () => {
       },
     ],
   );
-
 });
 
 app.listen(Number(process.env.PORT));

@@ -1,24 +1,26 @@
 /**
  * Unit tests for BlockchainEventsDaemon.
  *
- * Scope: the daemon's event routing table and its queue wiring. The daemon is
- * subclassed to expose the protected getEventRouting() table; handlers are
- * invoked with synthetic BlockchainEvent objects. Real ChartsService and
- * TransactionsService instances run on fake repositories and a fake
- * RedisEventsClient (through the real ChartEventsClient); RabbitMQ is a fake
- * client. Nothing connects to a broker, Redis, or a database. Run with
- * `bun test` from services/charts.
+ * Scope: the daemon's event routing table. The RabbitMQ machinery and the
+ * delivery pipeline live in @shared/ordered-consumer (covered by the package's
+ * own tests). Real ChartsService and TransactionsService instances run on fake
+ * repositories and a fake RedisEventsClient (through the real ChartEventsClient);
+ * nothing connects to a broker, Redis, or a database. Run with `bun test` from
+ * services/charts.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { AppError } from '@shared/errors/app-errors';
-import type { BlockchainEvent } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
-import type { RedisEventsClient } from '@shared/redis-events/src/redis-events.client';
-import { BlockchainEventsDaemon } from '../src/daemons/blockchainEvents.daemon';
+import {
+  BlockchainEventsDaemon,
+  BLOCKCHAIN_EVENTS_EXCHANGE,
+  BLOCKCHAIN_EVENTS_QUEUE,
+} from '../src/daemons/blockchainEvents.daemon';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { ChartsService } from '../src/services/charts.service';
 import { TransactionsService } from '../src/services/transactions.service';
 import { ChartEventsClient } from '../src/clients/redis.client';
 import { PoolTransactionType } from '../src/models/shared/enums.model';
+import type { RedisEventsClient } from '@shared/redis-events/src/redis-events.client';
 import type { PriceDataRepository } from '../src/repositories/priceData.repository';
 import type { PoolTransactionRepository } from '../src/repositories/poolTransaction.repository';
 import { createFakePriceDataRepository, type FakePriceDataRepository } from './fakes/priceData.repository.fake';
@@ -27,20 +29,12 @@ import {
   type FakePoolTransactionRepository,
 } from './fakes/poolTransaction.repository.fake';
 import { createFakeRedisEventsClient, type FakeRedisEventsClient } from './fakes/redis-events.client.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
 const POOL_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const MINTER_ADDRESS = '0x1234567890AbcdEF1234567890aBcdef12345678';
 const BURNER_ADDRESS = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
 const EVENT_TIMESTAMP = 1_700_000_000;
 const BLOCK_NUMBER = 12_345_678;
-
-/** Exposes the protected routing table to the test. */
-class TestableBlockchainEventsDaemon extends BlockchainEventsDaemon {
-  public getRouting() {
-    return this.getEventRouting();
-  }
-}
 
 function makeEvent(name: string, data: Record<string, unknown>): BlockchainEvent {
   return {
@@ -55,21 +49,19 @@ function makeEvent(name: string, data: Record<string, unknown>): BlockchainEvent
   };
 }
 
-describe('BlockchainEventsDaemon (unit, fake rabbit client + fake redis client)', () => {
+describe('BlockchainEventsDaemon (unit, real services on fake repositories and a fake redis client)', () => {
   let priceData: FakePriceDataRepository;
   let poolTransactions: FakePoolTransactionRepository;
   let redis: FakeRedisEventsClient;
   let chartEvents: ChartEventsClient;
-  let rabbit: FakeRabbitMQClient;
-  let daemon: TestableBlockchainEventsDaemon;
-  let routing: ReturnType<TestableBlockchainEventsDaemon['getRouting']>;
+  let daemon: BlockchainEventsDaemon;
+  let routing: ReturnType<BlockchainEventsDaemon['getEventRouting']>;
 
   beforeEach(() => {
     priceData = createFakePriceDataRepository();
     poolTransactions = createFakePoolTransactionRepository();
     redis = createFakeRedisEventsClient();
     chartEvents = new ChartEventsClient(redis as unknown as RedisEventsClient);
-    rabbit = createFakeRabbitMQClient();
 
     const chartsService = new ChartsService(priceData as unknown as PriceDataRepository, chartEvents);
     const transactionsService = new TransactionsService(
@@ -77,12 +69,14 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client + fake redis client)'
       chartEvents,
     );
 
-    daemon = new TestableBlockchainEventsDaemon(
-      rabbit as unknown as RabbitMQClient,
-      chartsService,
-      transactionsService,
-    );
-    routing = daemon.getRouting();
+    // the base machinery (rabbit client, consumer service) is never touched here
+    daemon = new BlockchainEventsDaemon({} as any, {} as any, chartsService, transactionsService);
+    routing = daemon.getEventRouting();
+  });
+
+  test('the daemon declares the blockchain events exchange and the charts queue', () => {
+    expect(BLOCKCHAIN_EVENTS_EXCHANGE).toBe('blockchain.events');
+    expect(BLOCKCHAIN_EVENTS_QUEUE).toBe('blockchain.events.charts');
   });
 
   describe('event routing', () => {
@@ -235,49 +229,6 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client + fake redis client)'
       ).rejects.toThrow('redis unavailable');
 
       expect(priceData.store.size).toBe(1);
-    });
-  });
-
-  describe('queue wiring (initialize)', () => {
-    test('declares the charts queue, its retry/parked queues and binds only its events', async () => {
-      await daemon.initialize();
-
-      expect(rabbit.setupExchange).toHaveBeenCalledWith('blockchain.events', 'direct', { durable: true });
-      expect(rabbit.setupExchange).toHaveBeenCalledWith('blockchain.events.charts.retry.exchange', 'direct', {
-        durable: true,
-      });
-
-      expect(rabbit.setupQueue).toHaveBeenCalledWith('blockchain.events.charts', {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': 'blockchain.events.charts.retry.exchange',
-          'x-dead-letter-routing-key': 'blockchain.events.charts.retry',
-        },
-      });
-      expect(rabbit.setupQueue).toHaveBeenCalledWith('blockchain.events.charts.retry', {
-        durable: true,
-        arguments: {
-          'x-message-ttl': 10_000,
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': 'blockchain.events.charts',
-        },
-      });
-      expect(rabbit.setupQueue).toHaveBeenCalledWith('blockchain.events.charts.parked', { durable: true });
-
-      for (const eventName of ['Pool_ReservesUpdated', 'Pool_RwaMinted', 'Pool_RwaBurned']) {
-        expect(rabbit.bindQueue).toHaveBeenCalledWith('blockchain.events.charts', 'blockchain.events', eventName);
-      }
-      expect(rabbit.bindQueue).toHaveBeenCalledWith(
-        'blockchain.events.charts.retry',
-        'blockchain.events.charts.retry.exchange',
-        'blockchain.events.charts.retry',
-      );
-
-      // Consumption starts with a single in-flight message.
-      expect(rabbit.consume).toHaveBeenCalledTimes(1);
-      expect(rabbit.consume.mock.calls[0]?.[0]).toBe('blockchain.events.charts');
-      expect(rabbit.consume.mock.calls[0]?.[2]).toEqual({ noAck: false, prefetch: 1 });
-      expect(rabbit.consumers.has('blockchain.events.charts')).toBe(true);
     });
   });
 });

@@ -1,33 +1,19 @@
-import { BaseBlockchainDaemon } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type {
-  BlockchainDaemonRetryOptions,
-  BlockchainEvent,
-  EventRouting,
-} from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import { OrderedConsumerDaemon } from '@shared/ordered-consumer';
+import type { OrderedConsumerService } from '@shared/ordered-consumer/src/services/orderedConsumer.service';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { DaoService } from '../services/dao.service';
-import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 
-/**
- * DAO service implementation of blockchain events daemon
- *
- * Handlers forward the full blockchain event to the service: decoded contract
- * fields live in `event.data`, the envelope (chainId, transactionHash, logIndex,
- * blockNumber) sits on the root.
- */
+export const BLOCKCHAIN_EVENTS_EXCHANGE = 'blockchain.events';
+export const BLOCKCHAIN_EVENTS_QUEUE = 'blockchain.events.dao';
 
-export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
+export class BlockchainEventsDaemon extends OrderedConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
+    consumerService: OrderedConsumerService,
     private readonly daoService: DaoService,
-    retryOptions?: BlockchainDaemonRetryOptions,
   ) {
-    super(rabbitClient, 'blockchain.events.dao', retryOptions);
-  }
-
-  @TraceDecorator()
-  protected getEventRouting(): EventRouting {
-    return {
+    super(rabbitClient, consumerService, BLOCKCHAIN_EVENTS_EXCHANGE, {
       Governance_ProposalCreated: async (event: BlockchainEvent) => {
         await this.daoService.processProposalCreated(event as any);
       },
@@ -71,6 +57,6 @@ export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
       Treasury_Withdrawal: async (event: BlockchainEvent) => {
         await this.daoService.processTreasuryWithdrawal(event as any);
       },
-    };
+    });
   }
 }

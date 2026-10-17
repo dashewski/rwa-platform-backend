@@ -2,7 +2,7 @@
  * Component tests for the blockchain-scanner HTTP layer.
  *
  * The whole Elysia app is assembled in-process: real controllers and the real
- * BlockchainScannerService, with repositories and the RabbitMQ client replaced
+ * BlockchainScannerService, with repositories and the ordered publisher replaced
  * by in-memory fakes. Requests go through app.handle() — no port is bound and
  * nothing is queried over the network (createApp() is not used because it
  * connects mongoose). Run with `bun test` from services/blockchain-scanner.
@@ -14,13 +14,16 @@ import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
 import { createControllersPlugin } from '../src/plugins/controllers.plugin';
 import type { RepositoriesPlugin } from '../src/plugins/repositories.plugin';
-import type { ClientsPlugin } from '../src/plugins/clients.plugin';
+import type { OrderedPublisherPlugin } from '@shared/ordered-publisher';
 import { createFakeEventRepository, type FakeEventDoc, type FakeEventRepository } from './fakes/event.repository.fake';
 import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
+import {
+  createFakeOrderedPublisher,
+  type FakeOrderedPublisher,
+} from './fakes/orderedPublisher.fake';
 
 const CHAIN_ID = 31337;
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
@@ -49,17 +52,17 @@ function seedEvent(
 function buildApp(
   events: FakeEventRepository,
   scannerState: FakeScannerStateRepository,
-  rabbitMQClient: FakeRabbitMQClient,
+  publisher: FakeOrderedPublisher,
 ) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('eventRepository', events)
     .decorate('scannerStateRepository', scannerState);
 
-  const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', rabbitMQClient);
+  const orderedPublisherPlugin = new Elysia({ name: 'OrderedPublisher' }).decorate('orderedPublisher', publisher);
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,
-    clientsPlugin as unknown as ClientsPlugin,
+    orderedPublisherPlugin as unknown as OrderedPublisherPlugin,
     CHAIN_ID,
   );
 
@@ -80,17 +83,17 @@ async function post(app: App, path: string, body: unknown) {
   return { status: response.status, body: (await response.json()) as any };
 }
 
-describe('blockchain-scanner HTTP layer (component, fake repositories + fake rabbit client)', () => {
+describe('blockchain-scanner HTTP layer (component, fake repositories + fake publisher)', () => {
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let rabbitMQClient: FakeRabbitMQClient;
+  let publisher: FakeOrderedPublisher;
   let app: App;
 
   beforeEach(() => {
     events = createFakeEventRepository();
     scannerState = createFakeScannerStateRepository();
-    rabbitMQClient = createFakeRabbitMQClient();
-    app = buildApp(events, scannerState, rabbitMQClient);
+    publisher = createFakeOrderedPublisher();
+    app = buildApp(events, scannerState, publisher);
   });
 
   test('getEventById: returns the mapped event without Mongo internals', async () => {

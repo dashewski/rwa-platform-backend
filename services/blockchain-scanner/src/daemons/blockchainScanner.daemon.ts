@@ -6,17 +6,8 @@ import { BlockchainScannerService } from '../services/blockchainScanner.service'
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
+import type { BlockchainEvent } from '@shared/blockchain';
 
-type BlockchainEventData = {
-  chainId: number;
-  name: string;
-  blockNumber: number;
-  transactionHash: string;
-  address: string;
-  logIndex: number;
-  data: Record<string, any>;
-  timestamp: number;
-};
 
 export class BlockchainScannerDaemon {
   private provider: ethers.JsonRpcProvider;
@@ -113,7 +104,7 @@ export class BlockchainScannerDaemon {
   /**
    * Get events from block range
    */
-  private async getEvents(fromBlock: number, toBlock: number): Promise<BlockchainEventData[]> {
+  private async getEvents(fromBlock: number, toBlock: number): Promise<BlockchainEvent[]> {
     try {
       const allEvents = await this.eventEmitterContract.queryFilter('*' as any, fromBlock, toBlock);
 
@@ -130,7 +121,7 @@ export class BlockchainScannerDaemon {
 
       blockNumbers.sort((a, b) => a - b);
 
-      const processedEvents: BlockchainEventData[] = [];
+      const processedEvents: BlockchainEvent[] = [];
 
       for (const blockNumber of blockNumbers) {
         const blockEvents = eventsByBlock[blockNumber];
@@ -303,7 +294,7 @@ export class BlockchainScannerDaemon {
           acc[event.blockNumber].push(event);
           return acc;
         },
-        {} as Record<number, BlockchainEventData[]>,
+        {} as Record<number, BlockchainEvent[]>,
       );
 
       const blockNumbers = Object.keys(eventsByBlock)

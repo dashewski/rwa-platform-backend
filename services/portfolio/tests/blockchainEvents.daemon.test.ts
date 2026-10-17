@@ -1,47 +1,32 @@
 /**
  * Unit tests for BlockchainEventsDaemon.
  *
- * The daemon is subclassed in-test to expose its protected routing table, and
- * its RabbitMQ client is replaced with an in-memory fake
- * (tests/fakes/rabbitmq.client.fake.ts): no broker, no database, no network.
- * Run with `bun test` from services/portfolio.
- *
- * Scope note: the RWA_Transfer handler and the captured consumer callback are
- * invoked directly. The stock processMessage path passes through
- * processEventExactlyOnce, which opens a MongoDB transaction (replica set), so
- * duplicate-delivery filtering and retry/parking accounting stay out of these
- * isolated tests.
+ * Scope: routing only — the RWA_Transfer mapping onto PortfolioService. The
+ * RabbitMQ machinery and the delivery pipeline live in @shared/ordered-consumer
+ * (covered by the package's own tests); the service is either an in-memory spy
+ * or the real class on fake repositories, so these tests need no database, no
+ * broker and no network. Run with `bun test` from services/portfolio.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { BlockchainEventsDaemon } from '../src/daemons/blockchainEvents.daemon';
+import {
+  BlockchainEventsDaemon,
+  BLOCKCHAIN_EVENTS_EXCHANGE,
+  BLOCKCHAIN_EVENTS_QUEUE,
+} from '../src/daemons/blockchainEvents.daemon';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { PortfolioService } from '../src/services/portfolio.service';
-import type { BlockchainEvent, EventRouting } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
 import type { TokenBalanceRepository } from '../src/repositories/tokenBalance.repository';
 import type { TransactionRepository } from '../src/repositories/transaction.repository';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 import {
   createFakeTokenBalanceRepository,
   type FakeTokenBalanceRepository,
 } from './fakes/tokenBalance.repository.fake';
 import { createFakeTransactionRepository, type FakeTransactionRepository } from './fakes/transaction.repository.fake';
 
-const QUEUE_NAME = 'blockchain.events.portfolio';
-
 const FROM = '0x1111111111111111111111111111111111111111';
 const TO = '0x2222222222222222222222222222222222222222';
 const TOKEN_ADDRESS = '0x3333333333333333333333333333333333333333';
 const POOL_ADDRESS = '0x4444444444444444444444444444444444444444';
-
-/**
- * Test-only subclass: getEventRouting() is protected, so the routing table is
- * exposed through a public method instead of reaching into the instance.
- */
-class TestBlockchainEventsDaemon extends BlockchainEventsDaemon {
-  public routing(): EventRouting {
-    return this.getEventRouting();
-  }
-}
 
 /** Synthetic RWA_Transfer event as published by the blockchain scanner. */
 const TRANSFER_EVENT: BlockchainEvent = {
@@ -80,36 +65,30 @@ function createPortfolioServiceSpy() {
   };
 }
 
-function createMessage(payload: unknown) {
-  return {
-    content: Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload)),
-    properties: { headers: {} },
-  };
-}
-
-describe('BlockchainEventsDaemon (unit, fake rabbit client)', () => {
-  let rabbit: FakeRabbitMQClient;
+describe('BlockchainEventsDaemon (unit, service spy)', () => {
   let serviceSpy: ReturnType<typeof createPortfolioServiceSpy>;
-  let daemon: TestBlockchainEventsDaemon;
+  let daemon: BlockchainEventsDaemon;
 
   beforeEach(() => {
-    rabbit = createFakeRabbitMQClient();
     serviceSpy = createPortfolioServiceSpy();
-    daemon = new TestBlockchainEventsDaemon(
-      rabbit as unknown as RabbitMQClient,
-      serviceSpy as unknown as PortfolioService,
-    );
+    // the base machinery (rabbit client, consumer service) is never touched here
+    daemon = new BlockchainEventsDaemon({} as any, {} as any, serviceSpy as unknown as PortfolioService);
+  });
+
+  test('the daemon declares the blockchain events exchange and the portfolio queue', () => {
+    expect(BLOCKCHAIN_EVENTS_EXCHANGE).toBe('blockchain.events');
+    expect(BLOCKCHAIN_EVENTS_QUEUE).toBe('blockchain.events.portfolio');
   });
 
   test('routing: exposes exactly the RWA_Transfer handler', () => {
-    const routing = daemon.routing();
+    const routing = daemon.getEventRouting();
 
     expect(Object.keys(routing)).toEqual(['RWA_Transfer']);
     expect(typeof routing['RWA_Transfer']).toBe('function');
   });
 
   test('RWA_Transfer: maps the scan payload onto processTransfer', async () => {
-    await daemon.routing()['RWA_Transfer'](TRANSFER_EVENT);
+    await daemon.getEventRouting()['RWA_Transfer'](TRANSFER_EVENT);
 
     expect(serviceSpy.processTransfer).toHaveBeenCalledTimes(1);
     expect(serviceSpy.processTransfer).toHaveBeenCalledWith({
@@ -126,7 +105,7 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client)', () => {
   });
 
   test('RWA_Transfer: normalizes numeric fields before calling the service', async () => {
-    const routing = daemon.routing();
+    const routing = daemon.getEventRouting();
 
     await routing['RWA_Transfer']({ ...TRANSFER_EVENT, data: { ...TRANSFER_EVENT.data, amount: '0.5' } });
     await routing['RWA_Transfer']({ ...TRANSFER_EVENT, data: { ...TRANSFER_EVENT.data, amount: 3 } });
@@ -147,9 +126,9 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client)', () => {
       balances as unknown as TokenBalanceRepository,
       transactions as unknown as TransactionRepository,
     );
-    const wiredDaemon = new TestBlockchainEventsDaemon(rabbit as unknown as RabbitMQClient, service);
+    const wiredDaemon = new BlockchainEventsDaemon({} as any, {} as any, service);
 
-    await wiredDaemon.routing()['RWA_Transfer'](TRANSFER_EVENT);
+    await wiredDaemon.getEventRouting()['RWA_Transfer'](TRANSFER_EVENT);
 
     expect(transactions.store.size).toBe(1);
     const transaction = Array.from(transactions.store.values())[0];
@@ -177,47 +156,5 @@ describe('BlockchainEventsDaemon (unit, fake rabbit client)', () => {
     expect(balances.store.size).toBe(2);
     expect(position(FROM)?.balance).toBe(-250);
     expect(position(TO)?.balance).toBe(250);
-  });
-
-  test('initialize: declares the queue, binds RWA_Transfer and starts consuming', async () => {
-    await daemon.initialize();
-
-    // The daemon owns the blockchain.events.portfolio queue...
-    expect(rabbit.setupQueue).toHaveBeenCalledWith(QUEUE_NAME, expect.objectContaining({ durable: true }));
-    // ...binds exactly the events it routes...
-    expect(rabbit.bindQueue).toHaveBeenCalledWith(QUEUE_NAME, 'blockchain.events', 'RWA_Transfer');
-    // ...and consumes with manual acks, one message in flight.
-    expect(rabbit.consume).toHaveBeenCalledWith(QUEUE_NAME, expect.any(Function), { noAck: false, prefetch: 1 });
-    expect(typeof rabbit.consumerFor(QUEUE_NAME)).toBe('function');
-  });
-
-  test('consumer: a malformed payload is parked and acknowledged, never routed', async () => {
-    await daemon.initialize();
-    const consumer = rabbit.consumerFor(QUEUE_NAME);
-    expect(typeof consumer).toBe('function');
-
-    const message = createMessage('not-json');
-    await consumer!(message);
-
-    // The raw payload is parked for manual inspection and the original message
-    // is acknowledged (prefetch=1: never leave it unacknowledged).
-    expect(rabbit.sendToQueue).toHaveBeenCalledWith(
-      `${QUEUE_NAME}.parked`,
-      expect.objectContaining({ reason: 'Invalid payload (not a JSON event)', content: 'not-json' }),
-    );
-    expect(rabbit.ack).toHaveBeenCalledWith(message);
-    expect(serviceSpy.processTransfer).toHaveBeenCalledTimes(0);
-  });
-
-  test('consumer: an event without a handler is acknowledged without touching the service', async () => {
-    await daemon.initialize();
-    const consumer = rabbit.consumerFor(QUEUE_NAME)!;
-
-    const message = createMessage({ ...TRANSFER_EVENT, name: 'RWA_Deployed' });
-    await consumer(message);
-
-    expect(rabbit.ack).toHaveBeenCalledWith(message);
-    expect(rabbit.sendToQueue).toHaveBeenCalledTimes(0);
-    expect(serviceSpy.processTransfer).toHaveBeenCalledTimes(0);
   });
 });

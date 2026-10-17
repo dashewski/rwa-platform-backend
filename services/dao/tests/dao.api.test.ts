@@ -2,8 +2,8 @@
  * Component tests for the dao HTTP layer.
  *
  * The whole Elysia app is assembled in-process: real controllers and the real
- * DaoService, with repositories and the RabbitMQ client replaced by in-memory
- * fakes. Requests go through app.handle() — no port is bound, nothing is
+ * DaoService, with repositories replaced by in-memory fakes. Requests go
+ * through app.handle() — no port is bound, nothing is
  * queried over the network. Run with `bun test` from services/dao.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -13,7 +13,6 @@ import { AppError } from '@shared/errors/app-errors';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
 import { createControllersPlugin } from '../src/plugins/controllers.plugin';
 import type { RepositoriesPlugin } from '../src/plugins/repositories.plugin';
-import type { ClientsPlugin } from '../src/plugins/clients.plugin';
 import { createFakeProposalRepository, type FakeProposalRepository } from './fakes/proposal.repository.fake';
 import { createFakeVoteRepository, type FakeVoteRepository } from './fakes/vote.repository.fake';
 import { createFakeStakingRepository, type FakeStakingRepository } from './fakes/staking.repository.fake';
@@ -29,8 +28,6 @@ import {
   createFakeTreasuryWithdrawRepository,
   type FakeTreasuryWithdrawRepository,
 } from './fakes/treasuryWithdraw.repository.fake';
-import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-
 const PROPOSAL = {
   proposalId: '7',
   proposer: '0xAlice',
@@ -104,12 +101,7 @@ function buildApp(
     .decorate('timelockTaskRepository', timelockTasks)
     .decorate('treasuryWithdrawRepository', treasuryWithdrawals);
 
-  const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', createFakeRabbitMQClient());
-
-  const servicesPlugin = createServicesPlugin(
-    repositoriesPlugin as unknown as RepositoriesPlugin,
-    clientsPlugin as unknown as ClientsPlugin,
-  );
+  const servicesPlugin = createServicesPlugin(repositoriesPlugin as unknown as RepositoriesPlugin);
 
   return new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
 }

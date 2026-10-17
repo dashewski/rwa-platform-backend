@@ -1,24 +1,19 @@
-import { BaseBlockchainDaemon } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { BlockchainEvent, EventRouting } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import { OrderedConsumerDaemon } from '@shared/ordered-consumer';
+import type { OrderedConsumerService } from '@shared/ordered-consumer/src/services/orderedConsumer.service';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { LoyaltyService } from '../services/loyalty.service';
-import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 
-/**
- * Loyalty service implementation of blockchain events daemon
- */
+export const BLOCKCHAIN_EVENTS_EXCHANGE = 'blockchain.events';
+export const BLOCKCHAIN_EVENTS_QUEUE = 'blockchain.events.loyalty';
 
-export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
+export class BlockchainEventsDaemon extends OrderedConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
+    consumerService: OrderedConsumerService,
     private readonly loyaltyService: LoyaltyService,
   ) {
-    super(rabbitClient, 'blockchain.events.loyalty');
-  }
-
-  @TraceDecorator()
-  protected getEventRouting(): EventRouting {
-    return {
+    super(rabbitClient, consumerService, BLOCKCHAIN_EVENTS_EXCHANGE, {
       Factory_CreateRWAFeeCollected: async (event: BlockchainEvent) => {
         await this.loyaltyService.processCreateRWAFeeCollected(event as any);
       },
@@ -38,6 +33,6 @@ export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
       ReferralTreasury_Withdrawn: async (event: BlockchainEvent) => {
         await this.loyaltyService.processReferralTreasuryWithdrawn(event as any);
       },
-    };
+    });
   }
 }

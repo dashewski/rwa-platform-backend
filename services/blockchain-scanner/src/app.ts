@@ -2,8 +2,8 @@ import { Elysia } from 'elysia';
 import { monitoringPlugin } from '@shared/monitoring/src/monitoring.plugin';
 import { healthPlugin } from '@shared/monitoring/src/health.plugin';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
+import { createOrderedPublisherPlugin } from '@shared/ordered-publisher';
 import { createRepositoriesPlugin } from './plugins/repositories.plugin';
-import { createClientsPlugin } from './plugins/clients.plugin';
 import { createServicesPlugin } from './plugins/services.plugin';
 import { createControllersPlugin } from './plugins/controllers.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
@@ -13,8 +13,6 @@ export async function createApp(
   port: number,
   mongoUri: string,
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
   rpcUrl: string,
   contractAddress: string,
   blockConfirmations: number,
@@ -28,13 +26,14 @@ export async function createApp(
     async () => await createRepositoriesPlugin(mongoUri),
   );
 
-  const clientsPlugin = await withTraceAsync(
-    'blockchain-scanner.init.clients_plugin',
-    async () => await createClientsPlugin(rabbitMqUri, rabbitMqMaxReconnectAttempts, rabbitMqReconnectInterval),
+  // the publisher owns the RabbitMQ client, the exchange declaration and the outbox relay
+  const orderedPublisherPlugin = await withTraceAsync(
+    'blockchain-scanner.init.ordered_publisher_plugin',
+    async () => await createOrderedPublisherPlugin(rabbitMqUri, 'blockchain.events'),
   );
 
   const servicesPlugin = withTraceSync('blockchain-scanner.init.services_plugin', () =>
-    createServicesPlugin(repositoriesPlugin, clientsPlugin, chainId),
+    createServicesPlugin(repositoriesPlugin, orderedPublisherPlugin, chainId),
   );
 
   const controllersPlugin = withTraceSync('blockchain-scanner.init.controllers_plugin', () =>
@@ -62,7 +61,7 @@ export async function createApp(
       .use(healthPlugin)
       .onError(ErrorHandlerPlugin)
       .use(repositoriesPlugin)
-      .use(clientsPlugin)
+      .use(orderedPublisherPlugin)
       .use(servicesPlugin)
       .use(daemonsPlugin)
       .use(controllersPlugin);

@@ -1,7 +1,7 @@
 /**
- * In-memory fake of DaoService for daemon tests.
+ * In-memory fake of DaoService for blockchain-events tests.
  *
- * The daemon only forwards blockchain events to the service, so daemon tests
+ * The consumer only forwards blockchain events to the service, so its tests
  * replace DaoService with this fake to isolate routing: every process* method
  * is wrapped in bun:test mock() so interactions can be asserted.
  */

@@ -10,9 +10,10 @@
   "dependencies": {
     "@shared/monitoring": "workspace:*",
     "@shared/errors": "workspace:*",
+    "@shared/blockchain": "workspace:*",
     "@shared/openrouter": "workspace:*",
     "@shared/rabbitmq": "workspace:*",
-    "@shared/blockchain-daemon": "workspace:*",
+    "@shared/ordered-consumer": "workspace:*",
     "@shared/redis-events": "workspace:*",
     "@shared/webhooks": "workspace:*",
     "@shared/files": "workspace:*",

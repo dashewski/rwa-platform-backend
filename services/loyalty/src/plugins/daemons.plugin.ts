@@ -1,27 +1,32 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { BlockchainEventsDaemon } from '../daemons/blockchainEvents.daemon';
-import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
-import type { ClientsPlugin } from './clients.plugin';
+import type { OrderedConsumerPlugin } from '@shared/ordered-consumer';
 import type { ServicesPlugin } from './services.plugin';
+import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
+export const createDaemonsPlugin = async (
+  servicesPlugin: ServicesPlugin,
+  orderedConsumerPlugin: OrderedConsumerPlugin,
+) => {
   const blockchainEventsDaemon = withTraceSync(
     'loyalty.init.daemons.blockchain_events',
-    () => new BlockchainEventsDaemon(clientsPlugin.decorator.rabbitMQClient, servicesPlugin.decorator.loyaltyService),
+    () =>
+      new BlockchainEventsDaemon(
+        orderedConsumerPlugin.decorator.rabbitMQClient,
+        orderedConsumerPlugin.decorator.orderedConsumer,
+        servicesPlugin.decorator.loyaltyService,
+      ),
   );
 
   await withTraceAsync('loyalty.init.daemons.initialize', async () => {
-    logger.debug('Initializing daemons');
     await blockchainEventsDaemon.initialize();
-    await blockchainEventsDaemon.start();
-    logger.info('Blockchain events daemon started');
   });
 
   const plugin = withTraceSync('loyalty.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
-      .use(clientsPlugin)
       .use(servicesPlugin)
+      .use(orderedConsumerPlugin)
       .decorate('blockchainEventsDaemon', blockchainEventsDaemon)
       .onStop(async () => {
         await withTraceAsync('loyalty.stop.daemons', async () => {

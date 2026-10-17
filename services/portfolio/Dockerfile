@@ -8,7 +8,8 @@ COPY package.json .
 COPY shared/monitoring/package.json ./shared/monitoring/
 COPY shared/errors/package.json ./shared/errors/
 COPY shared/rabbitmq/package.json ./shared/rabbitmq/
-COPY shared/blockchain-daemon/package.json ./shared/blockchain-daemon/
+COPY shared/blockchain/package.json ./shared/blockchain/
+COPY shared/ordered-consumer/package.json ./shared/ordered-consumer/
 
 COPY services/portfolio/package.json ./services/portfolio/
 

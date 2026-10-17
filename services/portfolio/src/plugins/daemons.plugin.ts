@@ -1,34 +1,38 @@
 import { Elysia } from 'elysia';
 import { BlockchainEventsDaemon } from '../daemons/blockchainEvents.daemon';
-import type { ClientsPlugin } from './clients.plugin';
+import type { OrderedConsumerPlugin } from '@shared/ordered-consumer';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
+export const createDaemonsPlugin = async (
+  servicesPlugin: ServicesPlugin,
+  orderedConsumerPlugin: OrderedConsumerPlugin,
+) => {
   const blockchainEventsDaemon = withTraceSync(
     'portfolio.init.daemons.blockchain_events',
-    () => new BlockchainEventsDaemon(clientsPlugin.decorator.rabbitMQClient, servicesPlugin.decorator.portfolioService),
+    () =>
+      new BlockchainEventsDaemon(
+        orderedConsumerPlugin.decorator.rabbitMQClient,
+        orderedConsumerPlugin.decorator.orderedConsumer,
+        servicesPlugin.decorator.portfolioService,
+      ),
   );
 
-  await withTraceAsync('portfolio.init.daemons.blockchain_events_initialize', async () => {
+  await withTraceAsync('portfolio.init.daemons.initialize', async () => {
     await blockchainEventsDaemon.initialize();
-  });
-
-  await withTraceAsync('portfolio.init.daemons.blockchain_events_start', async () => {
-    await blockchainEventsDaemon.start();
   });
 
   const plugin = withTraceSync('portfolio.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
-      .use(clientsPlugin)
       .use(servicesPlugin)
+      .use(orderedConsumerPlugin)
       .decorate('blockchainEventsDaemon', blockchainEventsDaemon)
-      .onStop(async ({ decorator }) => {
-        if (decorator.blockchainEventsDaemon) {
-          await withTraceAsync('portfolio.stop.daemons.blockchain_events', async () => {
-            await decorator.blockchainEventsDaemon.stop();
-          });
-        }
+      .onStop(async () => {
+        await withTraceAsync('portfolio.stop.daemons', async () => {
+          if (blockchainEventsDaemon) {
+            await blockchainEventsDaemon.stop();
+          }
+        });
       }),
   );
 

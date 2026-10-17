@@ -1,32 +1,24 @@
 /**
  * Unit tests for BlockchainEventsDaemon.
  *
- * Scope: the daemon layer only. RabbitMQ and both services are replaced with
- * in-memory fakes (tests/fakes/*.fake.ts), so these tests need no broker and
- * no database. getEventRouting() is protected, so the daemon is subclassed to
- * expose the routing table, and handlers are invoked with a synthetic
- * BlockchainEvent. Run with `bun test` from services/rwa.
+ * Scope: routing only — which event name goes to which BusinessService /
+ * PoolService method. The RabbitMQ machinery and the delivery pipeline live in
+ * @shared/ordered-consumer (covered by the package's own tests); both services
+ * are replaced with in-memory fakes (tests/fakes/*.fake.ts), so these tests
+ * need no broker and no database. Run with `bun test` from services/rwa.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { AppError } from '@shared/errors/app-errors';
-import { BlockchainEventsDaemon } from '../src/daemons/blockchainEvents.daemon';
+import {
+  BlockchainEventsDaemon,
+  BLOCKCHAIN_EVENTS_EXCHANGE,
+  BLOCKCHAIN_EVENTS_QUEUE,
+} from '../src/daemons/blockchainEvents.daemon';
+import type { BlockchainEvent } from '@shared/blockchain';
 import type { BusinessService } from '../src/services/business.service';
 import type { PoolService } from '../src/services/pool.service';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
-import type { BlockchainEvent, EventRouting } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
 import { createFakeBusinessService, type FakeBusinessService } from './fakes/business.service.fake';
 import { createFakePoolService, type FakePoolService } from './fakes/pool.service.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-
-const QUEUE_NAME = 'blockchain.events.rwa';
-const EXCHANGE_NAME = 'blockchain.events';
-
-/** Exposes the protected routing table for direct handler invocation. */
-class TestBlockchainEventsDaemon extends BlockchainEventsDaemon {
-  public routing(): EventRouting {
-    return this.getEventRouting();
-  }
-}
 
 const BUSINESS_EVENT = 'RWA_Deployed';
 const BUSINESS_PAUSED_EVENT = 'RWA_PausedStateChanged';
@@ -59,25 +51,30 @@ function blockchainEvent(name: string, data: Record<string, unknown>): Blockchai
   };
 }
 
-describe('BlockchainEventsDaemon (unit, fake clients and services)', () => {
-  let rabbitMQ: FakeRabbitMQClient;
+describe('BlockchainEventsDaemon (unit, fake services)', () => {
   let businessService: FakeBusinessService;
   let poolService: FakePoolService;
-  let daemon: TestBlockchainEventsDaemon;
+  let daemon: BlockchainEventsDaemon;
 
   beforeEach(() => {
-    rabbitMQ = createFakeRabbitMQClient();
     businessService = createFakeBusinessService();
     poolService = createFakePoolService();
-    daemon = new TestBlockchainEventsDaemon(
-      rabbitMQ as unknown as RabbitMQClient,
+    // the base machinery (rabbit client, consumer service) is never touched here
+    daemon = new BlockchainEventsDaemon(
+      {} as any,
+      {} as any,
       businessService as unknown as BusinessService,
       poolService as unknown as PoolService,
     );
   });
 
+  test('the daemon declares the blockchain events exchange and the rwa queue', () => {
+    expect(BLOCKCHAIN_EVENTS_EXCHANGE).toBe('blockchain.events');
+    expect(BLOCKCHAIN_EVENTS_QUEUE).toBe('blockchain.events.rwa');
+  });
+
   test('getEventRouting: exposes exactly the expected event handlers', () => {
-    const routing = daemon.routing();
+    const routing = daemon.getEventRouting();
 
     const expectedEvents = [
       BUSINESS_EVENT,
@@ -88,13 +85,15 @@ describe('BlockchainEventsDaemon (unit, fake clients and services)', () => {
   });
 
   test('getEventRouting: has no handler for unknown events', () => {
-    expect(daemon.routing()['Pool_Unknown']).toBeUndefined();
+    const routing = daemon.getEventRouting() as Record<string, unknown>;
+
+    expect(routing['Pool_Unknown']).toBeUndefined();
   });
 
   test('RWA_Deployed: routes to businessService.syncAfterDeployment with event.data', async () => {
     const event = blockchainEvent(BUSINESS_EVENT, { entityId: 'business-1', emittedFrom: '0xtoken', owner: '0xowner' });
 
-    await daemon.routing()[BUSINESS_EVENT](event);
+    await daemon.getEventRouting()[BUSINESS_EVENT](event);
 
     expect(businessService.syncAfterDeployment).toHaveBeenCalledTimes(1);
     expect(businessService.syncAfterDeployment).toHaveBeenCalledWith(event.data, {
@@ -107,7 +106,7 @@ describe('BlockchainEventsDaemon (unit, fake clients and services)', () => {
   test('RWA_PausedStateChanged: routes to businessService.syncPausedState with event.data', async () => {
     const event = blockchainEvent(BUSINESS_PAUSED_EVENT, { emittedFrom: '0xtoken', isPaused: true });
 
-    await daemon.routing()[BUSINESS_PAUSED_EVENT](event);
+    await daemon.getEventRouting()[BUSINESS_PAUSED_EVENT](event);
 
     expect(businessService.syncPausedState).toHaveBeenCalledTimes(1);
     expect(businessService.syncPausedState).toHaveBeenCalledWith(event.data);
@@ -119,7 +118,7 @@ describe('BlockchainEventsDaemon (unit, fake clients and services)', () => {
     test(`${eventName}: routes to poolService.${method} with event.data`, async () => {
       const event = blockchainEvent(eventName, { entityId: 'pool-1', emittedFrom: '0xpool' });
 
-      await daemon.routing()[eventName](event);
+      await daemon.getEventRouting()[eventName](event);
 
       expect(poolService[method]).toHaveBeenCalledTimes(1);
       if (eventName === 'Pool_Deployed') {
@@ -142,23 +141,6 @@ describe('BlockchainEventsDaemon (unit, fake clients and services)', () => {
     });
     const event = blockchainEvent('Pool_ReservesUpdated', { emittedFrom: '0xpool' });
 
-    await expect(daemon.routing()['Pool_ReservesUpdated'](event)).rejects.toBe(serviceError);
-  });
-
-  test('initialize: binds the queue to every routed event and starts consuming', async () => {
-    await daemon.initialize();
-
-    expect(rabbitMQ.setupExchange).toHaveBeenCalledWith(EXCHANGE_NAME, 'direct', { durable: true });
-    expect(rabbitMQ.setupQueue).toHaveBeenCalledWith(QUEUE_NAME, expect.any(Object));
-
-    const routedEvents = Object.keys(daemon.routing());
-    for (const eventName of routedEvents) {
-      expect(rabbitMQ.bindQueue).toHaveBeenCalledWith(QUEUE_NAME, EXCHANGE_NAME, eventName);
-    }
-
-    expect(rabbitMQ.consume).toHaveBeenCalledTimes(1);
-    expect(rabbitMQ.consume.mock.calls[0][0]).toBe(QUEUE_NAME);
-    expect(typeof rabbitMQ.consume.mock.calls[0][1]).toBe('function');
-    expect(rabbitMQ.consumedHandlers.has(QUEUE_NAME)).toBe(true);
+    await expect(daemon.getEventRouting()['Pool_ReservesUpdated'](event)).rejects.toBe(serviceError);
   });
 });

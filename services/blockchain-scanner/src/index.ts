@@ -6,8 +6,6 @@ const app = await withTraceAsync('blockchain-scanner.init.main', async () => {
     Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
-    Number(process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS),
-    Number(process.env.RABBITMQ_RECONNECT_INTERVAL),
     String(process.env.RPC_URL),
     String(process.env.EVENT_EMITTER_ADDRESS),
     Number(process.env.BLOCK_CONFIRMATIONS),

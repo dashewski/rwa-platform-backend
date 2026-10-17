@@ -1,12 +1,12 @@
 import { Elysia } from 'elysia';
 import { BlockchainScannerService } from '../services/blockchainScanner.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
-import type { ClientsPlugin } from './clients.plugin';
+import type { OrderedPublisherPlugin } from '@shared/ordered-publisher';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
 export const createServicesPlugin = (
   repositoriesPlugin: RepositoriesPlugin,
-  clientsPlugin: ClientsPlugin,
+  orderedPublisherPlugin: OrderedPublisherPlugin,
   chainId: number,
 ) => {
   const blockchainScannerService = withTraceSync(
@@ -15,7 +15,7 @@ export const createServicesPlugin = (
       new BlockchainScannerService(
         repositoriesPlugin.decorator.eventRepository,
         repositoriesPlugin.decorator.scannerStateRepository,
-        clientsPlugin.decorator.rabbitMQClient,
+        orderedPublisherPlugin.decorator.orderedPublisher,
         chainId,
       ),
   );
@@ -23,7 +23,7 @@ export const createServicesPlugin = (
   const plugin = withTraceSync('blockchain-scanner.init.services.plugin', () =>
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
-      .use(clientsPlugin)
+      .use(orderedPublisherPlugin)
       .decorate('blockchainScannerService', blockchainScannerService),
   );
 

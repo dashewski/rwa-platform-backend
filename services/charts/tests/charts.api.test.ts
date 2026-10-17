@@ -23,7 +23,6 @@ import {
 } from './fakes/poolTransaction.repository.fake';
 import { createFakeChartEventsClient, type FakeChartEventsClient } from './fakes/chart-events.client.fake';
 import { createFakeRedisEventsClient, type FakeRedisEventsClient } from './fakes/redis-events.client.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
 const POOL_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const OTHER_POOL_ADDRESS = '0x0000000000000000000000000000000000000001';
@@ -34,14 +33,12 @@ function buildApp(
   poolTransactions: FakePoolTransactionRepository,
   chartEvents: FakeChartEventsClient,
   redis: FakeRedisEventsClient,
-  rabbit: FakeRabbitMQClient,
 ) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('priceDataRepository', priceData)
     .decorate('poolTransactionRepository', poolTransactions);
 
   const clientsPlugin = new Elysia({ name: 'Clients' })
-    .decorate('rabbitMQClient', rabbit)
     .decorate('redisEventsClient', redis)
     .decorate('chartEventsClient', chartEvents);
 
@@ -72,7 +69,6 @@ describe('charts HTTP layer (component, fake repositories + fake clients)', () =
   let poolTransactions: FakePoolTransactionRepository;
   let chartEvents: FakeChartEventsClient;
   let redis: FakeRedisEventsClient;
-  let rabbit: FakeRabbitMQClient;
   let app: App;
 
   beforeEach(() => {
@@ -80,8 +76,7 @@ describe('charts HTTP layer (component, fake repositories + fake clients)', () =
     poolTransactions = createFakePoolTransactionRepository();
     chartEvents = createFakeChartEventsClient();
     redis = createFakeRedisEventsClient();
-    rabbit = createFakeRabbitMQClient();
-    app = buildApp(priceData, poolTransactions, chartEvents, redis, rabbit);
+    app = buildApp(priceData, poolTransactions, chartEvents, redis);
   });
 
   /** Writes a price row straight into the fake repository. */

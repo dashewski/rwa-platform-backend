@@ -1,7 +1,7 @@
 import { AppError } from '@shared/errors/app-errors';
 import { EventRepository } from '../repositories/event.repository';
 import { ScannerStateRepository } from '../repositories/scannerState.repository';
-import { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -13,12 +13,10 @@ import { setSpanAttributes } from '@shared/monitoring/src/tracing';
  */
 
 export class BlockchainScannerService {
-  private readonly EXCHANGE_NAME = 'blockchain.events';
-
   constructor(
     private readonly eventRepository: EventRepository,
     private readonly scannerStateRepository: ScannerStateRepository,
-    private readonly rabbitMQClient: RabbitMQClient,
+    private readonly orderedPublisher: OrderedPublisherService,
     private readonly chainId: number,
   ) {}
 
@@ -105,7 +103,7 @@ export class BlockchainScannerService {
   }
 
   /**
-   * Apply blockchain events from a single block - save to DB and publish to RabbitMQ
+   * Apply blockchain events from a single block - save to DB and queue them for delivery
    */
   @TraceDecorator()
   @MetricsDecorator()
@@ -148,11 +146,14 @@ export class BlockchainScannerService {
       // Save new events to database
       const savedEvents = await this.eventRepository.createEvents(events);
 
-      // Publish events to RabbitMQ.
-      // The AmqplibInstrumentation auto-creates a producer span per publish and
-      // propagates traceparent via AMQP headers so the consumer continues the trace.
       for (const event of savedEvents) {
-        await this.rabbitMQClient.publish(this.EXCHANGE_NAME, event.name, event);
+        // chain-stable messageId: a re-scanned block yields the same id and the
+        // consumer inbox turns the duplicate delivery into a no-op
+        await this.orderedPublisher.publish(
+          event.name,
+          event,
+          `${this.chainId}:${event.transactionHash}:${event.logIndex}`,
+        );
         metrics.counter('events_processed_total', {
           event_name: event.name,
           chain_id: String(this.chainId),
@@ -160,7 +161,7 @@ export class BlockchainScannerService {
       }
     }
 
-    // Update scanner state only after successful publish
+    // Update scanner state only after every event of the block is queued
     await this.scannerStateRepository.updateLastScannedBlock(this.chainId, blockNumber);
   }
 

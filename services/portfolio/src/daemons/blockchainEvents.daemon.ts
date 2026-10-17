@@ -1,25 +1,19 @@
-import { BaseBlockchainDaemon } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { BlockchainEvent } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { EventRouting } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import { OrderedConsumerDaemon } from '@shared/ordered-consumer';
+import type { OrderedConsumerService } from '@shared/ordered-consumer/src/services/orderedConsumer.service';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { PortfolioService } from '../services/portfolio.service';
-import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 
-/**
- * Portfolio service implementation of blockchain events daemon
- */
+export const BLOCKCHAIN_EVENTS_EXCHANGE = 'blockchain.events';
+export const BLOCKCHAIN_EVENTS_QUEUE = 'blockchain.events.portfolio';
 
-export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
+export class BlockchainEventsDaemon extends OrderedConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
+    consumerService: OrderedConsumerService,
     private readonly portfolioService: PortfolioService,
   ) {
-    super(rabbitClient, 'blockchain.events.portfolio');
-  }
-
-  @TraceDecorator()
-  protected getEventRouting(): EventRouting {
-    return {
+    super(rabbitClient, consumerService, BLOCKCHAIN_EVENTS_EXCHANGE, {
       RWA_Transfer: async (event: BlockchainEvent) => {
         const {
           emittedFrom, // rwa address
@@ -42,6 +36,6 @@ export class BlockchainEventsDaemon extends BaseBlockchainDaemon {
           poolAddress: pool,
         });
       },
-    };
+    });
   }
 }

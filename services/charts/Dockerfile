@@ -8,9 +8,10 @@ COPY package.json .
 COPY shared/monitoring/package.json ./shared/monitoring/
 COPY shared/rabbitmq/package.json ./shared/rabbitmq/
 COPY shared/redis-events/package.json ./shared/redis-events/
-COPY shared/blockchain-daemon/package.json ./shared/blockchain-daemon/
 COPY shared/errors/package.json ./shared/errors/
 COPY services/charts/package.json ./services/charts/
+COPY shared/blockchain/package.json ./shared/blockchain/
+COPY shared/ordered-consumer/package.json ./shared/ordered-consumer/
 
 COPY bun.lockb .
 

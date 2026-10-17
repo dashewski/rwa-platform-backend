@@ -4,14 +4,20 @@ import { BlockchainEventsDaemon } from '../daemons/blockchainEvents.daemon';
 import { EvaluationResultsDaemon } from '../daemons/evaluationResults.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
+import type { OrderedConsumerPlugin } from '@shared/ordered-consumer';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
+export const createDaemonsPlugin = async (
+  clientsPlugin: ClientsPlugin,
+  servicesPlugin: ServicesPlugin,
+  orderedConsumerPlugin: OrderedConsumerPlugin,
+) => {
   const blockchainEventsDaemon = withTraceSync(
     'rwa.init.daemons.blockchain_events',
     () =>
       new BlockchainEventsDaemon(
-        clientsPlugin.decorator.rabbitMQClient,
+        orderedConsumerPlugin.decorator.rabbitMQClient,
+        orderedConsumerPlugin.decorator.orderedConsumer,
         servicesPlugin.decorator.businessService,
         servicesPlugin.decorator.poolService,
       ),
@@ -28,17 +34,15 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
   );
 
   await withTraceAsync('rwa.init.daemons.initialize', async () => {
-    logger.debug('Initializing daemons');
     await blockchainEventsDaemon.initialize();
-    await blockchainEventsDaemon.start();
     await evaluationResultsDaemon.initialize();
-    logger.info('Blockchain events daemon started, evaluation results daemon initialized');
   });
 
   const plugin = withTraceSync('rwa.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
       .use(clientsPlugin)
       .use(servicesPlugin)
+      .use(orderedConsumerPlugin)
       .decorate('blockchainEventsDaemon', blockchainEventsDaemon)
       .decorate('evaluationResultsDaemon', evaluationResultsDaemon)
       .onStop(async () => {

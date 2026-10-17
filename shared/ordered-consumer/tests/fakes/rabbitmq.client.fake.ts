@@ -1,26 +1,28 @@
 /**
- * In-memory fake of RabbitMQClient for daemon tests.
+ * In-memory fake of RabbitMQClient for unit tests.
  *
  * The real client owns an amqp-connection-manager connection and channel.
- * Tests use this fake to keep the daemon isolated: no broker, no network.
+ * Tests use this fake to keep the clients isolated: no broker, no network.
  * The public API mirrors shared/rabbitmq/src/rabbitmq.client.ts, and every
  * method is wrapped in bun:test mock() so interactions can be asserted.
  *
- * consume() records the registered handler per queue; a test can pick it up
- * with consumerFor(queue) and feed it a synthetic message built with
- * buildMessage().
+ * consume() records the registered handler per queue and returns a consumer
+ * tag; a test can pick the handler up with consumerFor(queue) and feed it a
+ * synthetic message, and cancelConsumer(tag) removes the consumer like the
+ * halt path of the ordered consumer does.
  */
 import { mock } from 'bun:test';
 
 export type FakeConsumeMessage = {
   content: Buffer;
-  properties?: { headers?: Record<string, unknown> };
+  properties?: { messageId?: string; headers?: Record<string, unknown> };
 };
 
 export type FakeConsumeHandler = (message: FakeConsumeMessage | null) => Promise<void>;
 
 export function createFakeRabbitMQClient() {
   const consumers = new Map<string, FakeConsumeHandler>();
+  const consumerTags = new Map<string, string>();
   const state = { connected: false };
 
   const client = {
@@ -37,15 +39,15 @@ export function createFakeRabbitMQClient() {
       state.connected = false;
     }),
 
-    setupExchange: mock(async (_exchange: string, _type: string, _options?: unknown) => {}),
+    setupQueue: mock(async (_queue: string, _options?: any) => {}),
 
-    setupQueue: mock(async (_queue: string, _options?: unknown) => {}),
+    setupExchange: mock(async (_exchange: string, _type: string, _options?: any) => {}),
 
     bindQueue: mock(async (_queue: string, _exchange: string, _pattern: string) => {}),
 
-    publish: mock(async (_exchange: string, _routingKey: string, _content: unknown, _options?: unknown) => {}),
+    publish: mock(async (_exchange: string, _routingKey: string, _content: any, _options?: any) => {}),
 
-    sendToQueue: mock(async (_queue: string, _content: unknown, _options?: unknown) => {}),
+    sendToQueue: mock(async (_queue: string, _content: any, _options?: any) => {}),
 
     consume: mock(
       async (
@@ -53,7 +55,10 @@ export function createFakeRabbitMQClient() {
         handler: FakeConsumeHandler,
         _options?: { noAck?: boolean; prefetch?: number },
       ) => {
+        const consumerTag = `consumer-${queue}-${consumerTags.size + 1}`;
         consumers.set(queue, handler);
+        consumerTags.set(consumerTag, queue);
+        return consumerTag;
       },
     ),
 
@@ -61,11 +66,13 @@ export function createFakeRabbitMQClient() {
 
     nack: mock(async (_message: FakeConsumeMessage, _requeue: boolean = true) => {}),
 
-    /** Builds a synthetic ConsumeMessage-like object around raw bytes or a JSON payload. */
-    buildMessage(payload: unknown): FakeConsumeMessage {
-      const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
-      return { content: Buffer.from(raw), properties: { headers: {} } };
-    },
+    cancelConsumer: mock(async (consumerTag: string) => {
+      const queue = consumerTags.get(consumerTag);
+      if (queue) {
+        consumers.delete(queue);
+        consumerTags.delete(consumerTag);
+      }
+    }),
   };
 
   return client;

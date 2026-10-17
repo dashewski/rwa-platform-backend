@@ -1,226 +1,109 @@
 /**
- * Component tests for the loyalty blockchain-events daemon.
+ * Unit tests for BlockchainEventsDaemon.
  *
- * The daemon is subclassed only to expose its protected routing table; the
- * RabbitMQ client is replaced by an in-memory fake whose consume() captures
- * the callback (replayed with synthetic messages) and the LoyaltyService by a
- * stub with mock methods. No broker, no database and no publish happens.
- *
- * The exactly-once wrapper of the base class (shared/blockchain-daemon) opens
- * a MongoDB transaction per message, so the consumption path is exercised via
- * the routing table plus the ack/park branches that run before the
- * transaction; the five handlers themselves are asserted in isolation.
+ * Scope: routing only — which event name goes to which LoyaltyService method.
+ * The RabbitMQ machinery and the delivery pipeline live in
+ * @shared/ordered-consumer (covered by the package's own tests); here the
+ * LoyaltyService is replaced with an in-memory fake, so these tests need no
+ * broker and no database.
  * Run with `bun test` from services/loyalty.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { AppError } from '@shared/errors/app-errors';
-import type { BlockchainEvent, EventRouting } from '@shared/blockchain-daemon/src/baseBlockchain.daemon';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import {
+  BlockchainEventsDaemon,
+  BLOCKCHAIN_EVENTS_EXCHANGE,
+  BLOCKCHAIN_EVENTS_QUEUE,
+} from '../src/daemons/blockchainEvents.daemon';
+import type { BlockchainEvent } from '@shared/blockchain';
 import type { LoyaltyService } from '../src/services/loyalty.service';
-import { BlockchainEventsDaemon } from '../src/daemons/blockchainEvents.daemon';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
-const QUEUE_NAME = 'blockchain.events.loyalty';
-
-const EVENT_ROUTING_CASES = [
-  { event: 'Factory_CreateRWAFeeCollected', serviceMethod: 'processCreateRWAFeeCollected' },
-  { event: 'Factory_CreatePoolFeeCollected', serviceMethod: 'processCreatePoolFeeCollected' },
-  { event: 'Pool_RwaMinted', serviceMethod: 'processRwaMinted' },
-  { event: 'Pool_RwaBurned', serviceMethod: 'processRwaBurned' },
-  { event: 'ReferralTreasury_Withdrawn', serviceMethod: 'processReferralTreasuryWithdrawn' },
-] as const;
+const ROUTING: Array<[string, keyof ReturnType<typeof createFakeLoyaltyService>]> = [
+  ['Factory_CreateRWAFeeCollected', 'processCreateRWAFeeCollected'],
+  ['Factory_CreatePoolFeeCollected', 'processCreatePoolFeeCollected'],
+  ['Pool_RwaMinted', 'processRwaMinted'],
+  ['Pool_RwaBurned', 'processRwaBurned'],
+  ['ReferralTreasury_Withdrawn', 'processReferralTreasuryWithdrawn'],
+];
 
 function createFakeLoyaltyService() {
   return {
-    processCreateRWAFeeCollected: mock(async (_event: unknown) => {}),
-    processCreatePoolFeeCollected: mock(async (_event: unknown) => {}),
-    processRwaMinted: mock(async (_event: unknown) => {}),
-    processRwaBurned: mock(async (_event: unknown) => {}),
-    processReferralTreasuryWithdrawn: mock(async (_event: unknown) => {}),
+    processCreateRWAFeeCollected: mock(async (_event: unknown): Promise<void> => {}),
+    processCreatePoolFeeCollected: mock(async (_event: unknown): Promise<void> => {}),
+    processRwaMinted: mock(async (_event: unknown): Promise<void> => {}),
+    processRwaBurned: mock(async (_event: unknown): Promise<void> => {}),
+    processReferralTreasuryWithdrawn: mock(async (_event: unknown): Promise<void> => {}),
   };
 }
 
 type FakeLoyaltyService = ReturnType<typeof createFakeLoyaltyService>;
 
-class TestableBlockchainEventsDaemon extends BlockchainEventsDaemon {
-  /** Exposes the protected routing table so handlers can be invoked directly. */
-  routing(): EventRouting {
-    return this.getEventRouting();
-  }
+const EVENT: BlockchainEvent = {
+  chainId: 97,
+  name: 'Pool_RwaMinted',
+  blockNumber: 123456,
+  transactionHash: '0x' + 'ab'.repeat(32),
+  address: '0x' + '44'.repeat(20),
+  logIndex: 7,
+  data: {
+    sender: '0x' + '11'.repeat(20),
+    minter: '0x' + '11'.repeat(20),
+    token: '0x' + '22'.repeat(20),
+    amount: '1000',
+    feePaid: '1000',
+  },
+  timestamp: 1730000000,
+};
+
+function totalServiceCalls(loyaltyService: FakeLoyaltyService): number {
+  return Object.values(loyaltyService).reduce((sum, method) => sum + method.mock.calls.length, 0);
 }
 
-function buildEvent(name: string): BlockchainEvent {
-  return {
-    chainId: 97,
-    name,
-    blockNumber: 123456,
-    transactionHash: '0x' + 'ab'.repeat(32),
-    address: '0x' + '44'.repeat(20),
-    logIndex: 7,
-    data: {
-      sender: '0x' + '11'.repeat(20),
-      minter: '0x' + '11'.repeat(20),
-      burner: '0x' + '11'.repeat(20),
-      user: '0x' + '11'.repeat(20),
-      token: '0x' + '22'.repeat(20),
-      holdToken: '0x' + '22'.repeat(20),
-      amount: '1000',
-      feePaid: '1000',
-      holdFeePaid: '600',
-      bonusFeePaid: '400',
-    },
-    timestamp: 1730000000,
-  };
-}
-
-describe('BlockchainEventsDaemon (component, fake RabbitMQ client and service stub)', () => {
-  let rabbit: FakeRabbitMQClient;
-  let service: FakeLoyaltyService;
-  let daemon: TestableBlockchainEventsDaemon;
+describe('BlockchainEventsDaemon (unit, fake service)', () => {
+  let loyaltyService: FakeLoyaltyService;
+  let daemon: BlockchainEventsDaemon;
 
   beforeEach(() => {
-    rabbit = createFakeRabbitMQClient();
-    service = createFakeLoyaltyService();
-    daemon = new TestableBlockchainEventsDaemon(
-      rabbit as unknown as RabbitMQClient,
-      service as unknown as LoyaltyService,
-    );
+    loyaltyService = createFakeLoyaltyService();
+    // the base machinery (rabbit client, consumer service) is never touched here
+    daemon = new BlockchainEventsDaemon({} as any, {} as any, loyaltyService as unknown as LoyaltyService);
   });
 
-  function methods(): Record<string, ReturnType<typeof mock>> {
-    return service as unknown as Record<string, ReturnType<typeof mock>>;
-  }
-
-  test('registers exactly the five loyalty events', () => {
-    expect(Object.keys(daemon.routing()).sort()).toEqual(EVENT_ROUTING_CASES.map((c) => c.event).sort());
+  test('the daemon declares the blockchain events exchange and the loyalty queue', () => {
+    expect(BLOCKCHAIN_EVENTS_EXCHANGE).toBe('blockchain.events');
+    expect(BLOCKCHAIN_EVENTS_QUEUE).toBe('blockchain.events.loyalty');
   });
 
-  for (const { event, serviceMethod } of EVENT_ROUTING_CASES) {
-    test(`routes ${event} to loyaltyService.${serviceMethod} with the full event`, async () => {
-      const blockchainEvent = buildEvent(event);
-
-      await daemon.routing()[event](blockchainEvent);
-
-      expect(methods()[serviceMethod]).toHaveBeenCalledTimes(1);
-      expect(methods()[serviceMethod]).toHaveBeenCalledWith(blockchainEvent);
-
-      for (const other of EVENT_ROUTING_CASES) {
-        if (other.serviceMethod !== serviceMethod) {
-          expect(methods()[other.serviceMethod]).toHaveBeenCalledTimes(0);
-        }
-      }
-    });
-  }
-
-  test('a handler settles only after the service call resolves', async () => {
-    let resolveService: () => void = () => {};
-    service.processRwaMinted.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveService = resolve;
-        }),
-    );
-
-    const handlerPromise = daemon.routing()['Pool_RwaMinted'](buildEvent('Pool_RwaMinted'));
-    let settled = false;
-    void handlerPromise.then(() => {
-      settled = true;
-    });
-
-    await Promise.resolve();
-    expect(settled).toBe(false);
-
-    resolveService();
-    await handlerPromise;
-    expect(settled).toBe(true);
+  test('routing: the loyalty queue binds exactly these events', () => {
+    expect(Object.keys(daemon.getEventRouting())).toEqual(ROUTING.map(([eventName]) => eventName));
   });
 
-  test('propagates a service rejection to the caller', async () => {
-    const failure = new AppError({ message: 'processing failed', statusCode: 503, code: 'SERVICE_UNAVAILABLE' });
-    service.processReferralTreasuryWithdrawn.mockRejectedValueOnce(failure);
+  test('routing: dispatches every event name to its LoyaltyService method and nothing else', async () => {
+    const routing = daemon.getEventRouting();
+
+    for (const [name, method] of ROUTING) {
+      await routing[name]({ ...EVENT, name });
+
+      expect(loyaltyService[method]).toHaveBeenCalledTimes(1);
+      expect(loyaltyService[method]).toHaveBeenCalledWith({ ...EVENT, name });
+    }
+
+    // exactly one service call per delivered message — no double dispatch
+    expect(totalServiceCalls(loyaltyService)).toBe(ROUTING.length);
+  });
+
+  test('routing: forwards the envelope and the decoded data untouched', async () => {
+    await daemon.getEventRouting()[EVENT.name](EVENT);
+
+    const forwarded = loyaltyService.processRwaMinted.mock.calls[0][0];
+    expect(forwarded).toEqual(EVENT);
+    expect((forwarded as BlockchainEvent).data).toEqual(EVENT.data);
+  });
+
+  test('routing: a service failure propagates to the retry loop', async () => {
+    loyaltyService.processReferralTreasuryWithdrawn.mockRejectedValueOnce(new Error('db is down'));
 
     await expect(
-      daemon.routing()['ReferralTreasury_Withdrawn'](buildEvent('ReferralTreasury_Withdrawn')),
-    ).rejects.toMatchObject({
-      statusCode: 503,
-      code: 'SERVICE_UNAVAILABLE',
-    });
-  });
-
-  describe('initialize and message consumption', () => {
-    test('declares the loyalty queues and binds every routed event', async () => {
-      await daemon.initialize();
-
-      expect(rabbit.setupExchange.mock.calls.map((call) => call[0])).toEqual([
-        'blockchain.events',
-        `${QUEUE_NAME}.retry.exchange`,
-      ]);
-
-      expect(rabbit.setupQueue.mock.calls.map((call) => call[0])).toEqual([
-        QUEUE_NAME,
-        `${QUEUE_NAME}.retry`,
-        `${QUEUE_NAME}.parked`,
-      ]);
-
-      expect(rabbit.setupQueue).toHaveBeenCalledWith(QUEUE_NAME, {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': `${QUEUE_NAME}.retry.exchange`,
-          'x-dead-letter-routing-key': `${QUEUE_NAME}.retry`,
-        },
-      });
-
-      const eventBindings = rabbit.bindQueue.mock.calls
-        .filter((call) => call[1] === 'blockchain.events')
-        .map((call) => call[2]);
-      expect(eventBindings).toHaveLength(EVENT_ROUTING_CASES.length);
-      expect(new Set(eventBindings)).toEqual(new Set(EVENT_ROUTING_CASES.map((c) => c.event)));
-
-      expect(rabbit.bindQueue).toHaveBeenCalledWith(
-        `${QUEUE_NAME}.retry`,
-        `${QUEUE_NAME}.retry.exchange`,
-        `${QUEUE_NAME}.retry`,
-      );
-
-      expect(rabbit.consume).toHaveBeenCalledTimes(1);
-      const [queue, handler, options] = rabbit.consume.mock.calls[0];
-      expect(queue).toBe(QUEUE_NAME);
-      expect(typeof handler).toBe('function');
-      expect(options).toEqual({ noAck: false, prefetch: 1 });
-      expect(typeof rabbit.consumerFor(QUEUE_NAME)).toBe('function');
-    });
-
-    test('replays a non-JSON message to the parked queue and acknowledges it', async () => {
-      await daemon.initialize();
-      const handler = rabbit.consumerFor(QUEUE_NAME)!;
-      const message = rabbit.buildMessage('this is not json');
-
-      await handler(message);
-
-      expect(rabbit.sendToQueue).toHaveBeenCalledTimes(1);
-      const [parkedQueue, payload] = rabbit.sendToQueue.mock.calls[0];
-      expect(parkedQueue).toBe(`${QUEUE_NAME}.parked`);
-      expect(payload).toMatchObject({
-        content: 'this is not json',
-        reason: expect.any(String),
-        parkedAt: expect.any(Number),
-      });
-      expect(rabbit.ack).toHaveBeenCalledWith(message);
-      expect(rabbit.nack).toHaveBeenCalledTimes(0);
-    });
-
-    test('acknowledges an event without a registered handler and never calls the service', async () => {
-      await daemon.initialize();
-      const handler = rabbit.consumerFor(QUEUE_NAME)!;
-      const message = rabbit.buildMessage(buildEvent('Something_Unknown'));
-
-      await handler(message);
-
-      expect(rabbit.ack).toHaveBeenCalledWith(message);
-      expect(rabbit.sendToQueue).toHaveBeenCalledTimes(0);
-      for (const { serviceMethod } of EVENT_ROUTING_CASES) {
-        expect(methods()[serviceMethod]).toHaveBeenCalledTimes(0);
-      }
-    });
+      daemon.getEventRouting()['ReferralTreasury_Withdrawn']({ ...EVENT, name: 'ReferralTreasury_Withdrawn' }),
+    ).rejects.toThrow('db is down');
   });
 });

@@ -34,7 +34,6 @@ import {
   FAKE_SIGNERS_TASK_ID,
   type FakeSignersManagerClient,
 } from './fakes/signersManager.client.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
 const CHAIN_ID = '97';
 const UNSUPPORTED_CHAIN_ID = '56';
@@ -67,7 +66,6 @@ type FakeRepositories = {
 
 type FakeClients = {
   signers: FakeSignersManagerClient;
-  rabbit: FakeRabbitMQClient;
 };
 
 function buildApp(repositories: FakeRepositories, clients: FakeClients) {
@@ -79,10 +77,8 @@ function buildApp(repositories: FakeRepositories, clients: FakeClients) {
     .decorate('commissionHistoryRepository', repositories.commissions)
     .decorate('referrerWithdrawRepository', repositories.withdraws);
 
-  // Stand-in for createClientsPlugin: same decorator names, no RabbitMQ connection.
-  const clientsPlugin = new Elysia({ name: 'Clients' })
-    .decorate('signersManagerClient', clients.signers)
-    .decorate('rabbitMQClient', clients.rabbit);
+  // Stand-in for createClientsPlugin: same decorator names, no network.
+  const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('signersManagerClient', clients.signers);
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,
@@ -123,7 +119,6 @@ describe('loyalty HTTP layer (component, fake repositories and clients)', () => 
     };
     clients = {
       signers: createFakeSignersManagerClient(),
-      rabbit: createFakeRabbitMQClient(),
     };
     app = buildApp(repositories, clients);
   });

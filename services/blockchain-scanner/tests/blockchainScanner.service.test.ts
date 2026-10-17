@@ -1,7 +1,7 @@
 /**
  * Unit tests for BlockchainScannerService.
  *
- * Scope: the service layer only. Repositories and the RabbitMQ client are
+ * Scope: the service layer only. Repositories and the ordered publisher are
  * replaced with in-memory fakes (tests/fakes/*.fake.ts), so these tests need
  * no database, no broker and no network. Run with `bun test` from
  * services/blockchain-scanner.
@@ -11,7 +11,7 @@ import { Types } from 'mongoose';
 import { BlockchainScannerService } from '../src/services/blockchainScanner.service';
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
-import type { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
 import {
   createFakeEventRepository,
   type CreateEventInput,
@@ -22,10 +22,12 @@ import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
+import {
+  createFakeOrderedPublisher,
+  type FakeOrderedPublisher,
+} from './fakes/orderedPublisher.fake';
 
 const CHAIN_ID = 31337;
-const EXCHANGE_NAME = 'blockchain.events';
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
 const TX_HASH = `0x${'ab'.repeat(32)}`;
 const STALE_TX_HASH = `0x${'ff'.repeat(32)}`;
@@ -65,20 +67,20 @@ function seedEvent(events: FakeEventRepository, event: CreateEventInput): FakeEv
   return doc;
 }
 
-describe('BlockchainScannerService (unit, fake repositories + fake rabbit client)', () => {
+describe('BlockchainScannerService (unit, fake repositories + fake publisher)', () => {
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let rabbitMQClient: FakeRabbitMQClient;
+  let publisher: FakeOrderedPublisher;
   let service: BlockchainScannerService;
 
   beforeEach(() => {
     events = createFakeEventRepository();
     scannerState = createFakeScannerStateRepository();
-    rabbitMQClient = createFakeRabbitMQClient();
+    publisher = createFakeOrderedPublisher();
     service = new BlockchainScannerService(
       events as unknown as EventRepository,
       scannerState as unknown as ScannerStateRepository,
-      rabbitMQClient as unknown as RabbitMQClient,
+      publisher as unknown as OrderedPublisherService,
       CHAIN_ID,
     );
   });
@@ -197,18 +199,21 @@ describe('BlockchainScannerService (unit, fake repositories + fake rabbit client
     expect(events.store.has(stale._id.toString())).toBe(false);
     expect(events.store.size).toBe(2);
 
-    // Published messages: exchange name + event name as routing key, in insert order.
-    expect(rabbitMQClient.publish).toHaveBeenCalledTimes(2);
-    expect(rabbitMQClient.published.map((message) => message.exchange)).toEqual([EXCHANGE_NAME, EXCHANGE_NAME]);
-    expect(rabbitMQClient.published.map((message) => message.routingKey)).toEqual([
+    // Queued messages: event name as routing key + a chain-stable messageId, in insert order.
+    expect(publisher.publish).toHaveBeenCalledTimes(2);
+    expect(publisher.queued.map((message) => message.routingKey)).toEqual([
       'RWA_Deployed',
       'DaoStaking_TokensStaked',
     ]);
+    expect(publisher.queued.map((message) => message.messageId)).toEqual([
+      `${CHAIN_ID}:${TX_HASH}:0`,
+      `${CHAIN_ID}:0x${'11'.repeat(32)}:1`,
+    ]);
 
-    const published = rabbitMQClient.published[0].content;
+    const payload = publisher.queued[0].payload;
     const stored = Array.from(events.store.values()).find((doc) => doc.logIndex === 0)!;
-    expect(published._id.toString()).toBe(stored._id.toString());
-    expect(published).toMatchObject({
+    expect(payload._id.toString()).toBe(stored._id.toString());
+    expect(payload).toMatchObject({
       chainId: CHAIN_ID,
       blockNumber: 1000,
       transactionHash: TX_HASH,
@@ -220,10 +225,10 @@ describe('BlockchainScannerService (unit, fake repositories + fake rabbit client
     });
     // The payload is the raw saved document, so it also carries the Mongo _id
     // and the created/updated timestamps (they are part of the queue contract).
-    expect(published).toHaveProperty('_id');
-    expect(published).toHaveProperty('createdAt');
+    expect(payload).toHaveProperty('_id');
+    expect(payload).toHaveProperty('createdAt');
 
-    // The scanner state only moves once the batch was persisted and published.
+    // The scanner state only moves once the batch was persisted and queued.
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledWith(CHAIN_ID, 1000);
     expect(await scannerState.getLastScannedBlock(CHAIN_ID)).toBe(1000);
   });
@@ -239,7 +244,7 @@ describe('BlockchainScannerService (unit, fake repositories + fake rabbit client
 
     expect(events.deleteBlockEvents).toHaveBeenCalledTimes(0);
     expect(events.createEvents).toHaveBeenCalledTimes(0);
-    expect(rabbitMQClient.publish).toHaveBeenCalledTimes(0);
+    expect(publisher.publish).toHaveBeenCalledTimes(0);
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledTimes(0);
   });
 
@@ -248,13 +253,13 @@ describe('BlockchainScannerService (unit, fake repositories + fake rabbit client
 
     expect(events.deleteBlockEvents).toHaveBeenCalledTimes(0);
     expect(events.createEvents).toHaveBeenCalledTimes(0);
-    expect(rabbitMQClient.publish).toHaveBeenCalledTimes(0);
+    expect(publisher.publish).toHaveBeenCalledTimes(0);
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledTimes(1);
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledWith(CHAIN_ID, 1000);
   });
 
-  test('applyBlockEvents: a publish failure leaves the state unadvanced so the block is processed again', async () => {
-    rabbitMQClient.state.failPublishFor = 'DaoStaking_TokensStaked';
+  test('applyBlockEvents: a queue insert failure leaves the state unadvanced so the block is processed again', async () => {
+    publisher.state.failPublishFor = 'DaoStaking_TokensStaked';
 
     const blockEvents = [
       makeEvent({ blockNumber: 1000, logIndex: 0 }),
@@ -271,15 +276,28 @@ describe('BlockchainScannerService (unit, fake repositories + fake rabbit client
       'publish failed for routing key DaoStaking_TokensStaked',
     );
 
-    // The events were already persisted (delete+insert runs before publishing)
-    // and the first one was already published; the state update is skipped.
-    // The next cycle re-processes the block: delete -> insert -> publish again,
+    // The events were already persisted (delete+insert runs before queueing)
+    // and the first one was already queued; the state update is skipped.
+    // The next cycle re-processes the block: delete -> insert -> queue again,
     // which is the known at-least-once delivery window of this service.
     expect(events.store.size).toBe(2);
-    expect(rabbitMQClient.published).toHaveLength(1);
-    expect(rabbitMQClient.published[0].routingKey).toBe('RWA_Deployed');
+    expect(publisher.queued).toHaveLength(1);
+    expect(publisher.queued[0].routingKey).toBe('RWA_Deployed');
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledTimes(0);
     expect(await scannerState.getLastScannedBlock(CHAIN_ID)).toBe(0);
+  });
+
+  test('applyBlockEvents: a re-scan of the same block queues the same chain-stable messageId', async () => {
+    const blockEvents = [makeEvent({ blockNumber: 1000, logIndex: 0 })];
+
+    await service.applyBlockEvents(1000, blockEvents);
+    await service.applyBlockEvents(1000, blockEvents);
+
+    // The block is replaced and queued again, so the outbox receives a second
+    // copy — but with the same messageId: the consumer inbox makes it a no-op.
+    expect(publisher.publish).toHaveBeenCalledTimes(2);
+    expect(publisher.queued[0].messageId).toBe(publisher.queued[1].messageId);
+    expect(publisher.queued[0].messageId).toBe(`${CHAIN_ID}:${TX_HASH}:0`);
   });
 
   test('getLastProcessedBlock / updateLastProcessedBlock: read and write the per-chain state', async () => {

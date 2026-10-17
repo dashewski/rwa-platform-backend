@@ -129,14 +129,16 @@ export class RabbitMQClient {
     queue: string,
     handler: (msg: ConsumeMessage | null) => Promise<void>,
     options?: { noAck?: boolean; prefetch?: number },
-  ): Promise<void> {
+  ): Promise<string> {
     const { prefetch, noAck = false } = options ?? {};
 
     // ChannelWrapper re-establishes consumers on reconnect and re-applies prefetch.
-    await this.getWrapper().consume(queue, handler, {
+    const { consumerTag } = await this.getWrapper().consume(queue, handler, {
       noAck,
       ...(typeof prefetch === 'number' ? { prefetch } : {}),
     });
+
+    return consumerTag;
   }
 
   async ack(message: ConsumeMessage): Promise<void> {
@@ -145,6 +147,11 @@ export class RabbitMQClient {
 
   async nack(message: ConsumeMessage, requeue: boolean = true): Promise<void> {
     this.getWrapper().nack(message, false, requeue);
+  }
+
+  /** Cancels one consumer by tag; the channel stays open and in-flight messages remain unacknowledged. */
+  async cancelConsumer(consumerTag: string): Promise<void> {
+    await this.getWrapper().cancel(consumerTag);
   }
 
   private async registerSetup(setup: ChannelSetup): Promise<void> {
