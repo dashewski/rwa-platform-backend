@@ -61,9 +61,6 @@ export const CONFIG = {
     AI_EVALUATOR: {
       URL: String(process.env.AI_EVALUATOR_SERVICE_URL),
     },
-    API_KEYS: {
-      URL: String(process.env.API_KEYS_SERVICE_URL),
-    },
   },
 
   MONITORING: {

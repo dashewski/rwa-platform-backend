@@ -32,17 +32,6 @@ export type Answer = {
   userId: Scalars['String']['output'];
 };
 
-export type ApiKey = {
-  __typename?: 'ApiKey';
-  createdAt: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-  prefix: Scalars['String']['output'];
-  updatedAt: Scalars['Int']['output'];
-  userId: Scalars['String']['output'];
-  wallet: Scalars['String']['output'];
-};
-
 export type ApprovalSignaturesResponse = {
   __typename?: 'ApprovalSignaturesResponse';
   taskId: Scalars['String']['output'];
@@ -150,19 +139,6 @@ export type CompanyWithDetails = {
   socials: Array<SocialLink>;
   updatedAt: Scalars['Int']['output'];
   users: Array<UserWithPermissions>;
-};
-
-export type CreateApiKeyInput = {
-  name: Scalars['String']['input'];
-};
-
-export type CreateApiKeyResult = {
-  __typename?: 'CreateApiKeyResult';
-  createdAt: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  key: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-  prefix: Scalars['String']['output'];
 };
 
 export type CreateAssistantInput = {
@@ -803,7 +779,6 @@ export type Mutation = {
   _?: Maybe<Scalars['Boolean']['output']>;
   addMember: Member;
   authenticate: AuthTokens;
-  createApiKey: CreateApiKeyResult;
   createAssistant: Assistant;
   createBlog: Blog;
   createBusiness: Business;
@@ -821,7 +796,6 @@ export type Mutation = {
   createQuestionAnswer: Question;
   createReferrerWithdrawTask: ReferrerWithdraw;
   createTopic: Topic;
-  deleteApiKey: Scalars['ID']['output'];
   deleteAssistant: IdResponse;
   deleteBlog: Scalars['ID']['output'];
   deleteCompany: Scalars['ID']['output'];
@@ -853,7 +827,6 @@ export type Mutation = {
   revokeTokens: RevokeTokensResult;
   setReaction: Reaction;
   toggleQuestionLike: Scalars['Boolean']['output'];
-  updateApiKey: ApiKey;
   updateAssistant: Assistant;
   updateBlog: Blog;
   updateBusinessRiskScore: Business;
@@ -880,11 +853,6 @@ export type MutationAddMemberArgs = {
 
 export type MutationAuthenticateArgs = {
   input: AuthenticateInput;
-};
-
-
-export type MutationCreateApiKeyArgs = {
-  input: CreateApiKeyInput;
 };
 
 
@@ -970,11 +938,6 @@ export type MutationCreateReferrerWithdrawTaskArgs = {
 
 export type MutationCreateTopicArgs = {
   input: CreateTopicInput;
-};
-
-
-export type MutationDeleteApiKeyArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -1130,11 +1093,6 @@ export type MutationSetReactionArgs = {
 
 export type MutationToggleQuestionLikeArgs = {
   questionId: Scalars['ID']['input'];
-};
-
-
-export type MutationUpdateApiKeyArgs = {
-  input: UpdateApiKeyInput;
 };
 
 
@@ -1405,8 +1363,6 @@ export type Proposal = {
 export type Query = {
   __typename?: 'Query';
   _?: Maybe<Scalars['Boolean']['output']>;
-  getApiKey: ApiKey;
-  getApiKeys: Array<ApiKey>;
   getAssistant: Assistant;
   getBalances: Array<TokenBalance>;
   getBlog: Blog;
@@ -1461,11 +1417,6 @@ export type Query = {
   getUserTokens: Array<RefreshToken>;
   getVolumeData: Array<VolumeData>;
   getVotes: Array<Vote>;
-};
-
-
-export type QueryGetApiKeyArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2051,11 +2002,6 @@ export type UnlockTimeResponse = {
   platformUnlockTime: Scalars['Float']['output'];
 };
 
-export type UpdateApiKeyInput = {
-  id: Scalars['ID']['input'];
-  name: Scalars['String']['input'];
-};
-
 export type UpdateAssistantInput = {
   contextPreferences?: InputMaybe<Array<AssistantContext>>;
   id: Scalars['ID']['input'];
@@ -2305,7 +2251,6 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
 export type ResolversTypes = ResolversObject<{
   AddMemberInput: AddMemberInput;
   Answer: ResolverTypeWrapper<Answer>;
-  ApiKey: ResolverTypeWrapper<ApiKey>;
   ApprovalSignaturesResponse: ResolverTypeWrapper<ApprovalSignaturesResponse>;
   Assistant: ResolverTypeWrapper<Assistant>;
   AssistantContext: AssistantContext;
@@ -2319,8 +2264,6 @@ export type ResolversTypes = ResolversObject<{
   BusinessType: BusinessType;
   Company: ResolverTypeWrapper<Company>;
   CompanyWithDetails: ResolverTypeWrapper<CompanyWithDetails>;
-  CreateApiKeyInput: CreateApiKeyInput;
-  CreateApiKeyResult: ResolverTypeWrapper<CreateApiKeyResult>;
   CreateAssistantInput: CreateAssistantInput;
   CreateBlogInput: CreateBlogInput;
   CreateBusinessInput: CreateBusinessInput;
@@ -2452,7 +2395,6 @@ export type ResolversTypes = ResolversObject<{
   TransactionEvent: ResolverTypeWrapper<TransactionEvent>;
   TreasuryWithdraw: ResolverTypeWrapper<TreasuryWithdraw>;
   UnlockTimeResponse: ResolverTypeWrapper<UnlockTimeResponse>;
-  UpdateApiKeyInput: UpdateApiKeyInput;
   UpdateAssistantInput: UpdateAssistantInput;
   UpdateBlogDataInput: UpdateBlogDataInput;
   UpdateBlogInput: UpdateBlogInput;
@@ -2490,7 +2432,6 @@ export type ResolversTypes = ResolversObject<{
 export type ResolversParentTypes = ResolversObject<{
   AddMemberInput: AddMemberInput;
   Answer: Answer;
-  ApiKey: ApiKey;
   ApprovalSignaturesResponse: ApprovalSignaturesResponse;
   Assistant: Assistant;
   AuthTokens: AuthTokens;
@@ -2500,8 +2441,6 @@ export type ResolversParentTypes = ResolversObject<{
   Business: Business;
   Company: Company;
   CompanyWithDetails: CompanyWithDetails;
-  CreateApiKeyInput: CreateApiKeyInput;
-  CreateApiKeyResult: CreateApiKeyResult;
   CreateAssistantInput: CreateAssistantInput;
   CreateBlogInput: CreateBlogInput;
   CreateBusinessInput: CreateBusinessInput;
@@ -2624,7 +2563,6 @@ export type ResolversParentTypes = ResolversObject<{
   TransactionEvent: TransactionEvent;
   TreasuryWithdraw: TreasuryWithdraw;
   UnlockTimeResponse: UnlockTimeResponse;
-  UpdateApiKeyInput: UpdateApiKeyInput;
   UpdateAssistantInput: UpdateAssistantInput;
   UpdateBlogDataInput: UpdateBlogDataInput;
   UpdateBlogInput: UpdateBlogInput;
@@ -2663,17 +2601,6 @@ export type AnswerResolvers<ContextType = GraphQLContext, ParentType extends Res
   text?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   userId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
-}>;
-
-export type ApiKeyResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ApiKey'] = ResolversParentTypes['ApiKey']> = ResolversObject<{
-  createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
-  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  prefix?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  updatedAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
-  userId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  wallet?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -2759,15 +2686,6 @@ export type CompanyWithDetailsResolvers<ContextType = GraphQLContext, ParentType
   socials?: Resolver<Array<ResolversTypes['SocialLink']>, ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   users?: Resolver<Array<ResolversTypes['UserWithPermissions']>, ParentType, ContextType>;
-  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
-}>;
-
-export type CreateApiKeyResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CreateApiKeyResult'] = ResolversParentTypes['CreateApiKeyResult']> = ResolversObject<{
-  createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
-  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  key?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  prefix?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -2980,7 +2898,6 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   _?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
   addMember?: Resolver<ResolversTypes['Member'], ParentType, ContextType, RequireFields<MutationAddMemberArgs, 'input'>>;
   authenticate?: Resolver<ResolversTypes['AuthTokens'], ParentType, ContextType, RequireFields<MutationAuthenticateArgs, 'input'>>;
-  createApiKey?: Resolver<ResolversTypes['CreateApiKeyResult'], ParentType, ContextType, RequireFields<MutationCreateApiKeyArgs, 'input'>>;
   createAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<MutationCreateAssistantArgs, 'input'>>;
   createBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<MutationCreateBlogArgs, 'input'>>;
   createBusiness?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationCreateBusinessArgs, 'input'>>;
@@ -2998,7 +2915,6 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   createQuestionAnswer?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationCreateQuestionAnswerArgs, 'input'>>;
   createReferrerWithdrawTask?: Resolver<ResolversTypes['ReferrerWithdraw'], ParentType, ContextType, RequireFields<MutationCreateReferrerWithdrawTaskArgs, 'input'>>;
   createTopic?: Resolver<ResolversTypes['Topic'], ParentType, ContextType, RequireFields<MutationCreateTopicArgs, 'input'>>;
-  deleteApiKey?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteApiKeyArgs, 'id'>>;
   deleteAssistant?: Resolver<ResolversTypes['IdResponse'], ParentType, ContextType, RequireFields<MutationDeleteAssistantArgs, 'id'>>;
   deleteBlog?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteBlogArgs, 'id'>>;
   deleteCompany?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteCompanyArgs, 'id'>>;
@@ -3030,7 +2946,6 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   revokeTokens?: Resolver<ResolversTypes['RevokeTokensResult'], ParentType, ContextType, RequireFields<MutationRevokeTokensArgs, 'input'>>;
   setReaction?: Resolver<ResolversTypes['Reaction'], ParentType, ContextType, RequireFields<MutationSetReactionArgs, 'input'>>;
   toggleQuestionLike?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationToggleQuestionLikeArgs, 'questionId'>>;
-  updateApiKey?: Resolver<ResolversTypes['ApiKey'], ParentType, ContextType, RequireFields<MutationUpdateApiKeyArgs, 'input'>>;
   updateAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<MutationUpdateAssistantArgs, 'input'>>;
   updateBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<MutationUpdateBlogArgs, 'input'>>;
   updateBusinessRiskScore?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationUpdateBusinessRiskScoreArgs, 'id'>>;
@@ -3211,8 +3126,6 @@ export type ProposalResolvers<ContextType = GraphQLContext, ParentType extends R
 
 export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
   _?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
-  getApiKey?: Resolver<ResolversTypes['ApiKey'], ParentType, ContextType, RequireFields<QueryGetApiKeyArgs, 'id'>>;
-  getApiKeys?: Resolver<Array<ResolversTypes['ApiKey']>, ParentType, ContextType>;
   getAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<QueryGetAssistantArgs, 'id'>>;
   getBalances?: Resolver<Array<ResolversTypes['TokenBalance']>, ParentType, ContextType, RequireFields<QueryGetBalancesArgs, 'input'>>;
   getBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<QueryGetBlogArgs, 'id'>>;
@@ -3555,7 +3468,6 @@ export type VoteResolvers<ContextType = GraphQLContext, ParentType extends Resol
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Answer?: AnswerResolvers<ContextType>;
-  ApiKey?: ApiKeyResolvers<ContextType>;
   ApprovalSignaturesResponse?: ApprovalSignaturesResponseResolvers<ContextType>;
   Assistant?: AssistantResolvers<ContextType>;
   AuthTokens?: AuthTokensResolvers<ContextType>;
@@ -3563,7 +3475,6 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Business?: BusinessResolvers<ContextType>;
   Company?: CompanyResolvers<ContextType>;
   CompanyWithDetails?: CompanyWithDetailsResolvers<ContextType>;
-  CreateApiKeyResult?: CreateApiKeyResultResolvers<ContextType>;
   Document?: DocumentResolvers<ContextType>;
   EntityReactionsResponse?: EntityReactionsResponseResolvers<ContextType>;
   Evaluation?: EvaluationResolvers<ContextType>;

@@ -62,7 +62,7 @@ Edit `infrastructure/docker/.env` and update the following mandatory fields:
     - `APP_JWT_SECRET`
     - `RABBITMQ_PASSWORD`
     - `GRAFANA_PASSWORD`
-     - `LLDAP_ADMIN_PASSWORD`
+    - `LLDAP_ADMIN_PASSWORD`
 2.  **Set your domain:**
     - `BASE_DOMAIN=yourdomain.com`
     - `LLDAP_BASE_DN=dc=yourdomain,dc=com`

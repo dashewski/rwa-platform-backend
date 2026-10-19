@@ -74,27 +74,6 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  api-keys:
-    container_name: api-keys
-    restart: unless-stopped
-    build:
-      context: ../..
-      dockerfile: services/api-keys/Dockerfile
-    environment:
-      <<: [*mongo-env, *monitoring-env]
-      SERVICE_NAME: ${API_KEYS_SERVICE_NAME}
-      SERVICE_VERSION: ${API_KEYS_SERVICE_VERSION}
-      MONGODB_DBNAME: ${API_KEYS_MONGODB_DBNAME}
-      OTEL_SERVICE_NAME: ${API_KEYS_SERVICE_NAME}
-      OTEL_RESOURCE_ATTRIBUTES: service.name=${API_KEYS_SERVICE_NAME},service.version=${API_KEYS_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
-      PORT: ${API_KEYS_PORT}
-    volumes: *monitoring-volumes
-    networks:
-      - app-network
-    depends_on:
-      mongodb:
-        condition: service_healthy
-
   auth:
     container_name: auth
     restart: unless-stopped
@@ -400,7 +379,6 @@ services:
       LOYALTY_SERVICE_URL: ${LOYALTY_SERVICE_URL}
       DAO_SERVICE_URL: ${DAO_SERVICE_URL}
       AI_EVALUATOR_SERVICE_URL: ${AI_EVALUATOR_SERVICE_URL}
-      API_KEYS_SERVICE_URL: ${API_KEYS_SERVICE_URL}
       PROMETHEUS_URL: ${PROMETHEUS_URL}
       LOKI_URL: ${LOKI_URL}
       REDIS_URL: ${REDIS_URL}
@@ -417,8 +395,6 @@ services:
       rwa:
         condition: service_started
       ai-evaluator:
-        condition: service_started
-      api-keys:
         condition: service_started
 
   portfolio:

@@ -17,7 +17,6 @@ import type { App as ReactionsApp } from '@services/reactions/src';
 import type { App as LoyaltyApp } from '@services/loyalty/src';
 import type { App as DaoApp } from '@services/dao/src';
 import type { App as AiEvaluatorApp } from '@services/ai-evaluator/src';
-import type { App as ApiKeysApp } from '@services/api-keys/src';
 
 import { createEdenTreatyClient } from '@shared/monitoring/src/eden';
 
@@ -39,7 +38,6 @@ export const reactionsClient = createEdenTreatyClient<ReactionsApp>(CONFIG.SERVI
 export const loyaltyClient = createEdenTreatyClient<LoyaltyApp>(CONFIG.SERVICES.LOYALTY.URL);
 export const daoClient = createEdenTreatyClient<DaoApp>(CONFIG.SERVICES.DAO.URL);
 export const aiEvaluatorClient = createEdenTreatyClient<AiEvaluatorApp>(CONFIG.SERVICES.AI_EVALUATOR.URL);
-export const apiKeysClient = createEdenTreatyClient<ApiKeysApp>(CONFIG.SERVICES.API_KEYS.URL);
 
 export type AuthClient = typeof authClient;
 export type AiAssistantClient = typeof aiAssistantClient;
@@ -59,4 +57,3 @@ export type ReactionsClient = typeof reactionsClient;
 export type LoyaltyClient = typeof loyaltyClient;
 export type DaoClient = typeof daoClient;
 export type AiEvaluatorClient = typeof aiEvaluatorClient;
-export type ApiKeysClient = typeof apiKeysClient;
