@@ -46,11 +46,7 @@ describe('api-keys resolvers (unit, fake clients)', () => {
       };
       fake.clients.apiKeysClient.createApiKey.post.mockImplementation(async () => edenOk(created));
 
-      const result = await createApiKey(
-        null as never,
-        { input: { name: 'CI key' } } as never,
-        asContext(fake),
-      );
+      const result = await createApiKey(null as never, { input: { name: 'CI key' } } as never, asContext(fake));
 
       expect(fake.clients.apiKeysClient.createApiKey.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.apiKeysClient.createApiKey.post).toHaveBeenCalledWith({

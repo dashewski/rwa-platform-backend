@@ -252,7 +252,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(pool.outgoingTranches).toEqual([]);
     expect(pool.incomingTranches).toEqual([]);
     expect(pool.riskScoreEvaluationProcess).toBe(false);
-
   });
 
   test('createPool: the DTO is plain JSON - string id, no raw _id leak', async () => {
@@ -801,16 +800,19 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(result.tokenId).toBe(event.data.tokenId);
 
     expect(poolEvents.publishPoolDeployed).toHaveBeenCalledTimes(1);
-    expect(poolEvents.publishPoolDeployed).toHaveBeenCalledWith(expect.objectContaining({ id: pool._id.toString(), poolAddress: POOL_ADDRESS }));
+    expect(poolEvents.publishPoolDeployed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: pool._id.toString(), poolAddress: POOL_ADDRESS }),
+    );
     // The fake pool-events client delegates to redis like the real one.
     expect(poolEvents.redisClient.publish).toHaveBeenCalledWith('pool:deployed', 'POOL_DEPLOYED', expect.any(Object));
-
   });
 
   test('syncPoolAfterDeployment: rejects with NOT_FOUND for an unknown pool', async () => {
     // The repository already throws for a missing id, so the service-level
     // `if (!pool)` guard is unreachable - the 404 comes from the repository.
-    await expect(service.syncPoolAfterDeployment(eventOf({ ...DEPLOYMENT_EVENT, entityId: 'unknown-pool' }))).rejects.toMatchObject({
+    await expect(
+      service.syncPoolAfterDeployment(eventOf({ ...DEPLOYMENT_EVENT, entityId: 'unknown-pool' })),
+    ).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
       message: 'Pool unknown-pool not found',
@@ -823,9 +825,9 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     test(`${method}: forwards the mapped fields to updatePoolByAddress`, async () => {
       const pool = await pools.createPool({ ...POOL, poolAddress: POOL_ADDRESS });
 
-      const handler = (service as unknown as Record<string, (event: Record<string, unknown>) => Promise<{ id: string }>>)[
-        method
-      ];
+      const handler = (
+        service as unknown as Record<string, (event: Record<string, unknown>) => Promise<{ id: string }>>
+      )[method];
       const result = await handler.call(service, eventOf(event));
 
       expect(pools.updatePoolByAddress).toHaveBeenCalledWith(POOL_ADDRESS, expected);
@@ -843,13 +845,15 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       ],
     });
 
-    const result = await service.syncPoolIncomingTrancheUpdate(eventOf({
-      emittedFrom: POOL_ADDRESS,
-      trancheIndex: 1,
-      amountAppliedToTranche: '150',
-      isNowComplete: true,
-      wasOnTime: true,
-    }));
+    const result = await service.syncPoolIncomingTrancheUpdate(
+      eventOf({
+        emittedFrom: POOL_ADDRESS,
+        trancheIndex: 1,
+        amountAppliedToTranche: '150',
+        isNowComplete: true,
+        wasOnTime: true,
+      }),
+    );
 
     expect(pools.updatePoolByAddress).toHaveBeenCalledWith(POOL_ADDRESS, {
       incomingTranches: [
@@ -860,28 +864,26 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(result.incomingTranches?.[1]?.returnedAmount).toBe('150');
     expect(result.id).toBe(pool._id.toString());
   });
-  
+
   test('syncPoolIncomingTrancheUpdate: accumulates partial returns for the same tranche', async () => {
     const pool = await pools.createPool({
       ...POOL,
       poolAddress: POOL_ADDRESS,
-      incomingTranches: [
-        { amount: '200', expiredAt: 1717171717, returnedAmount: '50' },
-      ],
+      incomingTranches: [{ amount: '200', expiredAt: 1717171717, returnedAmount: '50' }],
     });
 
-    const result = await service.syncPoolIncomingTrancheUpdate(eventOf({
-      emittedFrom: POOL_ADDRESS,
-      trancheIndex: 0,
-      amountAppliedToTranche: '150',
-      isNowComplete: true,
-      wasOnTime: true,
-    }));
+    const result = await service.syncPoolIncomingTrancheUpdate(
+      eventOf({
+        emittedFrom: POOL_ADDRESS,
+        trancheIndex: 0,
+        amountAppliedToTranche: '150',
+        isNowComplete: true,
+        wasOnTime: true,
+      }),
+    );
 
     expect(pools.updatePoolByAddress).toHaveBeenCalledWith(POOL_ADDRESS, {
-      incomingTranches: [
-        { amount: '200', expiredAt: 1717171717, returnedAmount: '200' },
-      ],
+      incomingTranches: [{ amount: '200', expiredAt: 1717171717, returnedAmount: '200' }],
     });
     expect(result.incomingTranches?.[0]?.returnedAmount).toBe('200');
     expect(result.id).toBe(pool._id.toString());
@@ -895,13 +897,15 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     });
 
     await expect(
-      service.syncPoolIncomingTrancheUpdate(eventOf({
-        emittedFrom: POOL_ADDRESS,
-        trancheIndex: 5,
-        amountAppliedToTranche: '150',
-        isNowComplete: false,
-        wasOnTime: false,
-      })),
+      service.syncPoolIncomingTrancheUpdate(
+        eventOf({
+          emittedFrom: POOL_ADDRESS,
+          trancheIndex: 5,
+          amountAppliedToTranche: '150',
+          isNowComplete: false,
+          wasOnTime: false,
+        }),
+      ),
     ).rejects.toMatchObject({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
@@ -913,13 +917,15 @@ describe('PoolService (unit, fake repositories and clients)', () => {
 
   test('syncPoolIncomingTrancheUpdate: rejects an unknown pool address with 404 NOT_FOUND', async () => {
     await expect(
-      service.syncPoolIncomingTrancheUpdate(eventOf({
-        emittedFrom: '0xunknown',
-        trancheIndex: 0,
-        amountAppliedToTranche: '150',
-        isNowComplete: false,
-        wasOnTime: false,
-      })),
+      service.syncPoolIncomingTrancheUpdate(
+        eventOf({
+          emittedFrom: '0xunknown',
+          trancheIndex: 0,
+          amountAppliedToTranche: '150',
+          isNowComplete: false,
+          wasOnTime: false,
+        }),
+      ),
     ).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
@@ -937,11 +943,13 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       ],
     });
 
-    const result = await service.syncPoolOutgoingTrancheClaimed(eventOf({
-      emittedFrom: POOL_ADDRESS,
-      trancheIndex: 0,
-      amountClaimed: '90',
-    }));
+    const result = await service.syncPoolOutgoingTrancheClaimed(
+      eventOf({
+        emittedFrom: POOL_ADDRESS,
+        trancheIndex: 0,
+        amountClaimed: '90',
+      }),
+    );
 
     expect(pools.updatePoolByAddress).toHaveBeenCalledWith(POOL_ADDRESS, {
       outgoingTranches: [
@@ -961,11 +969,13 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     });
 
     await expect(
-      service.syncPoolOutgoingTrancheClaimed(eventOf({
-        emittedFrom: POOL_ADDRESS,
-        trancheIndex: 3,
-        amountClaimed: '90',
-      })),
+      service.syncPoolOutgoingTrancheClaimed(
+        eventOf({
+          emittedFrom: POOL_ADDRESS,
+          trancheIndex: 3,
+          amountClaimed: '90',
+        }),
+      ),
     ).rejects.toMatchObject({
       statusCode: 400,
       code: 'VALIDATION_ERROR',

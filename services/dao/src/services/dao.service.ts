@@ -48,7 +48,8 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processProposalCreated(event: BlockchainEvent<{
+  async processProposalCreated(
+    event: BlockchainEvent<{
       emittedFrom: string;
       proposalId: string;
       proposer: string;
@@ -57,7 +58,8 @@ export class DaoService {
       description: string;
       creationTime: string;
       endTime: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.proposer,
       proposalId: event.data.proposalId,
@@ -92,11 +94,13 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processProposalExecuted(event: BlockchainEvent<{
+  async processProposalExecuted(
+    event: BlockchainEvent<{
       emittedFrom: string;
       proposalId: string;
       executor: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.executor,
       proposalId: event.data.proposalId,
@@ -122,11 +126,13 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processProposalCancelled(event: BlockchainEvent<{
+  async processProposalCancelled(
+    event: BlockchainEvent<{
       emittedFrom: string;
       proposalId: string;
       canceller: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.canceller,
       proposalId: event.data.proposalId,
@@ -152,14 +158,16 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processVoteCast(event: BlockchainEvent<{
+  async processVoteCast(
+    event: BlockchainEvent<{
       emittedFrom: string;
       proposalId: string;
       voter: string;
       support: boolean;
       weight: string;
       reason: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       voter: event.data.voter,
       proposalId: event.data.proposalId,
@@ -194,12 +202,14 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTokensStaked(event: BlockchainEvent<{
-    emittedFrom: string;
-    staker: string;
-    amount: string;
-    newVotingPower: string;
-  }>) {
+  async processTokensStaked(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      staker: string;
+      amount: string;
+      newVotingPower: string;
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.staker,
       chainId: String(event.chainId),
@@ -242,13 +252,15 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTokensUnstaked(event: BlockchainEvent<{
-    emittedFrom: string;
-    staker: string;
-    amount: string;
-    rewardsReceived: string;
-    newVotingPower: string;
-  }>) {
+  async processTokensUnstaked(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      staker: string;
+      amount: string;
+      rewardsReceived: string;
+      newVotingPower: string;
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.staker,
       chainId: String(event.chainId),
@@ -292,11 +304,13 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTokensLocked(event: BlockchainEvent<{
-    emittedFrom: string;
-    user: string;
-    unlockTimestamp: string;
-  }>) {
+  async processTokensLocked(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      user: string;
+      unlockTimestamp: string;
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.user,
       chainId: String(event.chainId),
@@ -325,13 +339,15 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTransactionQueued(event: BlockchainEvent<{
-    emittedFrom: string;
-    txHash: string;
-    target: string;
-    data: string;
-    eta: string;
-  }>) {
+  async processTransactionQueued(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      txHash: string;
+      target: string;
+      data: string;
+      eta: string;
+    }>,
+  ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
@@ -362,13 +378,15 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTransactionExecuted(event: BlockchainEvent<{
+  async processTransactionExecuted(
+    event: BlockchainEvent<{
       emittedFrom: string;
       txHash: string;
       target: string;
       data: string;
       eta: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
@@ -390,13 +408,15 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTransactionCancelled(event: BlockchainEvent<{
+  async processTransactionCancelled(
+    event: BlockchainEvent<{
       emittedFrom: string;
       txHash: string;
       target: string;
       data: string;
       eta: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
@@ -420,12 +440,14 @@ export class DaoService {
       logIndex: a[0].logIndex,
     }),
   })
-  async processTreasuryWithdrawal(event: BlockchainEvent<{
+  async processTreasuryWithdrawal(
+    event: BlockchainEvent<{
       emittedFrom: string;
       to: string;
       token: string;
       amount: string;
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.to,
       chainId: String(event.chainId),

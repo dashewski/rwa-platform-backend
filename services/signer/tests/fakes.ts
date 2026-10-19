@@ -99,8 +99,7 @@ export function createFakeRabbitClient() {
 
 export type FakeRabbitClient = ReturnType<typeof createFakeRabbitClient>;
 
-export const asRabbitClient = (fake: FakeRabbitClient): BaseRabbitMQClient =>
-  fake as unknown as BaseRabbitMQClient;
+export const asRabbitClient = (fake: FakeRabbitClient): BaseRabbitMQClient => fake as unknown as BaseRabbitMQClient;
 
 export function createFakeConsumerService() {
   const state = {
@@ -164,5 +163,4 @@ export function createFakeSignatureService() {
 
 export type FakeSignatureService = ReturnType<typeof createFakeSignatureService>;
 
-export const asSignatureService = (fake: FakeSignatureService): SignatureService =>
-  fake as unknown as SignatureService;
+export const asSignatureService = (fake: FakeSignatureService): SignatureService => fake as unknown as SignatureService;

@@ -21,10 +21,7 @@ import { createFakeEndpointRepository, type FakeEndpointRepository } from './fak
 import { createFakeDeliveryLogRepository, type FakeDeliveryLogRepository } from './fakes/deliveryLog.repository.fake';
 import { createFakeRedisClient, type FakeRedisClient } from './fakes/redis.client.fake';
 import { createFakeRabbitMQClient, type FakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-import {
-  createFakeWebhookDeliveryClient,
-  type FakeWebhookDeliveryClient,
-} from './fakes/webhookDelivery.client.fake';
+import { createFakeWebhookDeliveryClient, type FakeWebhookDeliveryClient } from './fakes/webhookDelivery.client.fake';
 import { createSyntheticMessage } from './fakes/consumerMessage.fake';
 
 const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');

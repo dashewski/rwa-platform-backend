@@ -69,11 +69,7 @@ function createFakeClients() {
 
 type FakeClients = ReturnType<typeof createFakeClients>;
 
-function buildApp(
-  businesses: FakeBusinessRepository,
-  pools: FakePoolRepository,
-  clients: FakeClients,
-) {
+function buildApp(businesses: FakeBusinessRepository, pools: FakePoolRepository, clients: FakeClients) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('businessRepository', businesses)
     .decorate('poolRepository', pools)
@@ -129,7 +125,12 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
   test('createBusiness -> getBusiness -> getBusinesses round-trip', async () => {
     const created = await post(app, '/createBusiness', BUSINESS);
     expect(created.status).toBe(200);
-    expect(created.body).toMatchObject({ name: BUSINESS.name, ownerId: OWNER_ID, ownerType: OWNER_TYPE, chainId: CHAIN_ID });
+    expect(created.body).toMatchObject({
+      name: BUSINESS.name,
+      ownerId: OWNER_ID,
+      ownerType: OWNER_TYPE,
+      chainId: CHAIN_ID,
+    });
     expect(typeof created.body.id).toBe('string');
 
     const fetched = await post(app, '/getBusiness', { id: created.body.id });
@@ -257,9 +258,8 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
 
   test('getTokenMetadata: returns ERC-1155 metadata for a known pool token', async () => {
     const business = (await post(app, '/createBusiness', { ...BUSINESS, description: 'Business description' })).body;
-    const pool = (
-      await post(app, '/createPool', { ...POOL, businessId: business.id, description: 'Pool description' })
-    ).body;
+    const pool = (await post(app, '/createPool', { ...POOL, businessId: business.id, description: 'Pool description' }))
+      .body;
     // tokenId is set on deployment, outside the create request - seed it on the fake repository.
     await pools.updatePool(pool.id, { tokenId: '42' });
 

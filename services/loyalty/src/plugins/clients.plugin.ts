@@ -9,10 +9,7 @@ export const createClientsPlugin = async (signersManagerUrl: string, rabbitMqUri
     createSignersManagerClient(signersManagerUrl),
   );
 
-  const rabbitMQClient = withTraceSync(
-    'loyalty.init.clients.rabbitmq',
-    () => new RabbitMQClient(rabbitMqUri),
-  );
+  const rabbitMQClient = withTraceSync('loyalty.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
 
   await withTraceAsync('loyalty.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');

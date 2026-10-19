@@ -68,9 +68,7 @@ describe('ContextService (unit, fake eden clients)', () => {
     expect(context).toContain('Investment Pools System Description:');
     expect(context).toContain('Currently popular investment pools:');
     // Order is defined by the src logic: base prompts first, then dynamic data.
-    expect(context.indexOf('helping investors')).toBeLessThan(
-      context.indexOf('Investment Pools System Description:'),
-    );
+    expect(context.indexOf('helping investors')).toBeLessThan(context.indexOf('Investment Pools System Description:'));
   });
 
   test('popular_pools: forwards the pool query and formats funded progress', async () => {

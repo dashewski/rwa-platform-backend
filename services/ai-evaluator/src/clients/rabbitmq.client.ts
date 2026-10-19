@@ -8,7 +8,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
   getTopologyDefinition() {
     return {
       exchanges: {
-        'evaluation': { type: 'direct', options: { durable: true } },
+        evaluation: { type: 'direct', options: { durable: true } },
       },
       queues: {},
     } as const;

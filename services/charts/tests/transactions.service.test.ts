@@ -170,11 +170,12 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   });
 
   test('recordMint: an empty-string bonus amount is coerced to "0" (|| fallback, not ??)', async () => {
-    const result = await service.recordBurn({ ...BURN_EVENT, data: { ...BURN_EVENT.data, bonusAmountReceived: '', bonusFeePaid: '' } });
+    const result = await service.recordBurn({
+      ...BURN_EVENT,
+      data: { ...BURN_EVENT.data, bonusAmountReceived: '', bonusFeePaid: '' },
+    });
 
-    expect(poolTransactions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ bonusAmount: '0', bonusFee: '0' }),
-    );
+    expect(poolTransactions.create).toHaveBeenCalledWith(expect.objectContaining({ bonusAmount: '0', bonusFee: '0' }));
     expect(result.bonusAmount).toBe('0');
     expect(result.bonusFee).toBe('0');
   });
@@ -210,12 +211,7 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     });
 
     expect(poolTransactions.findAll).toHaveBeenCalledTimes(1);
-    expect(poolTransactions.findAll).toHaveBeenCalledWith(
-      { poolAddress: POOL_ADDRESS },
-      { timestamp: 'desc' },
-      5,
-      1,
-    );
+    expect(poolTransactions.findAll).toHaveBeenCalledWith({ poolAddress: POOL_ADDRESS }, { timestamp: 'desc' }, 5, 1);
 
     // Descending [200, 100], then offset 1 keeps only the older row.
     expect(result).toHaveLength(1);
@@ -228,7 +224,9 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   test('getTransactions: a filter that matches nothing returns an empty array', async () => {
     await seedTransaction();
 
-    const result = await service.getTransactions({ filter: { poolAddress: '0x0000000000000000000000000000000000000002' } });
+    const result = await service.getTransactions({
+      filter: { poolAddress: '0x0000000000000000000000000000000000000002' },
+    });
 
     expect(result).toEqual([]);
   });

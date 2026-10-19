@@ -64,12 +64,13 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processCreateRWAFeeCollected(event: BlockchainEvent<{
+  async processCreateRWAFeeCollected(
+    event: BlockchainEvent<{
       sender: string;
       amount: string;
       token: string;
-    
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.sender,
       transactionHash: event.transactionHash,
@@ -128,12 +129,13 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processCreatePoolFeeCollected(event: BlockchainEvent<{
+  async processCreatePoolFeeCollected(
+    event: BlockchainEvent<{
       sender: string;
       amount: string;
       token: string;
-    
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.sender,
       transactionHash: event.transactionHash,
@@ -192,7 +194,8 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processRwaMinted(event: BlockchainEvent<{
+  async processRwaMinted(
+    event: BlockchainEvent<{
       minter: string;
       rwaAmountMinted: string;
       holdAmountPaid: string;
@@ -203,8 +206,8 @@ export class LoyaltyService {
       businessId: string;
       poolId: string;
       holdToken: string;
-    
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.minter,
       transactionHash: event.transactionHash,
@@ -257,7 +260,8 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processRwaBurned(event: BlockchainEvent<{
+  async processRwaBurned(
+    event: BlockchainEvent<{
       burner: string;
       rwaAmountBurned: string;
       holdAmountReceived: string;
@@ -270,8 +274,8 @@ export class LoyaltyService {
       businessId: string;
       poolId: string;
       holdToken: string;
-    
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.burner,
       transactionHash: event.transactionHash,
@@ -335,12 +339,13 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processReferralTreasuryWithdrawn(event: BlockchainEvent<{
+  async processReferralTreasuryWithdrawn(
+    event: BlockchainEvent<{
       user: string;
       token: string;
       amount: string;
-    
-  }>) {
+    }>,
+  ) {
     setSpanAttributes({
       wallet: event.data.user,
       chainId: String(event.chainId),

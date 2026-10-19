@@ -45,11 +45,7 @@ describe('gateway webhooks resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.webhooksClient.getEndpoint.post.mockImplementation(async () => edenOk(ENDPOINT));
 
-    const result = await getWebhookEndpoint(
-      null as never,
-      { id: 'wh-1' } as never,
-      fake as unknown as GraphQLContext,
-    );
+    const result = await getWebhookEndpoint(null as never, { id: 'wh-1' } as never, fake as unknown as GraphQLContext);
 
     expect(fake.clients.webhooksClient.getEndpoint.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.webhooksClient.getEndpoint.post).toHaveBeenCalledWith({

@@ -117,10 +117,7 @@ export class WebhookEventsDaemon {
     }
 
     // Check rate limit
-    const withinLimit = await this.webhookService.checkRateLimit(
-      endpoint._id.toString(),
-      endpoint.rateLimitPerMinute,
-    );
+    const withinLimit = await this.webhookService.checkRateLimit(endpoint._id.toString(), endpoint.rateLimitPerMinute);
     if (!withinLimit) {
       logger.warn('Rate limit exceeded, skipping', { endpointId: endpoint._id.toString() });
       return;

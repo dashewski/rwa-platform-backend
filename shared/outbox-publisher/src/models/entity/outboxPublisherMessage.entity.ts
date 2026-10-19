@@ -60,7 +60,4 @@ type InferredOutboxPublisherMessage = InferRawDocType<typeof outboxPublisherMess
 export type IOutboxPublisherMessageEntity = InferredOutboxPublisherMessage & {
   _id: Types.ObjectId;
 };
-export const OutboxPublisherMessageEntity = mongoose.model(
-  'OutboxPublisherMessage',
-  outboxPublisherMessageSchema,
-);
+export const OutboxPublisherMessageEntity = mongoose.model('OutboxPublisherMessage', outboxPublisherMessageSchema);

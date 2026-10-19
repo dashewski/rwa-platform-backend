@@ -7,7 +7,6 @@ const app = await withTraceAsync('files.init.main', async () => {
     String(process.env.STORAGE_ROOT_DIR),
     Number(process.env.MAX_FILE_SIZE),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

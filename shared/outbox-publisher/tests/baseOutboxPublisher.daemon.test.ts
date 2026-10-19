@@ -71,7 +71,10 @@ type FakePublisherService = ReturnType<typeof createFakePublisherService>;
 
 /** The daemon is abstract: the test subclass pins the exchange config. */
 class TestOutboxDaemon extends BaseOutboxPublisherDaemon {
-  constructor(service: FakePublisherService, config: Record<string, { isSync: boolean; concurrency: number; maxAttempts: number }>) {
+  constructor(
+    service: FakePublisherService,
+    config: Record<string, { isSync: boolean; concurrency: number; maxAttempts: number }>,
+  ) {
     super(service as unknown as OutboxPublisherService, INTERVAL_MS, config as never);
   }
 }

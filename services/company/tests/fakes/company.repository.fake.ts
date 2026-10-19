@@ -55,10 +55,7 @@ export function createFakeCompanyRepository() {
     }),
 
     update: mock(
-      async (
-        id: string,
-        data: Partial<Pick<FakeCompanyDoc, 'name' | 'description' | 'country' | 'socials'>>,
-      ) => {
+      async (id: string, data: Partial<Pick<FakeCompanyDoc, 'name' | 'description' | 'country' | 'socials'>>) => {
         const doc = store.get(id);
         if (!doc) throw notFound(id);
 

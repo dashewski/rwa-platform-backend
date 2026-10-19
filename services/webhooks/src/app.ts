@@ -9,21 +9,13 @@ import { createControllersPlugin } from './plugins/controllers.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(
-  mongoUri: string,
-  rabbitMqUri: string,
-  redisUrl: string,
-  encryptionKey: string,
-) {
+export async function createApp(mongoUri: string, rabbitMqUri: string, redisUrl: string, encryptionKey: string) {
   const repositoriesPlugin = await withTraceAsync(
     'webhooks.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),
   );
 
-  const clientsPlugin = await createClientsPlugin(
-    rabbitMqUri,
-    redisUrl,
-  );
+  const clientsPlugin = await createClientsPlugin(rabbitMqUri, redisUrl);
 
   const servicesPlugin = withTraceSync('webhooks.init.services_plugin', () =>
     createServicesPlugin(repositoriesPlugin, clientsPlugin, encryptionKey),

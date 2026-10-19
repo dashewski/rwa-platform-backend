@@ -156,10 +156,16 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
 
     test('getRawPriceData: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.chartsClient.getRawPriceData.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.chartsClient.getRawPriceData.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
-        getRawPriceData(null as never, { input: { poolAddress: '0xpool-1' } } as never, fake as unknown as GraphQLContext),
+        getRawPriceData(
+          null as never,
+          { input: { poolAddress: '0xpool-1' } } as never,
+          fake as unknown as GraphQLContext,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get raw price data' });
     });
   });
@@ -187,7 +193,9 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
 
     test('getOhlcPriceData: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.chartsClient.getOhlcPriceData.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.chartsClient.getOhlcPriceData.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getOhlcPriceData(
@@ -222,7 +230,9 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
 
     test('getVolumeData: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.chartsClient.getVolumeData.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.chartsClient.getVolumeData.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getVolumeData(
@@ -261,7 +271,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getPoolTransactions(null as never, { input: {} } as never, fake as unknown as GraphQLContext);
+      const result = await getPoolTransactions(
+        null as never,
+        { input: {} } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledWith({
         filter: {},
@@ -274,7 +288,9 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
 
     test('getPoolTransactions: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getPoolTransactions(null as never, { input: { limit: 10 } } as never, fake as unknown as GraphQLContext),
@@ -288,11 +304,7 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         const fake = createFakeContext();
         fake.pubSub.subscribe.mockImplementation((() => asyncIterableOf(PRICE_EVENT)) as never);
 
-        const stream = subscribeToPriceUpdates(
-          null,
-          { poolAddress: '0xpool-1' },
-          fake as unknown as GraphQLContext,
-        );
+        const stream = subscribeToPriceUpdates(null, { poolAddress: '0xpool-1' }, fake as unknown as GraphQLContext);
 
         expect(fake.pubSub.subscribe).toHaveBeenCalledTimes(1);
         expect(fake.pubSub.subscribe).toHaveBeenCalledWith('charts:price:0xpool-1');
@@ -306,11 +318,7 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         const event = { ...PRICE_EVENT, payload: { ...PRICE_EVENT.payload, poolAddress: '0xpool-2' } };
         fake.pubSub.subscribe.mockImplementation((() => asyncIterableOf(event)) as never);
 
-        const stream = subscribeToPriceUpdates(
-          null,
-          { poolAddress: '0xpool-2' },
-          fake as unknown as GraphQLContext,
-        );
+        const stream = subscribeToPriceUpdates(null, { poolAddress: '0xpool-2' }, fake as unknown as GraphQLContext);
 
         expect(fake.pubSub.subscribe).toHaveBeenCalledWith('charts:price:0xpool-2');
 

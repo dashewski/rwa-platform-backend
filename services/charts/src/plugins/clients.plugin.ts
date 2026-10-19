@@ -16,10 +16,7 @@ export const createClientsPlugin = async (redisUrl: string, serviceName: string,
     () => new ChartEventsClient(redisEventsClient),
   );
 
-  const rabbitMQClient = withTraceSync(
-    'charts.init.clients.rabbitmq',
-    () => new RabbitMQClient(rabbitMqUri),
-  );
+  const rabbitMQClient = withTraceSync('charts.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
 
   await withTraceAsync('charts.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');

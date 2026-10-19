@@ -41,10 +41,10 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
       .decorate('inboxConsumerMessageRepository', inboxConsumerMessageRepository)
       .decorate('outboxPublisherMessageRepository', outboxPublisherMessageRepository)
       .onStop(async () => {
-      await withTraceAsync('ai-evaluator.stop.repositories_plugin', async () => {
-        await mongoose.disconnect();
-      });
-    }),
+        await withTraceAsync('ai-evaluator.stop.repositories_plugin', async () => {
+          await mongoose.disconnect();
+        });
+      }),
   );
 
   return plugin;

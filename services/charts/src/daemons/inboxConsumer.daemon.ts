@@ -4,7 +4,6 @@ import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { ChartsService } from '../services/charts.service';
 import type { TransactionsService } from '../services/transactions.service';
 
-
 export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
   constructor(
     rabbitClient: RabbitMQClient,

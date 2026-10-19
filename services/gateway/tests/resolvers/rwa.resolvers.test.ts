@@ -149,7 +149,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         getBusiness(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -162,7 +164,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.rwaClient.getBusinesses.post.mockImplementation(async () => edenOk([BUSINESS]));
 
-      const result = await getBusinesses(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await getBusinesses(
+        null as never,
+        { input: LIST_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.rwaClient.getBusinesses.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -175,7 +181,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.rwaClient.getBusinesses.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.rwaClient.getBusinesses.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getBusinesses(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext),
@@ -328,7 +336,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.createBusiness.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.rwaClient.createBusiness.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         createBusiness(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
@@ -474,15 +484,23 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const payload = fake.clients.rwaClient.editBusiness.post.mock.calls[0][0] as {
         updateData: Record<string, unknown>;
       };
-      expect(Object.keys(payload.updateData).sort()).toEqual(
-        ['businessType', 'chainId', 'country', 'description', 'name', 'socials', 'tags'],
-      );
+      expect(Object.keys(payload.updateData).sort()).toEqual([
+        'businessType',
+        'chainId',
+        'country',
+        'description',
+        'name',
+        'socials',
+        'tags',
+      ]);
       expect(payload.updateData.ownerId).toBeUndefined();
     });
 
     test('maps a failed business fetch to 502 BAD_GATEWAY and never calls the edit', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         editBusiness(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
@@ -540,7 +558,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         updateBusinessRiskScore(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -616,7 +636,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         requestBusinessApprovalSignatures(
@@ -651,7 +673,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        rejectBusinessApprovalSignatures(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext),
+        rejectBusinessApprovalSignatures(
+          null as never,
+          { id: 'business-1' } as never,
+          fake as unknown as GraphQLContext,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -685,7 +711,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         rejectBusinessApprovalSignatures(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -702,7 +730,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        rejectBusinessApprovalSignatures(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext),
+        rejectBusinessApprovalSignatures(
+          null as never,
+          { id: 'business-1' } as never,
+          fake as unknown as GraphQLContext,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -724,7 +756,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
       fake.clients.rwaClient.createPool.post.mockImplementation(async () => edenOk(POOL));
 
-      const result = await createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await createPool(
+        null as never,
+        { input: CREATE_POOL_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -770,7 +806,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('rejects a business without a deployed token with 409 CONFLICT', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk({ ...BUSINESS, tokenAddress: null }));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenOk({ ...BUSINESS, tokenAddress: null }),
+      );
 
       await expect(
         createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
@@ -782,7 +820,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
@@ -849,7 +889,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('rejects a business without a deployed token with 409 CONFLICT', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk({ ...BUSINESS, tokenAddress: null }));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenOk({ ...BUSINESS, tokenAddress: null }),
+      );
 
       await expect(
         createPoolWithAI(
@@ -865,7 +907,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
     test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no business'));
+      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no business'),
+      );
 
       await expect(
         createPoolWithAI(
@@ -881,7 +925,9 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
     test('maps a failed pool creation to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
-      fake.clients.rwaClient.createPoolWithAI.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.rwaClient.createPoolWithAI.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         createPoolWithAI(
@@ -911,7 +957,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const updatedPool = { ...POOL, name: 'Senior tranche II' };
       fake.clients.rwaClient.editPool.post.mockImplementation(async () => edenOk(updatedPool));
 
-      const result = await editPool(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await editPool(
+        null as never,
+        { input: EDIT_POOL_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -968,7 +1018,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const evaluated = { ...POOL, riskScore: 7 };
       fake.clients.rwaClient.requestPoolEvaluation.post.mockImplementation(async () => edenOk(evaluated));
 
-      const result = await updatePoolRiskScore(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext);
+      const result = await updatePoolRiskScore(
+        null as never,
+        { id: 'pool-1' } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -1189,9 +1243,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         metadata: { timestamp: 1, service: 'rwa', version: '1' },
       };
       // createPubSub().subscribe is synchronous: return the async iterator directly.
-      fake.pubSub.subscribe.mockImplementation(() => (async function* () {
-        yield event;
-      })());
+      fake.pubSub.subscribe.mockImplementation(() =>
+        (async function* () {
+          yield event;
+        })(),
+      );
 
       const received: unknown[] = [];
       for await (const value of subscribe(fake)) {

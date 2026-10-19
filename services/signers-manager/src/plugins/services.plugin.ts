@@ -7,17 +7,18 @@ import type { RepositoriesPlugin } from './repositories.plugin';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
 export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, clientsPlugin: ClientsPlugin) => {
-  const outboxPublisher = withTraceSync('signers-manager.init.services.outbox_publisher', () =>
-    new OutboxPublisherService(
-      clientsPlugin.decorator.rabbitMQClient,
-      repositoriesPlugin.decorator.outboxPublisherMessageRepository,
-    ),
+  const outboxPublisher = withTraceSync(
+    'signers-manager.init.services.outbox_publisher',
+    () =>
+      new OutboxPublisherService(
+        clientsPlugin.decorator.rabbitMQClient,
+        repositoriesPlugin.decorator.outboxPublisherMessageRepository,
+      ),
   );
 
-  const inboxConsumer = withTraceSync('signers-manager.init.services.inbox_consumer', () =>
-    new InboxConsumerService(
-      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
-    ),
+  const inboxConsumer = withTraceSync(
+    'signers-manager.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const signaturesService = withTraceSync(

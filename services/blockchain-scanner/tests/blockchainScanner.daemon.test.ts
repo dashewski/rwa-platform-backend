@@ -22,11 +22,7 @@ import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import {
-  createFakeOutboxPublisher,
-  EXCHANGE,
-  type FakeOutboxPublisher,
-} from './fakes/outboxPublisher.fake';
+import { createFakeOutboxPublisher, EXCHANGE, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 import {
   createFakeEthersProvider,
   createFakeEventEmitterContract,
@@ -269,7 +265,9 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
       statusCode: 502,
       code: 'BLOCKCHAIN_ERROR',
     });
-    expect(error.cause.message).toBe(`Chain ID mismatch. Expected ${CHAIN_ID}, but provider returned ${Number(CHAIN_ID) + 1}`);
+    expect(error.cause.message).toBe(
+      `Chain ID mismatch. Expected ${CHAIN_ID}, but provider returned ${Number(CHAIN_ID) + 1}`,
+    );
     // The mismatch is detected before any state is read.
     expect(scannerState.getLastScannedBlock).toHaveBeenCalledTimes(0);
   });

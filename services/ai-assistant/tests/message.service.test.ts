@@ -219,7 +219,11 @@ describe('MessageService (unit, fake repositories and clients)', () => {
 
   test('getMessage: returns the mapped message', async () => {
     const assistant = await assistants.create(ASSISTANT);
-    const created = await messages.create({ assistantId: assistant._id.toString(), text: 'What is HOLD?', sender: 'user' });
+    const created = await messages.create({
+      assistantId: assistant._id.toString(),
+      text: 'What is HOLD?',
+      sender: 'user',
+    });
 
     const message = await service.getMessage(created._id.toString());
 

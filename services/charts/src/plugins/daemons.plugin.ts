@@ -5,10 +5,7 @@ import type { ClientsPlugin } from './clients.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 
-export const createDaemonsPlugin = async (
-  servicesPlugin: ServicesPlugin,
-  clientsPlugin: ClientsPlugin,
-) => {
+export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, clientsPlugin: ClientsPlugin) => {
   const inboxConsumerDaemon = withTraceSync(
     'charts.init.daemons.inbox_consumer',
     () =>

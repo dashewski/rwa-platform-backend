@@ -112,10 +112,22 @@ describe('PortfolioService (unit, fake repositories)', () => {
     // The sender is debited first, the receiver is credited second.
     expect(balances.updateBalance).toHaveBeenCalledTimes(2);
     expect(balances.updateBalance.mock.calls[0]).toEqual([
-      FROM, TOKEN_ADDRESS, TOKEN_ID, POOL_ADDRESS, CHAIN_ID, -250, 123,
+      FROM,
+      TOKEN_ADDRESS,
+      TOKEN_ID,
+      POOL_ADDRESS,
+      CHAIN_ID,
+      -250,
+      123,
     ]);
     expect(balances.updateBalance.mock.calls[1]).toEqual([
-      TO, TOKEN_ADDRESS, TOKEN_ID, POOL_ADDRESS, CHAIN_ID, 250, 123,
+      TO,
+      TOKEN_ADDRESS,
+      TOKEN_ID,
+      POOL_ADDRESS,
+      CHAIN_ID,
+      250,
+      123,
     ]);
 
     // Balances are plain increments: the sender ends up negative when the fake
@@ -148,7 +160,13 @@ describe('PortfolioService (unit, fake repositories)', () => {
     // No debit leg: the zero address is never written to.
     expect(balances.updateBalance).toHaveBeenCalledTimes(1);
     expect(balances.updateBalance.mock.calls[0]).toEqual([
-      TO, TOKEN_ADDRESS, TOKEN_ID, POOL_ADDRESS, CHAIN_ID, 1000, 123,
+      TO,
+      TOKEN_ADDRESS,
+      TOKEN_ID,
+      POOL_ADDRESS,
+      CHAIN_ID,
+      1000,
+      123,
     ]);
     expect(balanceOf(TO)?.balance).toBe(1000);
   });
@@ -159,7 +177,13 @@ describe('PortfolioService (unit, fake repositories)', () => {
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(balances.updateBalance).toHaveBeenCalledTimes(1);
     expect(balances.updateBalance.mock.calls[0]).toEqual([
-      FROM, TOKEN_ADDRESS, TOKEN_ID, POOL_ADDRESS, CHAIN_ID, -500, 123,
+      FROM,
+      TOKEN_ADDRESS,
+      TOKEN_ID,
+      POOL_ADDRESS,
+      CHAIN_ID,
+      -500,
+      123,
     ]);
     expect(balanceOf(FROM)?.balance).toBe(-500);
   });

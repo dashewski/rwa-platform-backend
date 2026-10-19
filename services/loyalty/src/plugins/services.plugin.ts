@@ -26,10 +26,9 @@ export const createServicesPlugin = (
       ),
   );
 
-  const inboxConsumer = withTraceSync('loyalty.init.services.inbox_consumer', () =>
-    new InboxConsumerService(
-      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
-    ),
+  const inboxConsumer = withTraceSync(
+    'loyalty.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const plugin = withTraceSync('loyalty.init.services.plugin', () =>

@@ -6,7 +6,6 @@ const app = await withTraceAsync('signers-manager.init.main', async () => {
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

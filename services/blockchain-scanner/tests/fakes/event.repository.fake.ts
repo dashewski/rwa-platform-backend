@@ -103,10 +103,7 @@ export function createFakeEventRepository() {
           .sort((a, b) => {
             for (const key of sortKeys) {
               const direction = sort[key] === 'asc' || sort[key] === 1 ? 1 : -1;
-              const diff = compareValues(
-                (a as Record<string, unknown>)[key],
-                (b as Record<string, unknown>)[key],
-              );
+              const diff = compareValues((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]);
               if (diff !== 0) return diff * direction;
             }
             return 0;

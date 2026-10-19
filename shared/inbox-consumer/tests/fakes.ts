@@ -113,12 +113,10 @@ export function createFakeRabbitClient() {
       if (state.failNack) throw state.failNack;
     }),
 
-    park: mock(
-      async (queue: string, payload: unknown, options?: { messageId?: string }): Promise<void> => {
-        state.parked.push({ queue, payload, messageId: options?.messageId });
-        if (state.failPark) throw state.failPark;
-      },
-    ),
+    park: mock(async (queue: string, payload: unknown, options?: { messageId?: string }): Promise<void> => {
+      state.parked.push({ queue, payload, messageId: options?.messageId });
+      if (state.failPark) throw state.failPark;
+    }),
 
     getQueueDeferAfterAttempts: mock((queue: string): number => {
       return state.deferAfterAttempts.get(queue) ?? Number.POSITIVE_INFINITY;

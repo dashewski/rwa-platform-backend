@@ -154,11 +154,7 @@ describe('FaucetService (unit, fake repository + fake blockchain client)', () =>
     const request = await service.requestPlatformToken({ ...REQUEST, amount: 30 });
 
     expect(blockchainClient.transferERC20Token).toHaveBeenCalledTimes(1);
-    expect(blockchainClient.transferERC20Token).toHaveBeenCalledWith(
-      PLATFORM_TOKEN_ADDRESS,
-      WALLET,
-      '30',
-    );
+    expect(blockchainClient.transferERC20Token).toHaveBeenCalledWith(PLATFORM_TOKEN_ADDRESS, WALLET, '30');
     expect(blockchainClient.transferToken).toHaveBeenCalledTimes(0);
 
     expect(faucetRequests.create).toHaveBeenCalledWith({

@@ -49,7 +49,9 @@ export function createFakeRabbitMQClient() {
 
     bindQueue: mock(async (_queue: string, _exchange: string, _pattern: string): Promise<void> => {}),
 
-    publish: mock(async (_exchange: string, _routingKey: string, _content: unknown, _options?: unknown): Promise<void> => {}),
+    publish: mock(
+      async (_exchange: string, _routingKey: string, _content: unknown, _options?: unknown): Promise<void> => {},
+    ),
 
     sendToQueue: mock(async (queue: string, content: any, options?: unknown): Promise<void> => {
       sent.push({ queue, content, options });

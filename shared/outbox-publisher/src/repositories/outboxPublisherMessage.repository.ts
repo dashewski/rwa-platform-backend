@@ -8,12 +8,10 @@ function nowSeconds(): number {
 }
 
 export class OutboxPublisherMessageRepository {
-  constructor(private readonly model = OutboxPublisherMessageEntity) { }
+  constructor(private readonly model = OutboxPublisherMessageEntity) {}
 
   @TraceDecorator()
-  async create(
-    data: Pick<IOutboxPublisherMessageEntity, 'exchange' | 'routingKey' | 'payload' | 'messageId'>,
-  ) {
+  async create(data: Pick<IOutboxPublisherMessageEntity, 'exchange' | 'routingKey' | 'payload' | 'messageId'>) {
     try {
       const doc = await this.model.create(data);
       return doc.toObject();

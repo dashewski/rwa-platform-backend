@@ -22,11 +22,7 @@ import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import {
-  createFakeOutboxPublisher,
-  EXCHANGE,
-  type FakeOutboxPublisher,
-} from './fakes/outboxPublisher.fake';
+import { createFakeOutboxPublisher, EXCHANGE, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 
 const CHAIN_ID = 31337;
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
@@ -204,10 +200,7 @@ describe('BlockchainScannerService (unit, fake repositories + fake outbox publis
     // Queued messages: event name as routing key + a chain-stable messageId, in insert order.
     expect(publisher.publish).toHaveBeenCalledTimes(2);
     expect(publisher.queued.map((message) => message.exchange)).toEqual([EXCHANGE, EXCHANGE]);
-    expect(publisher.queued.map((message) => message.routingKey)).toEqual([
-      'RWA_Deployed',
-      'DaoStaking_TokensStaked',
-    ]);
+    expect(publisher.queued.map((message) => message.routingKey)).toEqual(['RWA_Deployed', 'DaoStaking_TokensStaked']);
     expect(publisher.queued.map((message) => message.messageId)).toEqual([
       `${CHAIN_ID}:${TX_HASH}:0`,
       `${CHAIN_ID}:0x${'11'.repeat(32)}:1`,

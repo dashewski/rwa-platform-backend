@@ -3,7 +3,6 @@ import { BaseInboxConsumerDaemon } from '@shared/inbox-consumer';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { DaoService } from '../services/dao.service';
 
-
 export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
   constructor(
     rabbitClient: RabbitMQClient,

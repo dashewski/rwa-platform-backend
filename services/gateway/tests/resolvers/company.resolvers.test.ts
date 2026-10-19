@@ -144,9 +144,11 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
       fake.clients.companyClient.getCompanies.post.mockImplementation(async () => edenError(500));
 
-      await expect(
-        getCompanies(null as never, {} as never, fake as unknown as GraphQLContext),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get companies' });
+      await expect(getCompanies(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BAD_GATEWAY',
+        message: 'Failed to get companies',
+      });
     });
   });
 
@@ -164,7 +166,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('validates the input and forwards the create payload with the caller as owner', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.companyClient.createCompany.post.mockImplementation(async () => edenOk({ ...COMPANY, socials: null }));
+      fake.clients.companyClient.createCompany.post.mockImplementation(async () =>
+        edenOk({ ...COMPANY, socials: null }),
+      );
 
       const result = await createCompany(
         null as never,
@@ -195,7 +199,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('defaults country/socials to undefined and the returned socials to an empty array', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.companyClient.createCompany.post.mockImplementation(async () => edenOk({ ...COMPANY, socials: null }));
+      fake.clients.companyClient.createCompany.post.mockImplementation(async () =>
+        edenOk({ ...COMPANY, socials: null }),
+      );
       const input = { name: 'Acme RWA', description: 'Tokenized real-world assets' };
 
       const result = await createCompany(null as never, { input } as never, fake as unknown as GraphQLContext);
@@ -343,7 +349,11 @@ describe('company resolvers (unit, fake context)', () => {
       fake.services.cache.getCompany.mockImplementation(async () => edenOk(COMPANY));
       fake.clients.companyClient.deleteCompany.post.mockImplementation(async () => edenOk({ id: 'company-1' }));
 
-      const result = await deleteCompany(null as never, { id: 'company-1' } as never, fake as unknown as GraphQLContext);
+      const result = await deleteCompany(
+        null as never,
+        { id: 'company-1' } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.companyClient.deleteCompany.post).toHaveBeenCalledWith({ id: 'company-1' });
       expect(fake.services.cache.resetCompanyCache).toHaveBeenCalledWith('company-1');
@@ -405,7 +415,11 @@ describe('company resolvers (unit, fake context)', () => {
       fake.services.cache.getCompany.mockImplementation(async () => edenOk(COMPANY));
       fake.clients.companyClient.addMember.post.mockImplementation(async () => edenOk(MEMBER));
 
-      const result = await addMember(null as never, { input: ADD_MEMBER_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await addMember(
+        null as never,
+        { input: ADD_MEMBER_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.services.cache.getCompany).toHaveBeenCalledWith({ id: 'company-1' });
       expect(fake.clients.companyClient.addMember.post).toHaveBeenCalledWith({

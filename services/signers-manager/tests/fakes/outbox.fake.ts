@@ -13,12 +13,10 @@ export function createFakeOutbox() {
   const outbox = {
     state,
 
-    publish: mock(
-      async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {
-        if (state.failWith) throw state.failWith;
-        state.calls.push({ exchange, routingKey, payload, messageId });
-      },
-    ),
+    publish: mock(async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {
+      if (state.failWith) throw state.failWith;
+      state.calls.push({ exchange, routingKey, payload, messageId });
+    }),
   };
 
   return outbox;

@@ -33,7 +33,4 @@ type InferredInboxConsumerMessage = InferRawDocType<typeof inboxConsumerMessageS
 export type IInboxConsumerMessageEntity = InferredInboxConsumerMessage & {
   _id: Types.ObjectId;
 };
-export const InboxConsumerMessageEntity = mongoose.model(
-  'InboxConsumerMessage',
-  inboxConsumerMessageSchema,
-);
+export const InboxConsumerMessageEntity = mongoose.model('InboxConsumerMessage', inboxConsumerMessageSchema);

@@ -185,12 +185,12 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
       edenError(500, 'INTERNAL_ERROR', 'boom'),
     );
 
-    await expect(
-      getTimelockTasks(null as never, {} as never, fake as unknown as GraphQLContext),
-    ).rejects.toMatchObject({
-      statusCode: 502,
-      code: 'BAD_GATEWAY',
-    });
+    await expect(getTimelockTasks(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject(
+      {
+        statusCode: 502,
+        code: 'BAD_GATEWAY',
+      },
+    );
   });
 
   test('getTreasuryWithdraws: forwards filter, sort and pagination and returns the data', async () => {

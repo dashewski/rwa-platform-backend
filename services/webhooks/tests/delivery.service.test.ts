@@ -240,9 +240,7 @@ describe('DeliveryService (unit, fake repositories)', () => {
     process.env.SSRF_ALLOWED_HOSTS = 'host.docker.internal';
     http.setResponse({ status: 200, body: 'ok' });
     try {
-      const result = await service.deliverWebhook(
-        deliveryInput({ url: 'https://host.docker.internal:4000/webhook' }),
-      );
+      const result = await service.deliverWebhook(deliveryInput({ url: 'https://host.docker.internal:4000/webhook' }));
 
       expect(result).toEqual({ success: true });
       expect(http.calls).toHaveLength(1);

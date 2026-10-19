@@ -54,7 +54,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getBalances.post.mockImplementation(async () => edenOk([BALANCE]));
 
-      const result = await getBalances(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await getBalances(
+        null as never,
+        { input: LIST_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.clients.portfolioClient.getBalances.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -69,7 +73,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getBalances.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getBalances(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await getBalances(
+        null as never,
+        { input: LIST_INPUT } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(result).toEqual([]);
     });

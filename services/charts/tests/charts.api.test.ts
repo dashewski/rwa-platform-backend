@@ -155,14 +155,7 @@ describe('charts HTTP layer (component, fake repositories + fake clients)', () =
     expect(response.status).toBe(200);
     // Descending [270, 260, 250], offset 1 with limit 2 keeps [260, 250].
     expect(response.body.map((row: any) => row.price)).toEqual(['260', '250']);
-    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(
-      POOL_ADDRESS,
-      0,
-      1000,
-      { timestamp: 'desc' },
-      2,
-      1,
-    );
+    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(POOL_ADDRESS, 0, 1000, { timestamp: 'desc' }, 2, 1);
   });
 
   test('getRawPriceData: an empty range returns an empty array', async () => {

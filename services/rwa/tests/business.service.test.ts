@@ -574,13 +574,14 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     });
     expect(result.tokenAddress).toBe(tokenAddress);
     expect(result.ownerWallet).toBe(OWNER_WALLET);
-
   });
 
   test('syncPausedState: flips the pause flag on the business found by token address', async () => {
     const created = await service.createBusiness(BUSINESS);
     const tokenAddress = '0x00000000000000000000000000000000000000aa';
-    await service.syncAfterDeployment(eventOf({ entityId: created.id, emittedFrom: tokenAddress, owner: OWNER_WALLET }));
+    await service.syncAfterDeployment(
+      eventOf({ entityId: created.id, emittedFrom: tokenAddress, owner: OWNER_WALLET }),
+    );
 
     const result = await service.syncPausedState(eventOf({ emittedFrom: tokenAddress, isPaused: true }));
 

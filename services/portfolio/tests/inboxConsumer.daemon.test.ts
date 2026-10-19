@@ -73,11 +73,13 @@ function createFakeRabbitClient() {
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
-    consume: mock(async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
-      state.consumed.push({ queue, options });
-      state.handler = handler;
-      return `ctag-${state.consumed.length}`;
-    }),
+    consume: mock(
+      async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
+        state.consumed.push({ queue, options });
+        state.handler = handler;
+        return `ctag-${state.consumed.length}`;
+      },
+    ),
 
     cancelConsumer: mock(async (consumerTag: string) => {
       state.cancelled.push(consumerTag);

@@ -73,7 +73,8 @@ type RwaMintedSyntheticEvent = BlockchainEvent<{
   businessId: string;
   poolId: string;
   holdToken: string;
-}>;type RwaBurnedSyntheticEvent = BlockchainEvent<{
+}>;
+type RwaBurnedSyntheticEvent = BlockchainEvent<{
   burner: string;
   rwaAmountBurned: string;
   holdAmountReceived: string;
@@ -86,9 +87,12 @@ type RwaMintedSyntheticEvent = BlockchainEvent<{
   businessId: string;
   poolId: string;
   holdToken: string;
-}>;type TreasuryWithdrawnSyntheticEvent = BlockchainEvent<{ user: string; token: string; amount: string }>;
+}>;
+type TreasuryWithdrawnSyntheticEvent = BlockchainEvent<{ user: string; token: string; amount: string }>;
 
-function buildTokenFeeEvent(overrides: { sender?: string; amount?: string; token?: string } = {}): FeeCollectedSyntheticEvent {
+function buildTokenFeeEvent(
+  overrides: { sender?: string; amount?: string; token?: string } = {},
+): FeeCollectedSyntheticEvent {
   return {
     data: {
       sender: overrides.sender ?? LOWER_CASED_WALLET,
@@ -105,7 +109,9 @@ function buildTokenFeeEvent(overrides: { sender?: string; amount?: string; token
   };
 }
 
-function buildPoolFeeEvent(overrides: { sender?: string; amount?: string; token?: string } = {}): FeeCollectedSyntheticEvent {
+function buildPoolFeeEvent(
+  overrides: { sender?: string; amount?: string; token?: string } = {},
+): FeeCollectedSyntheticEvent {
   return {
     data: {
       sender: overrides.sender ?? LOWER_CASED_WALLET,
@@ -146,7 +152,9 @@ function buildRwaMintedEvent(overrides: { minter?: string; feePaid?: string } = 
   };
 }
 
-function buildRwaBurnedEvent(overrides: { burner?: string; holdFeePaid?: string; bonusFeePaid?: string } = {}): RwaBurnedSyntheticEvent {
+function buildRwaBurnedEvent(
+  overrides: { burner?: string; holdFeePaid?: string; bonusFeePaid?: string } = {},
+): RwaBurnedSyntheticEvent {
   return {
     data: {
       burner: overrides.burner ?? LOWER_CASED_WALLET,
@@ -172,7 +180,9 @@ function buildRwaBurnedEvent(overrides: { burner?: string; holdFeePaid?: string;
   };
 }
 
-function buildTreasuryWithdrawnEvent(overrides: { user?: string; token?: string; amount?: string } = {}): TreasuryWithdrawnSyntheticEvent {
+function buildTreasuryWithdrawnEvent(
+  overrides: { user?: string; token?: string; amount?: string } = {},
+): TreasuryWithdrawnSyntheticEvent {
   return {
     data: {
       user: overrides.user ?? LOWER_CASED_WALLET,
@@ -708,9 +718,7 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
       seedReferrerRewardFees('100');
       seedWithdrawRecord({ totalWithdrawnAmount: '250' });
 
-      await expect(
-        service.createReferrerWithdrawTask({ ...withdrawTaskParams, amount: '1' }),
-      ).rejects.toMatchObject({
+      await expect(service.createReferrerWithdrawTask({ ...withdrawTaskParams, amount: '1' })).rejects.toMatchObject({
         statusCode: 403,
         code: 'NOT_ALLOWED',
         message: 'No rewards available for withdrawal',
@@ -723,9 +731,7 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
       seedReferrerRewardFees('1000');
       seedWithdrawRecord({ totalWithdrawnAmount: '100' });
 
-      await expect(
-        service.createReferrerWithdrawTask({ ...withdrawTaskParams, amount: '901' }),
-      ).rejects.toMatchObject({
+      await expect(service.createReferrerWithdrawTask({ ...withdrawTaskParams, amount: '901' })).rejects.toMatchObject({
         statusCode: 403,
         code: 'NOT_ALLOWED',
         message: 'Requested amount exceeds available rewards. Available: 900',
@@ -777,9 +783,7 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
       expect(String(stored.totalWithdrawnAmount)).toBe('0');
       expect(stored.taskId).toBe(FAKE_SIGNERS_TASK_ID);
       expect(stored.taskExpiredAt).toBe(taskPayload.expired);
-      expect((stored.taskCooldown as number) - (stored.taskExpiredAt as number)).toBe(
-        60 * 60 * 24 * 30 - 60 * 10,
-      );
+      expect((stored.taskCooldown as number) - (stored.taskExpiredAt as number)).toBe(60 * 60 * 24 * 30 - 60 * 10);
 
       expect(typeof result.id).toBe('string');
       expect(result.id).toHaveLength(24);

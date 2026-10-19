@@ -167,7 +167,8 @@ function matchesFilter(doc: Record<string, unknown>, filter: Record<string, unkn
 export function createFakePoolRepository() {
   const store = new Map<string, FakePoolDoc>();
 
-  const notFound = (id: string) => new AppError({ message: `Pool ${id} not found`, statusCode: 404, code: 'NOT_FOUND' });
+  const notFound = (id: string) =>
+    new AppError({ message: `Pool ${id} not found`, statusCode: 404, code: 'NOT_FOUND' });
 
   const notFoundByAddress = (poolAddress: string) =>
     new AppError({ message: `Pool with address ${poolAddress} not found`, statusCode: 404, code: 'NOT_FOUND' });

@@ -24,13 +24,15 @@ export class TransactionsService {
       userAddress: a[0].data.minter,
     }),
   })
-  async recordMint(event: BlockchainEvent<{
-    emittedFrom: string;
-    minter: string;
-    rwaAmountMinted: string;
-    holdAmountPaid: string;
-    feePaid: string;
-  }>) {
+  async recordMint(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      minter: string;
+      rwaAmountMinted: string;
+      holdAmountPaid: string;
+      feePaid: string;
+    }>,
+  ) {
     return await this.recordTransaction({
       poolAddress: event.data.emittedFrom,
       transactionType: PoolTransactionType.MINT,
@@ -51,15 +53,17 @@ export class TransactionsService {
       userAddress: a[0].data.burner,
     }),
   })
-  async recordBurn(event: BlockchainEvent<{
-    emittedFrom: string;
-    burner: string;
-    rwaAmountBurned: string;
-    holdAmountReceived: string;
-    bonusAmountReceived: string;
-    holdFeePaid: string;
-    bonusFeePaid: string;
-  }>) {
+  async recordBurn(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      burner: string;
+      rwaAmountBurned: string;
+      holdAmountReceived: string;
+      bonusAmountReceived: string;
+      holdFeePaid: string;
+      bonusFeePaid: string;
+    }>,
+  ) {
     return await this.recordTransaction({
       poolAddress: event.data.emittedFrom,
       transactionType: PoolTransactionType.BURN,
@@ -177,11 +181,11 @@ export class TransactionsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ 
-      poolAddress: a[0].poolAddress, 
-      interval: a[0].interval, 
-      startTime: a[0].startTime, 
-      endTime: a[0].endTime 
+    args: (a) => ({
+      poolAddress: a[0].poolAddress,
+      interval: a[0].interval,
+      startTime: a[0].startTime,
+      endTime: a[0].endTime,
     }),
   })
   async getVolumeData(params: {

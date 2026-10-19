@@ -367,7 +367,7 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ 
+    args: (a) => ({
       id: a[0].id,
       ownerWallet: a[0].ownerWallet,
       deployerWallet: a[0].deployerWallet,
@@ -483,9 +483,13 @@ Response format:
   @LogDecorator({
     args: (a) => ({ entityId: a[0].data.entityId, emittedFrom: a[0].data.emittedFrom, owner: a[0].data.owner }),
   })
-  async syncAfterDeployment(event: BlockchainEvent<{
-    entityId: string; emittedFrom: string; owner: string
-  }>) {
+  async syncAfterDeployment(
+    event: BlockchainEvent<{
+      entityId: string;
+      emittedFrom: string;
+      owner: string;
+    }>,
+  ) {
     setSpanAttributes({
       entityId: event.data.entityId,
       entityType: 'business',
@@ -507,9 +511,12 @@ Response format:
   @LogDecorator({
     args: (a) => ({ tokenAddress: a[0].data.emittedFrom, isPaused: a[0].data.isPaused }),
   })
-  async syncPausedState(event: BlockchainEvent<{
-    emittedFrom: string; isPaused: boolean
-  }>) {
+  async syncPausedState(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      isPaused: boolean;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'business', tokenAddress: event.data.emittedFrom });
     const updated = await this.businessRepository.updateBusinessByTokenAddress(event.data.emittedFrom, {
       paused: event.data.isPaused,

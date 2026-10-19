@@ -272,7 +272,9 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
   test('updateBlog: loads the blog, checks ownership and forwards the update', async () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenOk(UPSTREAM_BLOG));
-    fake.clients.blogClient.updateBlog.post.mockImplementation(async () => edenOk({ ...UPSTREAM_BLOG, name: 'Renamed' }));
+    fake.clients.blogClient.updateBlog.post.mockImplementation(async () =>
+      edenOk({ ...UPSTREAM_BLOG, name: 'Renamed' }),
+    );
 
     const input = { id: 'blog-1', updateData: { name: 'Renamed' } };
     const result = await updateBlog(null as never, { input } as never, fake as unknown as GraphQLContext);

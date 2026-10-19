@@ -11,7 +11,6 @@ type ConsumerRegistration = {
   prefetch?: number;
 };
 
-
 export abstract class BaseRabbitMQClient {
   private connection: ChannelModel | null = null;
   private channel: ConfirmChannel | null = null;
@@ -26,7 +25,7 @@ export abstract class BaseRabbitMQClient {
     public readonly uri: string,
     public readonly channelName: string,
     private readonly reconnectDelayMs: number = 5_000,
-  ) { }
+  ) {}
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -45,22 +44,28 @@ export abstract class BaseRabbitMQClient {
   }
 
   getExchanges(): Array<keyof ReturnType<this['getTopologyDefinition']>['exchanges']> {
-    return Object.keys(this.getTopologyDefinition().exchanges)
+    return Object.keys(this.getTopologyDefinition().exchanges);
   }
 
   getTopologyDefinition(): {
-    exchanges: Record<string, {
-      type: 'direct' | 'topic' | 'fanout' | 'headers';
-      options?: Options.AssertExchange;
-    }>;
-    queues: Record<string, {
-      options?: Options.AssertQueue;
-      deferAfterAttempts: number;
-      parkAfterCycles: number;
-      bindings: Record<string, readonly string[]>;
-    }>;
+    exchanges: Record<
+      string,
+      {
+        type: 'direct' | 'topic' | 'fanout' | 'headers';
+        options?: Options.AssertExchange;
+      }
+    >;
+    queues: Record<
+      string,
+      {
+        options?: Options.AssertQueue;
+        deferAfterAttempts: number;
+        parkAfterCycles: number;
+        bindings: Record<string, readonly string[]>;
+      }
+    >;
   } {
-    return { exchanges: {}, queues: {} }
+    return { exchanges: {}, queues: {} };
   }
 
   getExchange(name: keyof ReturnType<this['getTopologyDefinition']>['exchanges'] & string) {
@@ -97,12 +102,8 @@ export abstract class BaseRabbitMQClient {
     await this.closeSilently();
   }
 
-  async park(
-    routingKey: string,
-    content: unknown,
-    options?: Options.Publish,
-  ) {
-    return await this.publish('', routingKey, content, options)
+  async park(routingKey: string, content: unknown, options?: Options.Publish) {
+    return await this.publish('', routingKey, content, options);
   }
 
   async publish(
@@ -143,7 +144,9 @@ export abstract class BaseRabbitMQClient {
       );
 
       const onClose = (): void =>
-        finish(new Error(`RabbitMQ "${this.channelName}": channel closed before the message to "${exchange}" was confirmed`));
+        finish(
+          new Error(`RabbitMQ "${this.channelName}": channel closed before the message to "${exchange}" was confirmed`),
+        );
 
       channel.once('close', onClose);
 
@@ -232,13 +235,9 @@ export abstract class BaseRabbitMQClient {
       this.connection = connection;
       this.channel = channel;
 
-      connection.on('error', (error: Error) =>
-        logger.error(`RabbitMQ "${this.channelName}" connection error`, error),
-      );
+      connection.on('error', (error: Error) => logger.error(`RabbitMQ "${this.channelName}" connection error`, error));
       connection.on('close', () => this.handleClose('connection closed'));
-      channel.on('error', (error: Error) =>
-        logger.error(`RabbitMQ "${this.channelName}" channel error`, error),
-      );
+      channel.on('error', (error: Error) => logger.error(`RabbitMQ "${this.channelName}" channel error`, error));
       channel.on('close', () => this.handleClose('channel closed'));
 
       await this.assertTopology(channel);
@@ -367,9 +366,11 @@ export abstract class BaseRabbitMQClient {
       (message) => {
         if (!message) return;
 
-        void registration.handler(message).catch((error) =>
-          logger.error(`RabbitMQ "${this.channelName}": consumer "${consumerTag}" handler failed`, error),
-        );
+        void registration
+          .handler(message)
+          .catch((error) =>
+            logger.error(`RabbitMQ "${this.channelName}": consumer "${consumerTag}" handler failed`, error),
+          );
       },
       { consumerTag, noAck: registration.noAck },
     );

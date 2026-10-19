@@ -4,10 +4,7 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createClientsPlugin = async (rabbitMqUri: string) => {
-  const rabbitMQClient = withTraceSync(
-    'dao.init.clients.rabbitmq',
-    () => new RabbitMQClient(rabbitMqUri),
-  );
+  const rabbitMQClient = withTraceSync('dao.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
 
   await withTraceAsync('dao.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');
@@ -16,14 +13,12 @@ export const createClientsPlugin = async (rabbitMqUri: string) => {
   });
 
   const plugin = withTraceSync('dao.init.clients.plugin', () =>
-    new Elysia({ name: 'Clients' })
-      .decorate('rabbitMQClient', rabbitMQClient)
-      .onStop(async () => {
-        await withTraceAsync('dao.stop.clients', async () => {
-          logger.info('Shutting down RabbitMQ client');
-          await rabbitMQClient.disconnect();
-        });
-      }),
+    new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', rabbitMQClient).onStop(async () => {
+      await withTraceAsync('dao.stop.clients', async () => {
+        logger.info('Shutting down RabbitMQ client');
+        await rabbitMQClient.disconnect();
+      });
+    }),
   );
 
   return plugin;

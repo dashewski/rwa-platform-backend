@@ -119,7 +119,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
 
     test('getGalleries: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.galleryClient.getGalleries.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.getGalleries.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getGalleries(null as never, { input: { limit: 10 } } as never, fake as unknown as GraphQLContext),
@@ -140,7 +142,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
 
     test('getImage: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'image not found'));
+      fake.clients.galleryClient.getImage.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'image not found'),
+      );
 
       await expect(
         getImage(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -186,7 +190,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
 
     test('getImages: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.galleryClient.getImages.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.getImages.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getImages(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
@@ -272,7 +278,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
         ownerId: 'company-1',
         ownerType: 'company',
       }));
-      fake.clients.galleryClient.createGallery.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.createGallery.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         createGallery(
@@ -347,7 +355,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
 
     test('updateGallery: maps a failed gallery lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.galleryClient.getGallery.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no gallery'));
+      fake.clients.galleryClient.getGallery.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no gallery'),
+      );
 
       await expect(
         updateGallery(
@@ -364,7 +374,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
     test('updateGallery: maps an upstream update failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.galleryClient.getGallery.post.mockImplementation(async () => edenOk(GALLERY));
-      fake.clients.galleryClient.updateGallery.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.updateGallery.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         updateGallery(
@@ -382,7 +394,11 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
       fake.clients.galleryClient.getGallery.post.mockImplementation(async () => edenOk(GALLERY));
       fake.clients.galleryClient.deleteGallery.post.mockImplementation(async () => edenOk({ id: 'gallery-1' }));
 
-      const result = await deleteGallery(null as never, { id: 'gallery-1' } as never, fake as unknown as GraphQLContext);
+      const result = await deleteGallery(
+        null as never,
+        { id: 'gallery-1' } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -407,7 +423,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
 
     test('deleteGallery: maps a failed gallery lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.galleryClient.getGallery.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no gallery'));
+      fake.clients.galleryClient.getGallery.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no gallery'),
+      );
 
       await expect(
         deleteGallery(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -419,7 +437,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
     test('deleteGallery: maps an upstream delete failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.galleryClient.getGallery.post.mockImplementation(async () => edenOk(GALLERY));
-      fake.clients.galleryClient.deleteGallery.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.deleteGallery.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         deleteGallery(null as never, { id: 'gallery-1' } as never, fake as unknown as GraphQLContext),
@@ -445,7 +465,10 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
         ownerType: IMAGE.ownerType,
         permission: 'content',
       });
-      expect(fake.clients.galleryClient.updateImage.post).toHaveBeenCalledWith({ id: 'image-1', updateData: input.updateData });
+      expect(fake.clients.galleryClient.updateImage.post).toHaveBeenCalledWith({
+        id: 'image-1',
+        updateData: input.updateData,
+      });
       expect(result).toEqual({ ...IMAGE, name: 'front-v2.png', description: 'Updated' });
     });
 
@@ -483,7 +506,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
     test('updateImage: maps an upstream update failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenOk(IMAGE));
-      fake.clients.galleryClient.updateImage.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.updateImage.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         updateImage(
@@ -541,7 +566,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
     test('deleteImage: maps an upstream delete failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenOk(IMAGE));
-      fake.clients.galleryClient.deleteImage.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.galleryClient.deleteImage.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         deleteImage(null as never, { id: 'image-1' } as never, fake as unknown as GraphQLContext),
@@ -554,7 +581,9 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
     test('deleteImage: still deletes the image when the file deletion fails', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenOk(IMAGE));
-      fake.clients.filesClient.deleteFile.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'file delete failed'));
+      fake.clients.filesClient.deleteFile.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'file delete failed'),
+      );
       fake.clients.galleryClient.deleteImage.post.mockImplementation(async () => edenOk({ id: 'image-1' }));
 
       const result = await deleteImage(null as never, { id: 'image-1' } as never, fake as unknown as GraphQLContext);

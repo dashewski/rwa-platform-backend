@@ -8,7 +8,6 @@ const app = await withTraceAsync('webhooks.init.main', async () => {
     String(process.env.REDIS_URL),
     String(process.env.WEBHOOKS_ENCRYPTION_KEY),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

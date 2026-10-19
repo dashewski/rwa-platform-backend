@@ -16,14 +16,12 @@ export const createClientsPlugin = async (rabbitMqUri: string) => {
   });
 
   const plugin = withTraceSync('blockchain-scanner.init.clients.plugin', () =>
-    new Elysia({ name: 'Clients' })
-      .decorate('rabbitMQClient', rabbitMQClient)
-      .onStop(async () => {
-        await withTraceAsync('blockchain-scanner.stop.clients', async () => {
-          logger.info('Shutting down RabbitMQ client');
-          await rabbitMQClient.disconnect();
-        });
-      }),
+    new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', rabbitMQClient).onStop(async () => {
+      await withTraceAsync('blockchain-scanner.stop.clients', async () => {
+        logger.info('Shutting down RabbitMQ client');
+        await rabbitMQClient.disconnect();
+      });
+    }),
   );
 
   return plugin;

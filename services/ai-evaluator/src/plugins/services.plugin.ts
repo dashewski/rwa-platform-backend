@@ -12,17 +12,18 @@ export const createServicesPlugin = (
   openRouterModel: string,
   maxFilesPerRequest: number,
 ) => {
-  const outboxPublisher = withTraceSync('ai-evaluator.init.services.outbox_publisher', () =>
-    new OutboxPublisherService(
-      clientsPlugin.decorator.rabbitMQClient,
-      repositoriesPlugin.decorator.outboxPublisherMessageRepository,
-    ),
+  const outboxPublisher = withTraceSync(
+    'ai-evaluator.init.services.outbox_publisher',
+    () =>
+      new OutboxPublisherService(
+        clientsPlugin.decorator.rabbitMQClient,
+        repositoriesPlugin.decorator.outboxPublisherMessageRepository,
+      ),
   );
 
-  const inboxConsumer = withTraceSync('ai-evaluator.init.services.inbox_consumer', () =>
-    new InboxConsumerService(
-      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
-    ),
+  const inboxConsumer = withTraceSync(
+    'ai-evaluator.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const riskEvaluationService = withTraceSync(

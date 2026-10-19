@@ -8,7 +8,6 @@ const app = await withTraceAsync('signer.init.main', async () => {
     String(process.env.SERVICE_NAME),
     String(process.env.SIGNER_PRIVATE_KEY),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

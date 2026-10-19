@@ -6,13 +6,15 @@ import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 
 export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, clientsPlugin: ClientsPlugin) => {
-  const inboxConsumerDaemon = withTraceSync('rwa.init.daemons.inbox_consumer', () =>
-    new InboxConsumerDaemon(
-      clientsPlugin.decorator.rabbitMQClient,
-      servicesPlugin.decorator.inboxConsumer,
-      servicesPlugin.decorator.businessService,
-      servicesPlugin.decorator.poolService,
-    ),
+  const inboxConsumerDaemon = withTraceSync(
+    'rwa.init.daemons.inbox_consumer',
+    () =>
+      new InboxConsumerDaemon(
+        clientsPlugin.decorator.rabbitMQClient,
+        servicesPlugin.decorator.inboxConsumer,
+        servicesPlugin.decorator.businessService,
+        servicesPlugin.decorator.poolService,
+      ),
   );
 
   await withTraceAsync('rwa.init.daemons_plugin.start', async () => {

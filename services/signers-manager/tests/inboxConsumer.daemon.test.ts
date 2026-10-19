@@ -124,7 +124,15 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
 
     await deliver(
       makeMessage('response', RESPONSE, {
-        headers: { 'x-death': [[['queue', `${RESPONSES_QUEUE}.retry`], ['reason', 'expired'], ['count', 1]]] },
+        headers: {
+          'x-death': [
+            [
+              ['queue', `${RESPONSES_QUEUE}.retry`],
+              ['reason', 'expired'],
+              ['count', 1],
+            ],
+          ],
+        },
       }),
     );
 

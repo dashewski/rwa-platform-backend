@@ -20,10 +20,7 @@ import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import {
-  createFakeOutboxPublisher,
-  type FakeOutboxPublisher,
-} from './fakes/outboxPublisher.fake';
+import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 
 const CHAIN_ID = 31337;
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
@@ -105,7 +102,11 @@ describe('blockchain-scanner HTTP layer (component, fake repositories + fake pub
       name: 'RWA_Deployed',
       blockNumber: 1000,
       logIndex: 0,
-      data: { emittedFrom: CONTRACT_ADDRESS, deployer: '0x00000000000000000000000000000000000000bb', entityId: 'business-1' },
+      data: {
+        emittedFrom: CONTRACT_ADDRESS,
+        deployer: '0x00000000000000000000000000000000000000bb',
+        entityId: 'business-1',
+      },
     });
 
     const response = await post(app, '/getEventById', { id: seeded._id.toString() });

@@ -79,11 +79,13 @@ function createFakeRabbitClient() {
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
-    consume: mock(async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
-      state.consumed.push({ queue, options });
-      state.handler = handler;
-      return `ctag-${state.consumed.length}`;
-    }),
+    consume: mock(
+      async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
+        state.consumed.push({ queue, options });
+        state.handler = handler;
+        return `ctag-${state.consumed.length}`;
+      },
+    ),
 
     cancelConsumer: mock(async (consumerTag: string) => {
       state.cancelled.push(consumerTag);
@@ -207,7 +209,10 @@ describe('dao InboxConsumerDaemon (unit, fakes for client / consumer service / D
     consumerService.state.outcome = 'deferred';
     daoService.processTokensStaked.mockRejectedValueOnce(new Error('db is down'));
 
-    await deliver('DaoStaking_TokensStaked', makeMessage('DaoStaking_TokensStaked', makeEvent('DaoStaking_TokensStaked')));
+    await deliver(
+      'DaoStaking_TokensStaked',
+      makeMessage('DaoStaking_TokensStaked', makeEvent('DaoStaking_TokensStaked')),
+    );
 
     expect(consumerService.state.handlerError).toBeInstanceOf(Error);
     expect((consumerService.state.handlerError as Error).message).toBe('db is down');

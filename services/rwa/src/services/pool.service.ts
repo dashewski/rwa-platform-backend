@@ -838,34 +838,36 @@ Example response:
   @LogDecorator({
     args: (a) => ({ entityId: a[0].data.entityId, poolAddress: a[0].data.emittedFrom }),
   })
-  async syncPoolAfterDeployment(event: BlockchainEvent<{
-    emittedFrom: string;
-    awaitCompletionExpired: boolean;
-    floatingOutTranchesTimestamps: boolean;
-    holdToken: string;
-    rwaToken: string;
-    tokenId: string;
-    entityId: string;
-    entityOwnerId: string;
-    entityOwnerType: string;
-    owner: string;
-    expectedHoldAmount: string;
-    expectedRwaAmount: string;
-    expectedBonusAmount: string;
-    rewardPercent: string;
-    fixedSell: boolean;
-    allowEntryBurn: boolean;
-    entryPeriodStart: string;
-    entryPeriodExpired: string;
-    completionPeriodExpired: string;
-    k: string;
-    entryFeePercent: string;
-    exitFeePercent: string;
-    outgoingTranches: string[];
-    outgoingTranchTimestamps: number[];
-    incomingTranches: string[];
-    incomingTrancheExpired: number[];
-  }>) {
+  async syncPoolAfterDeployment(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      awaitCompletionExpired: boolean;
+      floatingOutTranchesTimestamps: boolean;
+      holdToken: string;
+      rwaToken: string;
+      tokenId: string;
+      entityId: string;
+      entityOwnerId: string;
+      entityOwnerType: string;
+      owner: string;
+      expectedHoldAmount: string;
+      expectedRwaAmount: string;
+      expectedBonusAmount: string;
+      rewardPercent: string;
+      fixedSell: boolean;
+      allowEntryBurn: boolean;
+      entryPeriodStart: string;
+      entryPeriodExpired: string;
+      completionPeriodExpired: string;
+      k: string;
+      entryFeePercent: string;
+      exitFeePercent: string;
+      outgoingTranches: string[];
+      outgoingTranchTimestamps: number[];
+      incomingTranches: string[];
+      incomingTrancheExpired: number[];
+    }>,
+  ) {
     setSpanAttributes({
       entityId: event.data.entityId,
       entityType: 'pool',
@@ -921,9 +923,12 @@ Example response:
   @LogDecorator({
     args: (a) => ({ poolAddress: a[0].data.emittedFrom, awaitingRwaAmount: a[0].data.awaitingRwaAmount }),
   })
-  async syncPoolAwaitingRwaAmount(event: BlockchainEvent<{
-    emittedFrom: string; awaitingRwaAmount: string
-  }>) {
+  async syncPoolAwaitingRwaAmount(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      awaitingRwaAmount: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       awaitingRwaAmount: event.data.awaitingRwaAmount,
@@ -936,9 +941,12 @@ Example response:
   @LogDecorator({
     args: (a) => ({ poolAddress: a[0].data.emittedFrom, timestamp: a[0].data.timestamp }),
   })
-  async syncPoolFundsFullyReturned(event: BlockchainEvent<{
-    emittedFrom: string; timestamp: string
-  }>) {
+  async syncPoolFundsFullyReturned(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      timestamp: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       isFullyReturned: true,
@@ -956,11 +964,13 @@ Example response:
       currentRewardedRwaAmount: a[0].data.currentRewardedRwaAmount,
     }),
   })
-  async syncPoolBonusWithdrawn(event: BlockchainEvent<{
-    emittedFrom: string;
-    currentAwaitingBonusAmount: string;
-    currentRewardedRwaAmount: string;
-  }>) {
+  async syncPoolBonusWithdrawn(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      currentAwaitingBonusAmount: string;
+      currentRewardedRwaAmount: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       awaitingBonusAmount: event.data.currentAwaitingBonusAmount,
@@ -977,12 +987,14 @@ Example response:
       currentTotalReturnedAmount: a[0].data.currentTotalReturnedAmount,
     }),
   })
-  async syncPoolIncomingReturnSummary(event: BlockchainEvent<{
-    emittedFrom: string;
-    currentTotalReturnedAmount: string;
-    currentAwaitingBonusAmount: string;
-    currentLastCompletedIncomingTranche: number;
-  }>) {
+  async syncPoolIncomingReturnSummary(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      currentTotalReturnedAmount: string;
+      currentAwaitingBonusAmount: string;
+      currentLastCompletedIncomingTranche: number;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       totalReturnedAmount: event.data.currentTotalReturnedAmount,
@@ -1001,13 +1013,15 @@ Example response:
       isNowComplete: a[0].data.isNowComplete,
     }),
   })
-  async syncPoolIncomingTrancheUpdate(event: BlockchainEvent<{
-    emittedFrom: string;
-    trancheIndex: number;
-    amountAppliedToTranche: string;
-    isNowComplete: boolean;
-    wasOnTime: boolean;
-  }>) {
+  async syncPoolIncomingTrancheUpdate(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      trancheIndex: number;
+      amountAppliedToTranche: string;
+      isNowComplete: boolean;
+      wasOnTime: boolean;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
 
@@ -1039,11 +1053,13 @@ Example response:
       currentTotalClaimedAmount: a[0].data.currentTotalClaimedAmount,
     }),
   })
-  async syncPoolOutgoingClaimSummary(event: BlockchainEvent<{
-    emittedFrom: string;
-    currentTotalClaimedAmount: string;
-    currentOutgoingTranchesBalance: string;
-  }>) {
+  async syncPoolOutgoingClaimSummary(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      currentTotalClaimedAmount: string;
+      currentOutgoingTranchesBalance: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       totalClaimedAmount: event.data.currentTotalClaimedAmount,
@@ -1061,9 +1077,13 @@ Example response:
       amountClaimed: a[0].data.amountClaimed,
     }),
   })
-  async syncPoolOutgoingTrancheClaimed(event: BlockchainEvent<{
-    emittedFrom: string; trancheIndex: number; amountClaimed: string
-  }>) {
+  async syncPoolOutgoingTrancheClaimed(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      trancheIndex: number;
+      amountClaimed: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
     if (!pool) {
@@ -1096,9 +1116,12 @@ Example response:
   @LogDecorator({
     args: (a) => ({ poolAddress: a[0].data.emittedFrom, isPaused: a[0].data.isPaused }),
   })
-  async syncPoolPausedState(event: BlockchainEvent<{
-    emittedFrom: string; isPaused: boolean
-  }>) {
+  async syncPoolPausedState(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      isPaused: boolean;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       paused: event.data.isPaused,
@@ -1114,12 +1137,14 @@ Example response:
       realHoldReserve: a[0].data.realHoldReserve,
     }),
   })
-  async syncPoolReserves(event: BlockchainEvent<{
-    emittedFrom: string;
-    realHoldReserve: string;
-    virtualHoldReserve: string;
-    virtualRwaReserve: string;
-  }>) {
+  async syncPoolReserves(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      realHoldReserve: string;
+      virtualHoldReserve: string;
+      virtualRwaReserve: string;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       realHoldReserve: event.data.realHoldReserve,
@@ -1134,11 +1159,13 @@ Example response:
   @LogDecorator({
     args: (a) => ({ poolAddress: a[0].data.emittedFrom }),
   })
-  async syncPoolTargetReached(event: BlockchainEvent<{
-    emittedFrom: string;
-    outgoingTranchesBalance: string;
-    floatingTimestampOffset: number;
-  }>) {
+  async syncPoolTargetReached(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      outgoingTranchesBalance: string;
+      floatingTimestampOffset: number;
+    }>,
+  ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
       isTargetReached: true,

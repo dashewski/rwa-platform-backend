@@ -95,12 +95,7 @@ export function createFakePoolTransactionRepository() {
     }),
 
     findAll: mock(
-      async (
-        filter: Record<string, unknown> = {},
-        sort: SortSpec = { timestamp: 'desc' },
-        limit = 100,
-        offset = 0,
-      ) => {
+      async (filter: Record<string, unknown> = {}, sort: SortSpec = { timestamp: 'desc' }, limit = 100, offset = 0) => {
         const matched = Array.from(store.values()).filter((doc) => matchesFilter(doc, filter));
         return sortDocs(matched, sort).slice(offset, offset + limit);
       },

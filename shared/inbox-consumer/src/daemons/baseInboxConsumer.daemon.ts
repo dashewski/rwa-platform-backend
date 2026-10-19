@@ -5,21 +5,21 @@ import { metrics } from '@shared/monitoring/src/metrics';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { InboxConsumerService } from '../services/inboxConsumer.service';
 
-
-type TopologyQueues<TRabbitMQClient extends BaseRabbitMQClient> = ReturnType<TRabbitMQClient['getTopologyDefinition']>['queues'];
+type TopologyQueues<TRabbitMQClient extends BaseRabbitMQClient> = ReturnType<
+  TRabbitMQClient['getTopologyDefinition']
+>['queues'];
 type InboxEventRouting<TRabbitMQClient extends BaseRabbitMQClient> = {
   [Q in keyof TopologyQueues<TRabbitMQClient>]: {
     prefetch: number;
     isSync: boolean;
     handlers: Record<
       TopologyQueues<TRabbitMQClient>[Q]['bindings'][keyof TopologyQueues<TRabbitMQClient>[Q]['bindings']] extends readonly (infer K)[]
-      ? Extract<K, string>
-      : never,
+        ? Extract<K, string>
+        : never,
       (event: any) => Promise<void>
     >;
   };
 };
-
 
 export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbitMQClient = BaseRabbitMQClient> {
   private readonly consumerTags = new Map<string, string>();
@@ -29,8 +29,7 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
     private readonly rabbitClient: TRabbitMQClient,
     private readonly consumerService: InboxConsumerService,
     private readonly eventRouting: InboxEventRouting<TRabbitMQClient>,
-  ) { }
-
+  ) {}
 
   @TraceDecorator()
   async initialize(): Promise<void> {
@@ -42,11 +41,9 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
 
   @TraceDecorator()
   private async subscribe(queueName: string): Promise<void> {
-    const consumerTag = await this.rabbitClient.consume(
-      queueName,
-      (message) => this.enqueue(queueName, message),
-      { prefetch: this.eventRouting[queueName].prefetch },
-    );
+    const consumerTag = await this.rabbitClient.consume(queueName, (message) => this.enqueue(queueName, message), {
+      prefetch: this.eventRouting[queueName].prefetch,
+    });
 
     this.consumerTags.set(queueName, consumerTag);
   }
@@ -86,10 +83,13 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
     const chain = this.processingChains.get(queueName) ?? Promise.resolve();
     const run = chain.then(() => this.deliver(queueName, message));
 
-    this.processingChains.set(queueName, run.then(
-      () => undefined,
-      () => undefined,
-    ));
+    this.processingChains.set(
+      queueName,
+      run.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
     await run;
   }
 
@@ -130,11 +130,14 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
 
     if (!Array.isArray(deaths)) return 0;
 
-    const records = deaths.map((entry) => (Array.isArray(entry) ? Object.fromEntries(entry) : entry) as {
-      queue?: string;
-      reason?: string;
-      count?: number;
-    });
+    const records = deaths.map(
+      (entry) =>
+        (Array.isArray(entry) ? Object.fromEntries(entry) : entry) as {
+          queue?: string;
+          reason?: string;
+          count?: number;
+        },
+    );
     const retryDeath = records.find((record) => record.queue === `${queueName}.retry` && record.reason === 'expired');
 
     return typeof retryDeath?.count === 'number' ? retryDeath.count : 0;
@@ -148,7 +151,9 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
       await this.rabbitClient.ack(message);
 
       metrics.counter('inbox_consumer_parked_total', { queue: queueName });
-      logger.error(`Inbox consumer "${queueName}": messageId "${messageId ?? '-'}" parked after ${cycles} retry cycles`);
+      logger.error(
+        `Inbox consumer "${queueName}": messageId "${messageId ?? '-'}" parked after ${cycles} retry cycles`,
+      );
     } catch (error) {
       logger.error(`Inbox consumer "${queueName}": failed to park messageId "${messageId ?? '-'}"`, error);
 
@@ -181,7 +186,7 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
     } catch {
       logger.error(
         `Inbox consumer "${queueName}": payload is not valid JSON ` +
-        `(routingKey "${routingKey}", messageId "${message.properties.messageId ?? '-'}", body: ${raw.slice(0, 200)})`,
+          `(routingKey "${routingKey}", messageId "${message.properties.messageId ?? '-'}", body: ${raw.slice(0, 200)})`,
       );
 
       throw new Error(`Inbox consumer "${queueName}": payload is not valid JSON`);

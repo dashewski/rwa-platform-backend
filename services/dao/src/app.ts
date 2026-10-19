@@ -20,9 +20,7 @@ export async function createApp(mongoUri: string, rabbitMqUri: string) {
     async () => await createClientsPlugin(rabbitMqUri),
   );
 
-  const servicesPlugin = withTraceSync('dao.init.services_plugin', () =>
-    createServicesPlugin(repositoriesPlugin),
-  );
+  const servicesPlugin = withTraceSync('dao.init.services_plugin', () => createServicesPlugin(repositoriesPlugin));
 
   const controllersPlugin = withTraceSync('dao.init.controllers_plugin', () => createControllersPlugin(servicesPlugin));
 

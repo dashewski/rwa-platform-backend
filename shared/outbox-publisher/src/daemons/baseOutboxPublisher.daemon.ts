@@ -2,7 +2,6 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { OutboxPublisherService } from '../services/outboxPublisher.service';
 
-
 export abstract class BaseOutboxPublisherDaemon<TRabbitMQClient extends BaseRabbitMQClient = BaseRabbitMQClient> {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private stopped = false;
@@ -17,7 +16,7 @@ export abstract class BaseOutboxPublisherDaemon<TRabbitMQClient extends BaseRabb
         maxAttempts: number;
       };
     },
-  ) { }
+  ) {}
 
   async initialize() {
     this.stopped = false;
@@ -43,12 +42,7 @@ export abstract class BaseOutboxPublisherDaemon<TRabbitMQClient extends BaseRabb
     const config = this.exchangesConfig[exchange]!;
 
     try {
-      await this.publisherService.processOutbox(
-        exchange,
-        config.isSync,
-        config.concurrency,
-        config.maxAttempts,
-      );
+      await this.publisherService.processOutbox(exchange, config.isSync, config.concurrency, config.maxAttempts);
     } catch (error) {
       logger.error(`Outbox publisher daemon "${exchange}": outbox pass failed`, error);
     }

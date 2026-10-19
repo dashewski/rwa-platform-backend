@@ -41,12 +41,14 @@ export class ChartsService {
       blockNumber: a[0].blockNumber,
     }),
   })
-  async recordPriceData(event: BlockchainEvent<{
-    emittedFrom: string;
-    realHoldReserve: string;
-    virtualHoldReserve: string;
-    virtualRwaReserve: string;
-  }>): Promise<Omit<IPriceDataEntity, '_id'> & { id: string }> {
+  async recordPriceData(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      realHoldReserve: string;
+      virtualHoldReserve: string;
+      virtualRwaReserve: string;
+    }>,
+  ): Promise<Omit<IPriceDataEntity, '_id'> & { id: string }> {
     const data = {
       poolAddress: event.data.emittedFrom,
       timestamp: event.timestamp,
@@ -170,11 +172,11 @@ export class ChartsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ 
-      poolAddress: a[0].poolAddress, 
-      interval: a[0].interval, 
-      startTime: a[0].startTime, 
-      endTime: a[0].endTime 
+    args: (a) => ({
+      poolAddress: a[0].poolAddress,
+      interval: a[0].interval,
+      startTime: a[0].startTime,
+      endTime: a[0].endTime,
     }),
   })
   async getOhlcPriceData(params: {

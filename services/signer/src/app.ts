@@ -8,12 +8,7 @@ import { createServicesPlugin } from './plugins/services.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(
-  mongoUri: string,
-  rabbitMqUri: string,
-  signerName: string,
-  privateKey: string,
-) {
+export async function createApp(mongoUri: string, rabbitMqUri: string, signerName: string, privateKey: string) {
   const repositoriesPlugin = await withTraceAsync(
     'signer.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),

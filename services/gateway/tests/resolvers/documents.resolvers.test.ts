@@ -189,7 +189,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
 
     test('getFolders: maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.clients.documentsClient.getFolders.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.getFolders.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         getFolders(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
@@ -215,7 +217,10 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
         ownerType: DOCUMENT.ownerType,
         permission: 'content',
       });
-      expect(fake.clients.documentsClient.updateDocument.post).toHaveBeenCalledWith({ id: 'doc-1', updateData: input.updateData });
+      expect(fake.clients.documentsClient.updateDocument.post).toHaveBeenCalledWith({
+        id: 'doc-1',
+        updateData: input.updateData,
+      });
       expect(result).toEqual({ ...DOCUMENT, name: 'renamed.pdf' });
     });
 
@@ -238,7 +243,11 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenOk(DOCUMENT));
       fake.services.ownership.checkOwnership.mockImplementationOnce(async () => {
-        throw new AppError({ message: 'User does not have required company permissions', statusCode: 403, code: 'FORBIDDEN' });
+        throw new AppError({
+          message: 'User does not have required company permissions',
+          statusCode: 403,
+          code: 'FORBIDDEN',
+        });
       });
 
       await expect(
@@ -254,7 +263,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
 
     test('updateDocument: maps a failed document lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no document'));
+      fake.clients.documentsClient.getDocument.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no document'),
+      );
 
       await expect(
         updateDocument(
@@ -271,7 +282,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
     test('updateDocument: maps an upstream update failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenOk(DOCUMENT));
-      fake.clients.documentsClient.updateDocument.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.updateDocument.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         updateDocument(
@@ -316,7 +329,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
 
     test('deleteDocument: maps a failed document lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no document'));
+      fake.clients.documentsClient.getDocument.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no document'),
+      );
 
       await expect(
         deleteDocument(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -329,7 +344,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
     test('deleteDocument: maps an upstream delete failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenOk(DOCUMENT));
-      fake.clients.documentsClient.deleteDocument.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.deleteDocument.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         deleteDocument(null as never, { id: 'doc-1' } as never, fake as unknown as GraphQLContext),
@@ -342,7 +359,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
     test('deleteDocument: still deletes the document when the file deletion fails', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenOk(DOCUMENT));
-      fake.clients.filesClient.deleteFile.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'file delete failed'));
+      fake.clients.filesClient.deleteFile.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'file delete failed'),
+      );
       fake.clients.documentsClient.deleteDocument.post.mockImplementation(async () => edenOk({ id: 'doc-1' }));
 
       const result = await deleteDocument(null as never, { id: 'doc-1' } as never, fake as unknown as GraphQLContext);
@@ -430,7 +449,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
         ownerId: 'company-1',
         ownerType: 'company',
       }));
-      fake.clients.documentsClient.createFolder.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.createFolder.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         createFolder(
@@ -468,7 +489,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext({ user: fakeUser });
       const input = { id: 'folder-1', updateData: { name: 'Renamed' } };
       fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenOk(FOLDER));
-      fake.clients.documentsClient.updateFolder.post.mockImplementation(async () => edenOk({ ...FOLDER, name: 'Renamed' }));
+      fake.clients.documentsClient.updateFolder.post.mockImplementation(async () =>
+        edenOk({ ...FOLDER, name: 'Renamed' }),
+      );
 
       const result = await updateFolder(null as never, { input } as never, fake as unknown as GraphQLContext);
 
@@ -503,7 +526,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
 
     test('updateFolder: maps a failed folder lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no folder'));
+      fake.clients.documentsClient.getFolder.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no folder'),
+      );
 
       await expect(
         updateFolder(
@@ -520,7 +545,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
     test('updateFolder: maps an upstream update failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenOk(FOLDER));
-      fake.clients.documentsClient.updateFolder.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.updateFolder.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         updateFolder(
@@ -563,7 +590,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
 
     test('deleteFolder: maps a failed folder lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no folder'));
+      fake.clients.documentsClient.getFolder.post.mockImplementation(async () =>
+        edenError(404, 'NOT_FOUND', 'no folder'),
+      );
 
       await expect(
         deleteFolder(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
@@ -575,7 +604,9 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
     test('deleteFolder: maps an upstream delete failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenOk(FOLDER));
-      fake.clients.documentsClient.deleteFolder.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+      fake.clients.documentsClient.deleteFolder.post.mockImplementation(async () =>
+        edenError(500, 'INTERNAL_ERROR', 'boom'),
+      );
 
       await expect(
         deleteFolder(null as never, { id: 'folder-1' } as never, fake as unknown as GraphQLContext),

@@ -106,7 +106,6 @@ const TIMELOCK_EVENT = {
   blockNumber: 123_456,
 };
 
-
 /**
  * Wraps a decoded event literal into the full BlockchainEvent envelope:
  * name / address / timestamp are not used by DaoService, but the events the
@@ -184,17 +183,19 @@ describe('DaoService (unit, fake repositories)', () => {
     await service.processProposalCreated(PROPOSAL_CREATED_EVENT);
 
     await expect(
-      service.processProposalExecuted(asEvent({
-        data: {
-          emittedFrom: '0xGovernance',
-          proposalId: '7',
-          executor: '0xAlice',
-        },
-        chainId: '1',
-        transactionHash: '0xtx2',
-        logIndex: 1,
-        blockNumber: 123_456,
-      })),
+      service.processProposalExecuted(
+        asEvent({
+          data: {
+            emittedFrom: '0xGovernance',
+            proposalId: '7',
+            executor: '0xAlice',
+          },
+          chainId: '1',
+          transactionHash: '0xtx2',
+          logIndex: 1,
+          blockNumber: 123_456,
+        }),
+      ),
     ).resolves.toBeUndefined();
 
     expect(proposals.updateState).toHaveBeenCalledTimes(1);
@@ -207,17 +208,19 @@ describe('DaoService (unit, fake repositories)', () => {
     // findOneAndUpdate without upsert resolves to null for an unknown proposalId;
     // the service ignores the return value, so nothing is thrown and nothing is written.
     await expect(
-      service.processProposalExecuted(asEvent({
-        data: {
-          emittedFrom: '0xGovernance',
-          proposalId: 'unknown',
-          executor: '0xAlice',
-        },
-        chainId: '1',
-        transactionHash: '0xtx2',
-        logIndex: 1,
-        blockNumber: 123_456,
-      })),
+      service.processProposalExecuted(
+        asEvent({
+          data: {
+            emittedFrom: '0xGovernance',
+            proposalId: 'unknown',
+            executor: '0xAlice',
+          },
+          chainId: '1',
+          transactionHash: '0xtx2',
+          logIndex: 1,
+          blockNumber: 123_456,
+        }),
+      ),
     ).resolves.toBeUndefined();
 
     expect(proposals.updateState).toHaveBeenCalledWith('unknown', 'executed', { executor: '0xAlice' });
@@ -227,17 +230,19 @@ describe('DaoService (unit, fake repositories)', () => {
   test('processProposalCancelled: marks the proposal canceled', async () => {
     await service.processProposalCreated(PROPOSAL_CREATED_EVENT);
 
-    await service.processProposalCancelled(asEvent({
-      data: {
-        emittedFrom: '0xGovernance',
-        proposalId: '7',
-        canceller: '0xAlice',
-      },
-      chainId: '1',
-      transactionHash: '0xtx3',
-      logIndex: 2,
-      blockNumber: 123_456,
-    }));
+    await service.processProposalCancelled(
+      asEvent({
+        data: {
+          emittedFrom: '0xGovernance',
+          proposalId: '7',
+          canceller: '0xAlice',
+        },
+        chainId: '1',
+        transactionHash: '0xtx3',
+        logIndex: 2,
+        blockNumber: 123_456,
+      }),
+    );
 
     // 'canceled' (single l) is the value pinned in ProposalStateList.
     expect(proposals.updateState).toHaveBeenCalledWith('7', 'canceled', { canceller: '0xAlice' });
@@ -247,20 +252,22 @@ describe('DaoService (unit, fake repositories)', () => {
 
   test('processVoteCast: stores the vote with governanceAddress mapped from emittedFrom', async () => {
     await expect(
-      service.processVoteCast(asEvent({
-        data: {
-          emittedFrom: '0xGovernance',
-          proposalId: '7',
-          voter: '0xCarol',
-          support: true,
-          weight: '123.45',
-          reason: 'Good proposal',
-        },
-        chainId: '1',
-        transactionHash: '0xtx3',
-        logIndex: 0,
-        blockNumber: 42,
-      })),
+      service.processVoteCast(
+        asEvent({
+          data: {
+            emittedFrom: '0xGovernance',
+            proposalId: '7',
+            voter: '0xCarol',
+            support: true,
+            weight: '123.45',
+            reason: 'Good proposal',
+          },
+          chainId: '1',
+          transactionHash: '0xtx3',
+          logIndex: 0,
+          blockNumber: 42,
+        }),
+      ),
     ).resolves.toBeUndefined();
 
     expect(votes.create).toHaveBeenCalledTimes(1);
@@ -307,20 +314,26 @@ describe('DaoService (unit, fake repositories)', () => {
   });
 
   test('processTokensStaked: each event replaces the stored amount with the full post-state', async () => {
-    await service.processTokensStaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '100', newVotingPower: '100' },
-    }));
-    await service.processTokensStaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '50.5', newVotingPower: '150.5' },
-      transactionHash: '0xtx5',
-    }));
-    await service.processTokensStaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '7', newVotingPower: '7' },
-      chainId: '137',
-    }));
+    await service.processTokensStaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '100', newVotingPower: '100' },
+      }),
+    );
+    await service.processTokensStaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '50.5', newVotingPower: '150.5' },
+        transactionHash: '0xtx5',
+      }),
+    );
+    await service.processTokensStaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '7', newVotingPower: '7' },
+        chainId: '137',
+      }),
+    );
 
     expect(staking.setAmount).toHaveBeenCalledTimes(3);
     expect(staking.store.get('0xBob|1')?.amount).toBe('150.5');
@@ -328,18 +341,22 @@ describe('DaoService (unit, fake repositories)', () => {
   });
 
   test('processTokensUnstaked: mirrors the absolute amount and keeps rewards in the history', async () => {
-    await service.processTokensStaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '100', newVotingPower: '100' },
-    }));
+    await service.processTokensStaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '100', newVotingPower: '100' },
+      }),
+    );
 
-    await service.processTokensUnstaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '40', rewardsReceived: '1.5', newVotingPower: '60' },
-      transactionHash: '0xtx5',
-      logIndex: 2,
-      timestamp: 1_700_000_500,
-    }));
+    await service.processTokensUnstaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '40', rewardsReceived: '1.5', newVotingPower: '60' },
+        transactionHash: '0xtx5',
+        logIndex: 2,
+        timestamp: 1_700_000_500,
+      }),
+    );
 
     // Partial unstake: the event value is the full post-state, and the contract
     // resets its stakingTimestamp -> lastStakeTimestamp moves with the block time.
@@ -358,13 +375,15 @@ describe('DaoService (unit, fake repositories)', () => {
     expect(staking.store.get('0xBob|1')?.lastStakeTimestamp).toBe(1_700_000_500);
 
     // Full exit: voting power zeroes out and lastStakeTimestamp is left untouched.
-    await service.processTokensUnstaked(asEvent({
-      ...STAKING_EVENT,
-      data: { ...STAKING_EVENT.data, amount: '61.5', rewardsReceived: '1.5', newVotingPower: '0' },
-      transactionHash: '0xtx6',
-      logIndex: 3,
-      timestamp: 1_700_000_900,
-    }));
+    await service.processTokensUnstaked(
+      asEvent({
+        ...STAKING_EVENT,
+        data: { ...STAKING_EVENT.data, amount: '61.5', rewardsReceived: '1.5', newVotingPower: '0' },
+        transactionHash: '0xtx6',
+        logIndex: 3,
+        timestamp: 1_700_000_900,
+      }),
+    );
     expect(staking.store.get('0xBob|1')?.amount).toBe('0');
     expect(staking.store.get('0xBob|1')?.lastStakeTimestamp).toBe(1_700_000_500);
   });
@@ -372,14 +391,16 @@ describe('DaoService (unit, fake repositories)', () => {
   test('processTokensLocked: stores the voting lock timestamp on the staking record', async () => {
     await service.processTokensStaked(STAKING_EVENT);
 
-    await service.processTokensLocked(asEvent({
-      data: { emittedFrom: '0xStaking', user: '0xBob', unlockTimestamp: '1700086400' },
-      chainId: '1',
-      transactionHash: '0xtx11',
-      logIndex: 4,
-      blockNumber: 123_457,
-      timestamp: 1_700_000_100,
-    }));
+    await service.processTokensLocked(
+      asEvent({
+        data: { emittedFrom: '0xStaking', user: '0xBob', unlockTimestamp: '1700086400' },
+        chainId: '1',
+        transactionHash: '0xtx11',
+        logIndex: 4,
+        blockNumber: 123_457,
+        timestamp: 1_700_000_100,
+      }),
+    );
 
     expect(staking.setUnlockTimestamp).toHaveBeenCalledTimes(1);
     expect(staking.setUnlockTimestamp).toHaveBeenCalledWith('0xBob', '1', 1_700_086_400);
@@ -449,18 +470,20 @@ describe('DaoService (unit, fake repositories)', () => {
 
   test('processTreasuryWithdrawal: maps `to` to recipient and stores the withdrawal', async () => {
     await expect(
-      service.processTreasuryWithdrawal(asEvent({
-        data: {
-          emittedFrom: '0xTreasury',
-          to: '0xBob',
-          token: '0xToken',
-          amount: '500',
-        },
-        chainId: '1',
-        transactionHash: '0xtx8',
-        logIndex: 5,
-        blockNumber: 123_456,
-      })),
+      service.processTreasuryWithdrawal(
+        asEvent({
+          data: {
+            emittedFrom: '0xTreasury',
+            to: '0xBob',
+            token: '0xToken',
+            amount: '500',
+          },
+          chainId: '1',
+          transactionHash: '0xtx8',
+          logIndex: 5,
+          blockNumber: 123_456,
+        }),
+      ),
     ).resolves.toBeUndefined();
 
     expect(treasuryWithdrawals.create).toHaveBeenCalledTimes(1);

@@ -9,7 +9,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
     return {
       exchanges: {
         'blockchain.events': { type: 'direct', options: { durable: true } },
-        'evaluation': { type: 'direct', options: { durable: true } },
+        evaluation: { type: 'direct', options: { durable: true } },
       },
       queues: {
         'blockchain.events.rwa': {
@@ -39,7 +39,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
           deferAfterAttempts: 3,
           parkAfterCycles: 3,
           bindings: {
-            'evaluation': ['poolResult', 'businessResult'],
+            evaluation: ['poolResult', 'businessResult'],
           },
         },
       },

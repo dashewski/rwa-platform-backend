@@ -214,11 +214,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     fake.clients.authClient.getUser.post.mockImplementation(async () => edenOk(CALLER));
     fake.clients.loyaltyClient.registerReferral.post.mockImplementation(async () => edenOk(ROW));
 
-    const result = await registerReferral(
-      null as never,
-      { input: {} } as never,
-      fake as unknown as GraphQLContext,
-    );
+    const result = await registerReferral(null as never, { input: {} } as never, fake as unknown as GraphQLContext);
 
     // Caller wallet is resolved from the auth service, not taken from the context user.
     expect(fake.clients.authClient.getUser.post).toHaveBeenCalledTimes(1);

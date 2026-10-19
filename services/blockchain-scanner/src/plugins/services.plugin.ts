@@ -12,11 +12,9 @@ export const createServicesPlugin = (
 ) => {
   const rabbitMQClient = clientsPlugin.decorator.rabbitMQClient;
 
-  const outboxPublisher = withTraceSync('blockchain-scanner.init.services.outbox_publisher', () =>
-    new OutboxPublisherService(
-      rabbitMQClient,
-      repositoriesPlugin.decorator.outboxPublisherMessageRepository,
-    ),
+  const outboxPublisher = withTraceSync(
+    'blockchain-scanner.init.services.outbox_publisher',
+    () => new OutboxPublisherService(rabbitMQClient, repositoriesPlugin.decorator.outboxPublisherMessageRepository),
   );
 
   const blockchainScannerService = withTraceSync(

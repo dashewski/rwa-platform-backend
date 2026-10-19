@@ -5,8 +5,6 @@ import { metrics } from '@shared/monitoring/src/metrics';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { OutboxPublisherMessageRepository } from '../repositories/outboxPublisherMessage.repository';
 
-
-
 export class OutboxPublisherService {
   constructor(
     public readonly rabbitClient: BaseRabbitMQClient,
@@ -55,7 +53,10 @@ export class OutboxPublisherService {
         if (!(await sending)) break;
       } else {
         inFlight.add(sending);
-        void sending.then(() => inFlight.delete(sending), () => inFlight.delete(sending));
+        void sending.then(
+          () => inFlight.delete(sending),
+          () => inFlight.delete(sending),
+        );
       }
     }
 

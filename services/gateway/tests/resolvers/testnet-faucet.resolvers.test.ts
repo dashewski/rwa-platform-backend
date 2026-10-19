@@ -149,9 +149,10 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
   test('getUnlockTime: rejects an anonymous caller with 401 UNAUTHORIZED', async () => {
     const fake = createFakeContext();
 
-    await expect(
-      getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext),
-    ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
+    await expect(getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+    });
     expect(fake.clients.testnetFaucetClient.getUnlockTime.post).not.toHaveBeenCalled();
   });
 
@@ -172,9 +173,10 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
       edenError(500, 'INTERNAL_ERROR', 'boom'),
     );
 
-    await expect(
-      getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext),
-    ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
+    await expect(getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'BAD_GATEWAY',
+    });
   });
 
   test('getHistory: rejects an anonymous caller with 401 UNAUTHORIZED', async () => {

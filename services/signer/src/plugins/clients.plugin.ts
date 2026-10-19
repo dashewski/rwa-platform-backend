@@ -16,15 +16,13 @@ export const createClientsPlugin = async (rabbitMqUri: string, signerName: strin
   });
 
   const plugin = withTraceSync('signer.init.clients.plugin', () =>
-    new Elysia({ name: 'Clients' })
-      .decorate('rabbitMQClient', rabbitMQClient)
-      .onStop(async () => {
-        await withTraceAsync('signer.stop.clients', async () => {
-          logger.info('Shutting down RabbitMQ client');
-          await rabbitMQClient.disconnect();
-          logger.info('RabbitMQ client shut down successfully');
-        });
-      }),
+    new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', rabbitMQClient).onStop(async () => {
+      await withTraceAsync('signer.stop.clients', async () => {
+        logger.info('Shutting down RabbitMQ client');
+        await rabbitMQClient.disconnect();
+        logger.info('RabbitMQ client shut down successfully');
+      });
+    }),
   );
 
   return plugin;

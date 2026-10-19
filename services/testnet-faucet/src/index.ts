@@ -15,7 +15,6 @@ const app = await withTraceAsync('testnet-faucet.init.main', async () => {
     Number(process.env.REQUEST_HOLD_DELAY_MS),
     Number(process.env.REQUEST_PLATFORM_DELAY_MS),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

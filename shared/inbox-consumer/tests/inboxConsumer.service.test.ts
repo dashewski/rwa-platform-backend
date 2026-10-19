@@ -55,7 +55,8 @@ function createFakeRepository() {
     handlerRuns: 0,
   };
 
-  const nextOutcome = (): CreateOutcome => (state.outcomes.length ? (state.outcomes.shift() as CreateOutcome) : 'created');
+  const nextOutcome = (): CreateOutcome =>
+    state.outcomes.length ? (state.outcomes.shift() as CreateOutcome) : 'created';
 
   const repository = {
     state,
@@ -126,11 +127,7 @@ describe('InboxConsumerService (unit, fake repository + stubbed transaction)', (
   beforeEach(() => {
     transaction = stubTransaction();
     repository = createFakeRepository();
-    service = new InboxConsumerService(
-      repository as unknown as InboxConsumerMessageRepository,
-      5,
-      20,
-    );
+    service = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 5, 20);
     handlerRuns = 0;
     captureTelemetry();
   });
@@ -208,9 +205,14 @@ describe('InboxConsumerService (unit, fake repository + stubbed transaction)', (
 
   test('a handler failure aborts the transaction and the delivery is retried', async () => {
     await expect(
-      service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), async () => {
-        throw new Error('db write failed inside the handler');
-      }, 3),
+      service.handle(
+        QUEUE,
+        makeMessage('Governance_VoteCast', {}),
+        async () => {
+          throw new Error('db write failed inside the handler');
+        },
+        3,
+      ),
     ).resolves.toBe('deferred');
 
     expect(transaction.state.calls).toBe(3);
@@ -234,12 +236,7 @@ describe('InboxConsumerService (unit, fake repository + stubbed transaction)', (
   test('maxAttempts comes from the queue config, not the constructor', async () => {
     repository.state.outcomes = ['fail', 'fail'];
 
-    const outcome = await service.handle(
-      QUEUE,
-      makeMessage('Governance_VoteCast', {}),
-      handler,
-      2,
-    );
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 2);
 
     expect(outcome).toBe('deferred');
     expect(repository.state.calls).toHaveLength(2);

@@ -32,15 +32,13 @@ export function createFakeOutboxPublisher() {
     queued,
     state,
 
-    publish: mock(
-      async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {
-        if (state.failPublishFor === routingKey) {
-          throw new Error(`publish failed for routing key ${routingKey}`);
-        }
+    publish: mock(async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {
+      if (state.failPublishFor === routingKey) {
+        throw new Error(`publish failed for routing key ${routingKey}`);
+      }
 
-        queued.push({ exchange, routingKey, payload, messageId });
-      },
-    ),
+      queued.push({ exchange, routingKey, payload, messageId });
+    }),
   };
 
   return publisher;

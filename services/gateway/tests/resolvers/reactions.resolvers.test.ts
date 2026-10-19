@@ -61,9 +61,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       fake as unknown as GraphQLContext,
     );
 
-    const [payload] = fake.clients.reactionsClient.getEntityReactions.post.mock.calls[0] as [
-      Record<string, unknown>,
-    ];
+    const [payload] = fake.clients.reactionsClient.getEntityReactions.post.mock.calls[0] as [Record<string, unknown>];
     expect(Object.keys(payload).sort()).toEqual(['parentId', 'parentType', 'userId']);
     expect(payload.userId).toBeUndefined();
     expect(result).toEqual({ reactions: {}, userReactions: [] });
@@ -123,7 +121,9 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
 
   test('getReactions: maps an upstream error to 502 BAD_GATEWAY', async () => {
     const fake = createFakeContext();
-    fake.clients.reactionsClient.getReactions.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+    fake.clients.reactionsClient.getReactions.post.mockImplementation(async () =>
+      edenError(500, 'INTERNAL_ERROR', 'boom'),
+    );
 
     await expect(
       getReactions(null as never, { input: { filter: {} } } as never, fake as unknown as GraphQLContext),
@@ -162,7 +162,9 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
 
   test('setReaction: maps an upstream error to 502 BAD_GATEWAY', async () => {
     const fake = createFakeContext({ user: fakeUser });
-    fake.clients.reactionsClient.setReaction.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
+    fake.clients.reactionsClient.setReaction.post.mockImplementation(async () =>
+      edenError(500, 'INTERNAL_ERROR', 'boom'),
+    );
 
     await expect(
       setReaction(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext),

@@ -9,12 +9,7 @@ import { mock } from 'bun:test';
 export function createFakeOutboxPublisher() {
   return {
     publish: mock(
-      async (
-        _exchange: string,
-        _routingKey: string,
-        _payload: unknown,
-        _messageId: string,
-      ): Promise<void> => {},
+      async (_exchange: string, _routingKey: string, _payload: unknown, _messageId: string): Promise<void> => {},
     ),
   };
 }

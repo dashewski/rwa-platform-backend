@@ -174,7 +174,7 @@ export class RiskEvaluationService {
     await Promise.all(inFlight);
   }
 
-  private async processEvaluationJob(job: EvaluationJob & { _id: Types.ObjectId },): Promise<void> {
+  private async processEvaluationJob(job: EvaluationJob & { _id: Types.ObjectId }): Promise<void> {
     const params = job.params as { poolId?: string; businessId?: string; ownerId: string; ownerType: string };
 
     try {
@@ -186,7 +186,9 @@ export class RiskEvaluationService {
 
       await this.evaluationJobRepository.markDone(job._id);
     } catch (error) {
-      const failed = await this.evaluationJobRepository.markAttemptFailed(job._id, EVALUATION_JOB_MAX_ATTEMPTS).catch(() => null);
+      const failed = await this.evaluationJobRepository
+        .markAttemptFailed(job._id, EVALUATION_JOB_MAX_ATTEMPTS)
+        .catch(() => null);
 
       logger.error(`Evaluation job "${job._id}" (${job.entityType} ${job.entityId}) failed:`, error);
 

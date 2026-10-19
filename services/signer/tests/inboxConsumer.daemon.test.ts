@@ -136,7 +136,9 @@ describe('signer InboxConsumerDaemon (unit, fake client + fake services)', () =>
   test('a message without messageId still reaches the service (the dedup guard is in the inbox)', async () => {
     await daemon.initialize();
 
-    await deliver(makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1_900_000_000 }, { messageId: null }));
+    await deliver(
+      makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1_900_000_000 }, { messageId: null }),
+    );
 
     expect(signature.state.tasks).toHaveLength(1);
   });

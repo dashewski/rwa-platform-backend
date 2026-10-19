@@ -548,9 +548,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       expect(parts.map((part) => part.type)).toEqual(['text', 'text']);
       expect(createPayload(fakes).evaluatedDocuments).toEqual([]);
       expect(createPayload(fakes).evaluatedImages).toEqual([]);
-      expect(createPayload(fakes).stage1Response).toBe(
-        JSON.stringify({ requestedDocuments: [], requestedImages: [] }),
-      );
+      expect(createPayload(fakes).stage1Response).toBe(JSON.stringify({ requestedDocuments: [], requestedImages: [] }));
     });
 
     test('with images only, the selection prompt talks about images only', async () => {
@@ -860,10 +858,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
         10,
         0,
       );
-      expect(evaluations.map((evaluation) => evaluation.id)).toEqual([
-        first._id.toString(),
-        second._id.toString(),
-      ]);
+      expect(evaluations.map((evaluation) => evaluation.id)).toEqual([first._id.toString(), second._id.toString()]);
       expect(evaluations[0].riskScore).toBe(10);
       for (const evaluation of evaluations) expect(evaluation).not.toHaveProperty('_id');
     });

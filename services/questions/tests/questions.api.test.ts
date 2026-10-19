@@ -42,11 +42,7 @@ const ANSWER = {
   text: 'Stake HOLD and wait for the next epoch.',
 };
 
-function buildApp(
-  topics: FakeTopicRepository,
-  questions: FakeQuestionRepository,
-  likes: FakeQuestionLikesRepository,
-) {
+function buildApp(topics: FakeTopicRepository, questions: FakeQuestionRepository, likes: FakeQuestionLikesRepository) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('topicRepository', topics)
     .decorate('questionRepository', questions)
@@ -190,7 +186,8 @@ describe('questions HTTP layer (component, fake repositories)', () => {
     const topic = (await post(app, '/createTopic', TOPIC)).body;
     const otherTopic = (await post(app, '/createTopic', { ...TOPIC, name: 'Other' })).body;
     const mine = (await post(app, '/createQuestion', { ...QUESTION, topicId: topic.id })).body;
-    const foreign = (await post(app, '/createQuestion', { ...QUESTION, topicId: otherTopic.id, text: 'Foreign?' })).body;
+    const foreign = (await post(app, '/createQuestion', { ...QUESTION, topicId: otherTopic.id, text: 'Foreign?' }))
+      .body;
 
     const deleted = await post(app, '/deleteTopic', { id: topic.id });
     expect(deleted.status).toBe(200);

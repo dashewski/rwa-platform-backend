@@ -87,11 +87,13 @@ function createFakeRabbitClient() {
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
-    consume: mock(async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
-      state.consumed.push({ queue, options });
-      state.handler = handler;
-      return `ctag-${state.consumed.length}`;
-    }),
+    consume: mock(
+      async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
+        state.consumed.push({ queue, options });
+        state.handler = handler;
+        return `ctag-${state.consumed.length}`;
+      },
+    ),
 
     cancelConsumer: mock(async (consumerTag: string) => {
       state.cancelled.push(consumerTag);
@@ -229,7 +231,10 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
   test('a successful delivery is acked and nothing is requeued', async () => {
     await daemon.initialize();
 
-    await deliver('Pool_ReservesUpdated', makeMessage('Pool_ReservesUpdated', makeEvent('Pool_ReservesUpdated', RESERVES_DATA)));
+    await deliver(
+      'Pool_ReservesUpdated',
+      makeMessage('Pool_ReservesUpdated', makeEvent('Pool_ReservesUpdated', RESERVES_DATA)),
+    );
 
     expect(rabbit.state.acked).toHaveLength(1);
     expect(rabbit.state.nacked).toHaveLength(0);
@@ -252,7 +257,10 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
     consumerService.state.outcome = 'deferred';
     chartsService.recordPriceData.mockRejectedValueOnce(new Error('virtualRwaReserve cannot be zero'));
 
-    await deliver('Pool_ReservesUpdated', makeMessage('Pool_ReservesUpdated', makeEvent('Pool_ReservesUpdated', RESERVES_DATA)));
+    await deliver(
+      'Pool_ReservesUpdated',
+      makeMessage('Pool_ReservesUpdated', makeEvent('Pool_ReservesUpdated', RESERVES_DATA)),
+    );
 
     expect(consumerService.state.handlerError).toBeInstanceOf(Error);
     expect((consumerService.state.handlerError as Error).message).toBe('virtualRwaReserve cannot be zero');

@@ -38,7 +38,8 @@ export const isPrivateAddress = (address: string): boolean => {
   if (lower === '::' || lower === '::1') return true;
   if (lower.startsWith('::ffff:')) return isPrivateIpv4(lower.slice(7)); // IPv4-mapped
   if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 (unique local)
-  if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // fe80::/10
+  if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb'))
+    return true; // fe80::/10
   if (/^fe[c-f]/.test(lower)) return true; // fec0::/10 (deprecated site-local)
   if (lower.startsWith('ff')) return true; // ff00::/8 (multicast)
   if (lower.startsWith('2001:db8')) return true; // 2001:db8::/32 (documentation)

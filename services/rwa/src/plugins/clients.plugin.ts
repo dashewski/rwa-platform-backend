@@ -21,9 +21,7 @@ export const createClientsPlugin = async (
     createSignersManagerClient(signersManagerUrl),
   );
 
-  const aiEvaluatorClient = withTraceSync('rwa.init.clients.ai_evaluator', () =>
-    new AiEvaluatorClient(aiEvaluatorUrl),
-  );
+  const aiEvaluatorClient = withTraceSync('rwa.init.clients.ai_evaluator', () => new AiEvaluatorClient(aiEvaluatorUrl));
 
   const redisEventsClient = withTraceSync(
     'rwa.init.clients.redis_events',

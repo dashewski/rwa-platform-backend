@@ -47,24 +47,22 @@ function createFakeRepository(rows: Row[] = []) {
   const repository = {
     state,
 
-    create: mock(
-      async (data: { exchange: string; routingKey: string; payload: unknown; messageId: string }) => {
-        state.events.push(`create:${data.messageId}`);
+    create: mock(async (data: { exchange: string; routingKey: string; payload: unknown; messageId: string }) => {
+      state.events.push(`create:${data.messageId}`);
 
-        const created: Row = {
-          _id: `row-${state.rows.length + 1}`,
-          exchange: data.exchange,
-          routingKey: data.routingKey,
-          payload: data.payload,
-          messageId: data.messageId,
-          attempts: 0,
-          status: 'pending',
-        };
-        state.rows.push(created);
+      const created: Row = {
+        _id: `row-${state.rows.length + 1}`,
+        exchange: data.exchange,
+        routingKey: data.routingKey,
+        payload: data.payload,
+        messageId: data.messageId,
+        attempts: 0,
+        status: 'pending',
+      };
+      state.rows.push(created);
 
-        return { ...created };
-      },
-    ),
+      return { ...created };
+    }),
 
     releaseSending: mock(async (exchange: string): Promise<void> => {
       state.releaseCalls.push(exchange);
@@ -275,11 +273,7 @@ describe('OutboxPublisherService (unit, fake repository + fake rabbit client)', 
 
       await service.processOutbox(EXCHANGE, true, 1, 5);
 
-      expect(repository.state.events).toEqual([
-        `release:${EXCHANGE}`,
-        'claim:m1',
-        'attemptFailed:a:1:sending',
-      ]);
+      expect(repository.state.events).toEqual([`release:${EXCHANGE}`, 'claim:m1', 'attemptFailed:a:1:sending']);
       expect(repository.state.rows.find((entry) => entry._id === 'b')?.status).toBe('pending');
       expect(countOf('outbox_publisher_published_total')).toBe(0);
     });
@@ -341,7 +335,11 @@ describe('OutboxPublisherService (unit, fake repository + fake rabbit client)', 
 
   describe('processOutbox, isSync = false (sliding window)', () => {
     test('publishes several rows concurrently up to the configured window', async () => {
-      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' }), row({ _id: 'c', messageId: 'm3' })]);
+      build([
+        row({ _id: 'a', messageId: 'm1' }),
+        row({ _id: 'b', messageId: 'm2' }),
+        row({ _id: 'c', messageId: 'm3' }),
+      ]);
       let inFlight = 0;
       let maxInFlight = 0;
 

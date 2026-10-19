@@ -11,21 +11,23 @@ export const createServicesPlugin = (
   clientsPlugin: ClientsPlugin,
   privateKey: string,
 ) => {
-  const outboxPublisher = withTraceSync('signer.init.services.outbox_publisher', () =>
-    new OutboxPublisherService(
-      clientsPlugin.decorator.rabbitMQClient,
-      repositoriesPlugin.decorator.outboxPublisherMessageRepository,
-    ),
+  const outboxPublisher = withTraceSync(
+    'signer.init.services.outbox_publisher',
+    () =>
+      new OutboxPublisherService(
+        clientsPlugin.decorator.rabbitMQClient,
+        repositoriesPlugin.decorator.outboxPublisherMessageRepository,
+      ),
   );
 
-  const inboxConsumer = withTraceSync('signer.init.services.inbox_consumer', () =>
-    new InboxConsumerService(
-      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
-    ),
+  const inboxConsumer = withTraceSync(
+    'signer.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
-  const signatureService = withTraceSync('signer.init.services.signature', () =>
-    new SignatureService(outboxPublisher, privateKey),
+  const signatureService = withTraceSync(
+    'signer.init.services.signature',
+    () => new SignatureService(outboxPublisher, privateKey),
   );
 
   const plugin = withTraceSync('signer.init.services.plugin', () =>

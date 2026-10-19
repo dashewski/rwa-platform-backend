@@ -10,7 +10,6 @@ const app = await withTraceAsync('auth.init.main', async () => {
     String(process.env.DOMAIN_NAME),
     String(process.env.DOMAIN_VERSION),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

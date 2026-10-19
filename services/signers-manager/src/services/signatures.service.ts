@@ -88,7 +88,6 @@ export class SignaturesService {
     };
   }
 
-
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({

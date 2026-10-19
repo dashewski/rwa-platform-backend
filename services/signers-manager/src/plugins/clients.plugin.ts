@@ -4,10 +4,7 @@ import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createClientsPlugin = async (rabbitMqUri: string) => {
-  const rabbitMQClient = withTraceSync(
-    'signers-manager.init.clients.rabbitmq',
-    () => new RabbitMQClient(rabbitMqUri),
-  );
+  const rabbitMQClient = withTraceSync('signers-manager.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
 
   await withTraceAsync('signers-manager.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');
@@ -16,15 +13,13 @@ export const createClientsPlugin = async (rabbitMqUri: string) => {
   });
 
   const plugin = withTraceSync('signers-manager.init.clients.plugin', () =>
-    new Elysia({ name: 'Clients' })
-      .decorate('rabbitMQClient', rabbitMQClient)
-      .onStop(async () => {
-        await withTraceAsync('signers-manager.stop.clients', async () => {
-          logger.info('Shutting down RabbitMQ client');
-          await rabbitMQClient.disconnect();
-          logger.info('RabbitMQ client shut down successfully');
-        });
-      }),
+    new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', rabbitMQClient).onStop(async () => {
+      await withTraceAsync('signers-manager.stop.clients', async () => {
+        logger.info('Shutting down RabbitMQ client');
+        await rabbitMQClient.disconnect();
+        logger.info('RabbitMQ client shut down successfully');
+      });
+    }),
   );
 
   return plugin;

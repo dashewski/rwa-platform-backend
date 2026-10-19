@@ -34,8 +34,7 @@ export function createFakeRedisClient() {
 
     set: mock(async (key: string, value: string, expiryMode?: string, ttlSeconds?: number) => {
       // Only the ('EX', seconds) form used by the services is modelled.
-      const expiresAt =
-        expiryMode === 'EX' && typeof ttlSeconds === 'number' ? Date.now() + ttlSeconds * 1000 : null;
+      const expiresAt = expiryMode === 'EX' && typeof ttlSeconds === 'number' ? Date.now() + ttlSeconds * 1000 : null;
       strings.set(key, { value, expiresAt });
       return 'OK';
     }),

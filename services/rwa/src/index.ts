@@ -23,7 +23,6 @@ const app = await withTraceAsync('rwa.init.main', async () => {
     `https://${String(process.env.BASE_DOMAIN)}${String(process.env.PLACEHOLDER_IMAGE_PATH)}`,
     buildFilesBaseUrl(String(process.env.BASE_DOMAIN), String(process.env.FILES_URL_PATH)),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

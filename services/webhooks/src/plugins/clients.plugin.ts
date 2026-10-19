@@ -6,10 +6,7 @@ import { WebhookDeliveryClient } from '../clients/webhookDelivery.client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createClientsPlugin = async (
-  rabbitMqUri: string,
-  redisUrl: string,
-) => {
+export const createClientsPlugin = async (rabbitMqUri: string, redisUrl: string) => {
   const rabbitMQClient = withTraceSync(
     'webhooks.init.clients.rabbitmq',
     () =>

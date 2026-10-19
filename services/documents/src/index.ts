@@ -7,7 +7,6 @@ const app = await withTraceAsync('documents.init.main', async () => {
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     buildFilesBaseUrl(String(process.env.BASE_DOMAIN), String(process.env.FILES_URL_PATH)),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

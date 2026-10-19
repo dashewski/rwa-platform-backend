@@ -25,8 +25,16 @@ const ROUTING: Array<[string, keyof ReturnType<typeof createFakeLoyaltyService>]
 ];
 
 const EVENT_DATA: Record<string, Record<string, unknown>> = {
-  Factory_CreateRWAFeeCollected: { sender: '0x1111111111111111111111111111111111111111', amount: '1000000', token: '0x3333333333333333333333333333333333333333' },
-  Factory_CreatePoolFeeCollected: { sender: '0x1111111111111111111111111111111111111111', amount: '2000000', token: '0x3333333333333333333333333333333333333333' },
+  Factory_CreateRWAFeeCollected: {
+    sender: '0x1111111111111111111111111111111111111111',
+    amount: '1000000',
+    token: '0x3333333333333333333333333333333333333333',
+  },
+  Factory_CreatePoolFeeCollected: {
+    sender: '0x1111111111111111111111111111111111111111',
+    amount: '2000000',
+    token: '0x3333333333333333333333333333333333333333',
+  },
   Pool_RwaMinted: {
     minter: '0x1111111111111111111111111111111111111111',
     rwaAmountMinted: '1000000000000000000',
@@ -53,7 +61,11 @@ const EVENT_DATA: Record<string, Record<string, unknown>> = {
     poolId: 'pool-1',
     holdToken: '0x3333333333333333333333333333333333333333',
   },
-  ReferralTreasury_Withdrawn: { user: '0x1111111111111111111111111111111111111111', token: '0x3333333333333333333333333333333333333333', amount: '700' },
+  ReferralTreasury_Withdrawn: {
+    user: '0x1111111111111111111111111111111111111111',
+    token: '0x3333333333333333333333333333333333333333',
+    amount: '700',
+  },
 };
 
 function makeEvent(name: string) {
@@ -100,11 +112,13 @@ function createFakeRabbitClient() {
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
-    consume: mock(async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
-      state.consumed.push({ queue, options });
-      state.handler = handler;
-      return `ctag-${state.consumed.length}`;
-    }),
+    consume: mock(
+      async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
+        state.consumed.push({ queue, options });
+        state.handler = handler;
+        return `ctag-${state.consumed.length}`;
+      },
+    ),
 
     cancelConsumer: mock(async (consumerTag: string) => {
       state.cancelled.push(consumerTag);
@@ -240,7 +254,10 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
   test('a successful delivery is acked and nothing is requeued', async () => {
     await daemon.initialize();
 
-    await deliver('Factory_CreateRWAFeeCollected', makeMessage('Factory_CreateRWAFeeCollected', makeEvent('Factory_CreateRWAFeeCollected')));
+    await deliver(
+      'Factory_CreateRWAFeeCollected',
+      makeMessage('Factory_CreateRWAFeeCollected', makeEvent('Factory_CreateRWAFeeCollected')),
+    );
 
     expect(rabbit.state.acked).toHaveLength(1);
     expect(rabbit.state.nacked).toHaveLength(0);
@@ -252,7 +269,10 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
     consumerService.state.outcome = 'deferred';
     loyaltyService.processReferralTreasuryWithdrawn.mockRejectedValueOnce(new Error('db is down'));
 
-    await deliver('ReferralTreasury_Withdrawn', makeMessage('ReferralTreasury_Withdrawn', makeEvent('ReferralTreasury_Withdrawn')));
+    await deliver(
+      'ReferralTreasury_Withdrawn',
+      makeMessage('ReferralTreasury_Withdrawn', makeEvent('ReferralTreasury_Withdrawn')),
+    );
 
     expect(consumerService.state.handlerError).toBeInstanceOf(Error);
     expect((consumerService.state.handlerError as Error).message).toBe('db is down');

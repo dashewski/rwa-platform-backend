@@ -224,7 +224,11 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       await deliver(
         QUEUE,
-        makeMessage('Governance_VoteCast', {}, { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } }),
+        makeMessage(
+          'Governance_VoteCast',
+          {},
+          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } },
+        ),
       );
 
       expect(rabbit.state.parked).toHaveLength(0);
@@ -263,7 +267,11 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       await deliver(
         QUEUE,
-        makeMessage('Governance_VoteCast', {}, { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 2)] } }),
+        makeMessage(
+          'Governance_VoteCast',
+          {},
+          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 2)] } },
+        ),
       );
 
       expect(rabbit.state.parked).toHaveLength(0);
@@ -278,7 +286,11 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       await deliver(
         QUEUE,
-        makeMessage('Governance_VoteCast', {}, { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 1)] } }),
+        makeMessage(
+          'Governance_VoteCast',
+          {},
+          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 1)] } },
+        ),
       );
 
       expect(rabbit.state.acked).toHaveLength(0);
@@ -337,7 +349,11 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       await deliver(
         QUEUE,
-        makeMessage('Governance_VoteCast', {}, { raw: 'not-json{', headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 1)] } }),
+        makeMessage(
+          'Governance_VoteCast',
+          {},
+          { raw: 'not-json{', headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 1)] } },
+        ),
       );
 
       expect(rabbit.state.parked).toHaveLength(0);

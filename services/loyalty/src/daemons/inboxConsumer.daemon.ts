@@ -3,7 +3,6 @@ import { BaseInboxConsumerDaemon } from '@shared/inbox-consumer';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { LoyaltyService } from '../services/loyalty.service';
 
-
 export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
   constructor(
     rabbitClient: RabbitMQClient,

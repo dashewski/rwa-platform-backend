@@ -41,10 +41,7 @@ const REQUEST = {
 };
 
 function buildApp(faucetRequests: FakeFaucetRequestRepository, blockchainClient: FakeBlockchainClient) {
-  const repositoriesPlugin = new Elysia({ name: 'Repositories' }).decorate(
-    'faucetRequestRepository',
-    faucetRequests,
-  );
+  const repositoriesPlugin = new Elysia({ name: 'Repositories' }).decorate('faucetRequestRepository', faucetRequests);
   const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('blockchainClient', blockchainClient);
 
   const servicesPlugin = createServicesPlugin(

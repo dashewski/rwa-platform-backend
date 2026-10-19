@@ -182,14 +182,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
     });
 
     expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledTimes(1);
-    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(
-      POOL_ADDRESS,
-      100,
-      250,
-      { timestamp: 'desc' },
-      10,
-      1,
-    );
+    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(POOL_ADDRESS, 100, 250, { timestamp: 'desc' }, 10, 1);
 
     // Descending order [260, 250], then offset 1 keeps only the older row.
     expect(result).toHaveLength(1);
@@ -204,7 +197,14 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
 
     const result = await service.getRawPriceData({ poolAddress: POOL_ADDRESS, startTime: 0, endTime: 1000 });
 
-    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(POOL_ADDRESS, 0, 1000, undefined, undefined, undefined);
+    expect(priceData.findByPoolAndTimeRange).toHaveBeenCalledWith(
+      POOL_ADDRESS,
+      0,
+      1000,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(result).toHaveLength(1);
   });
 
@@ -219,9 +219,9 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   test('getRawPriceData: propagates a repository failure', async () => {
     priceData.findByPoolAndTimeRange.mockRejectedValueOnce(new Error('db unavailable'));
 
-    await expect(
-      service.getRawPriceData({ poolAddress: POOL_ADDRESS, startTime: 0, endTime: 1000 }),
-    ).rejects.toThrow('db unavailable');
+    await expect(service.getRawPriceData({ poolAddress: POOL_ADDRESS, startTime: 0, endTime: 1000 })).rejects.toThrow(
+      'db unavailable',
+    );
   });
 
   test('getOhlcPriceData: converts every supported interval to seconds before delegating', async () => {

@@ -5,7 +5,6 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { metrics } from '@shared/monitoring/src/metrics';
 import type { InboxConsumerMessageRepository } from '../repositories/inboxConsumerMessage.repository';
 
-
 export class InboxConsumerService {
   constructor(
     private readonly inboxConsumerMessageRepository: InboxConsumerMessageRepository,
@@ -24,7 +23,7 @@ export class InboxConsumerService {
   ): Promise<'acked' | 'deferred'> {
     let lastError = '';
     let delayMs = this.initialDelayMs;
-    let attempt = 1
+    let attempt = 1;
     for (; attempt <= maxAttempts; attempt += 1) {
       try {
         const applied = await this.apply(message, handler);

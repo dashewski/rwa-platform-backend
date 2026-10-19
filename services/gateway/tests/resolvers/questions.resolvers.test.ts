@@ -127,9 +127,11 @@ describe('questions resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
       fake.clients.questionsClient.getTopics.post.mockImplementation(async () => edenError(500));
 
-      await expect(
-        getTopics(null as never, {} as never, fake as unknown as GraphQLContext),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get topics' });
+      await expect(getTopics(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BAD_GATEWAY',
+        message: 'Failed to get topics',
+      });
     });
   });
 
@@ -192,9 +194,11 @@ describe('questions resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
       fake.clients.questionsClient.getQuestions.post.mockImplementation(async () => edenError(500));
 
-      await expect(
-        getQuestions(null as never, {} as never, fake as unknown as GraphQLContext),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get questions' });
+      await expect(getQuestions(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'BAD_GATEWAY',
+        message: 'Failed to get questions',
+      });
     });
   });
 
@@ -630,7 +634,11 @@ describe('questions resolvers (unit, fake context)', () => {
       fake.clients.questionsClient.getQuestion.post.mockImplementation(async () => edenOk(QUESTION));
       fake.clients.questionsClient.deleteQuestion.post.mockImplementation(async () => edenOk({ id: 'question-1' }));
 
-      const result = await deleteQuestion(null as never, { id: 'question-1' } as never, fake as unknown as GraphQLContext);
+      const result = await deleteQuestion(
+        null as never,
+        { id: 'question-1' } as never,
+        fake as unknown as GraphQLContext,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: 'user-1',

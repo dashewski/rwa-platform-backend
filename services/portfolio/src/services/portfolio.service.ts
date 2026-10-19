@@ -15,7 +15,7 @@ export class PortfolioService {
   constructor(
     private readonly tokenBalanceRepository: TokenBalanceRepository,
     private readonly transactionRepository: TransactionRepository,
-  ) { }
+  ) {}
 
   /**
    * Gets token balances list with filters, pagination and sorting
@@ -98,14 +98,16 @@ export class PortfolioService {
       amount: a[0].data.amount,
     }),
   })
-  async processTransfer(event: BlockchainEvent<{
-    emittedFrom: string;
-    from: string;
-    to: string;
-    tokenId: string;
-    amount: string;
-    pool: string;
-  }>) {
+  async processTransfer(
+    event: BlockchainEvent<{
+      emittedFrom: string;
+      from: string;
+      to: string;
+      tokenId: string;
+      amount: string;
+      pool: string;
+    }>,
+  ) {
     setSpanAttributes({
       chainId: event.chainId,
       blockNumber: event.blockNumber,

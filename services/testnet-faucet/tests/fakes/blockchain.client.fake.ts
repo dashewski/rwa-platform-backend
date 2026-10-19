@@ -45,11 +45,13 @@ export function createFakeBlockchainClient() {
       return transactionHash;
     }),
 
-    transferERC20Token: mock(async (tokenAddress: string, recipientAddress: string, amount: string): Promise<string> => {
-      const transactionHash = nextTransactionHash(transfers.length + 1);
-      transfers.push({ kind: 'erc20', tokenAddress, recipientAddress, amount, transactionHash });
-      return transactionHash;
-    }),
+    transferERC20Token: mock(
+      async (tokenAddress: string, recipientAddress: string, amount: string): Promise<string> => {
+        const transactionHash = nextTransactionHash(transfers.length + 1);
+        transfers.push({ kind: 'erc20', tokenAddress, recipientAddress, amount, transactionHash });
+        return transactionHash;
+      },
+    ),
 
     shutdown: mock(async (): Promise<void> => {}),
   };

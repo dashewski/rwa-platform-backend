@@ -8,7 +8,6 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import type { BlockchainEvent } from '@shared/blockchain';
 
-
 export class BlockchainScannerDaemon {
   private provider: ethers.JsonRpcProvider;
   private eventEmitterContract: ethers.Contract;
@@ -215,7 +214,7 @@ export class BlockchainScannerDaemon {
         chainId: this.chainId,
       });
       setTimeout(() => {
-        process.exit(1)
+        process.exit(1);
       }, 5000);
     });
   }

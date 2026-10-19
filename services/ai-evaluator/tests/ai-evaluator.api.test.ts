@@ -207,12 +207,7 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       second._id.toString(),
     ]);
     expect(response.body.map((evaluation: any) => evaluation.id)).not.toContain(third._id.toString());
-    expect(evaluationRepository.findAll).toHaveBeenCalledWith(
-      { parentId: 'pool-1' },
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(evaluationRepository.findAll).toHaveBeenCalledWith({ parentId: 'pool-1' }, undefined, undefined, undefined);
   });
 
   test('getEvaluations: sort and pagination are forwarded to the repository', async () => {

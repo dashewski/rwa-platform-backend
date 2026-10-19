@@ -15,10 +15,9 @@ export const createServicesPlugin = (
   placeholderImageUrl: string,
   filesBaseUrl: string,
 ) => {
-  const inboxConsumer = withTraceSync('rwa.init.services.inbox_consumer', () =>
-    new InboxConsumerService(
-      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
-    ),
+  const inboxConsumer = withTraceSync(
+    'rwa.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const businessService = withTraceSync(

@@ -10,7 +10,6 @@ const app = await withTraceAsync('ai-assistant.init.main', async () => {
     String(process.env.RWA_SERVICE_URL),
     String(process.env.PORTFOLIO_SERVICE_URL),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

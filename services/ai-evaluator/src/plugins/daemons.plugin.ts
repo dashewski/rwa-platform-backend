@@ -6,16 +6,15 @@ import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (
-  clientsPlugin: ClientsPlugin,
-  servicesPlugin: ServicesPlugin,
-) => {
-  const evaluationJobDaemon = withTraceSync('ai-evaluator.init.daemons.evaluation_job', () =>
-    new EvaluationJobDaemon(servicesPlugin.decorator.riskEvaluationService, 500, 5),
+export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
+  const evaluationJobDaemon = withTraceSync(
+    'ai-evaluator.init.daemons.evaluation_job',
+    () => new EvaluationJobDaemon(servicesPlugin.decorator.riskEvaluationService, 500, 5),
   );
 
-  const outboxPublisherDaemon = withTraceSync('ai-evaluator.init.daemons.outbox_publisher', () =>
-    new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
+  const outboxPublisherDaemon = withTraceSync(
+    'ai-evaluator.init.daemons.outbox_publisher',
+    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
   );
 
   await withTraceAsync('ai-evaluator.init.daemons.initialize', async () => {

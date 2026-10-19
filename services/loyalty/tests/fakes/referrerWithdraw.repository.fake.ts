@@ -125,7 +125,8 @@ export function createFakeReferrerWithdrawRepository() {
 
     addWithdrawnAmount: mock(
       async (referrerWallet: string, referrerId: string, chainId: string, tokenAddress: string, amount: string) => {
-        const doc = findByKey(referrerWallet, referrerId, chainId, tokenAddress) ??
+        const doc =
+          findByKey(referrerWallet, referrerId, chainId, tokenAddress) ??
           insert({ referrerWallet, referrerId, chainId, tokenAddress });
 
         doc.totalWithdrawnAmount = addDecimal(doc.totalWithdrawnAmount, amount);

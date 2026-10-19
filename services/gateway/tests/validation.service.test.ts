@@ -38,7 +38,9 @@ describe('ValidationService (unit, pure)', () => {
 
   test('validateSocials: rejects links missing type or url', () => {
     expect(() => service.validateSocials([{ type: 'twitter' } as never])).toThrow('Each social link must have');
-    expect(() => service.validateSocials([{ url: 'https://x.com/abc' } as never])).toThrow('Each social link must have');
+    expect(() => service.validateSocials([{ url: 'https://x.com/abc' } as never])).toThrow(
+      'Each social link must have',
+    );
   });
 
   test('validateSocials: rejects unknown social types', () => {
@@ -60,7 +62,9 @@ describe('ValidationService (unit, pure)', () => {
     );
     expect(() => service.validateSocials([{ type: 'instagram', url: 'https://www.instagram.com/abc' }])).not.toThrow();
     expect(() => service.validateSocials([{ type: 'facebook', url: 'https://facebook.com/page' }])).not.toThrow();
-    expect(() => service.validateSocials([{ type: 'youtube', url: 'https://www.youtube.com/watch?v=1' }])).not.toThrow();
+    expect(() =>
+      service.validateSocials([{ type: 'youtube', url: 'https://www.youtube.com/watch?v=1' }]),
+    ).not.toThrow();
     expect(() => service.validateSocials([{ type: 'youtube', url: 'https://youtu.be/abc' }])).toThrow(
       'Invalid URL for youtube',
     );
