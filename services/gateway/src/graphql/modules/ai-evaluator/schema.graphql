@@ -27,7 +27,6 @@ type Evaluation {
   grandParentId: String!
   ownerId: String!
   ownerType: String!
-  status: String!
   riskScore: Int
   reasoning: String
   factors: [EvaluationFactor!]!

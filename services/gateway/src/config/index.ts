@@ -64,9 +64,6 @@ export const CONFIG = {
     API_KEYS: {
       URL: String(process.env.API_KEYS_SERVICE_URL),
     },
-    WEBHOOKS: {
-      URL: String(process.env.WEBHOOKS_SERVICE_URL),
-    },
   },
 
   MONITORING: {

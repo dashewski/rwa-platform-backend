@@ -25,7 +25,6 @@ import {
   daoClient,
   aiEvaluatorClient,
   apiKeysClient,
-  webhooksClient,
 } from '../../clients/eden.clients';
 import type { GraphQLContext, User } from '../context/types';
 import { cacheService, ownershipService, parentService, validationService } from '../../services/services.init';
@@ -115,7 +114,6 @@ export const yogaServer = createYoga({
         daoClient,
         aiEvaluatorClient,
         apiKeysClient,
-        webhooksClient,
       },
       services: {
         cache: cacheService,

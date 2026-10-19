@@ -12,7 +12,6 @@ COPY shared/rabbitmq/package.json ./shared/rabbitmq/
 COPY shared/inbox-consumer/package.json ./shared/inbox-consumer/
 COPY shared/outbox-publisher/package.json ./shared/outbox-publisher/
 COPY shared/redis-events/package.json ./shared/redis-events/
-COPY shared/webhooks/package.json ./shared/webhooks/
 
 COPY services/rwa/package.json ./services/rwa/
 COPY services/documents/package.json ./services/documents/

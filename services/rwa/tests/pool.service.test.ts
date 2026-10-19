@@ -755,7 +755,7 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     });
   });
 
-  test('syncPoolAfterDeployment: maps the deployment event, publishes redis and webhook events', async () => {
+  test('syncPoolAfterDeployment: maps the deployment event and publishes the redis event', async () => {
     const pool = await pools.createPool(POOL);
     const event = eventOf({ ...DEPLOYMENT_EVENT, entityId: pool._id.toString() });
 

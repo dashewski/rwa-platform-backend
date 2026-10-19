@@ -18,7 +18,6 @@ import type {
   DaoClient,
   AiEvaluatorClient,
   ApiKeysClient,
-  WebhooksClient,
 } from '../../clients/eden.clients';
 import type { createPubSub } from 'graphql-yoga';
 import { CacheService } from '../../services/cache.service';
@@ -52,7 +51,6 @@ export interface ServiceClients {
   daoClient: DaoClient;
   aiEvaluatorClient: AiEvaluatorClient;
   apiKeysClient: ApiKeysClient;
-  webhooksClient: WebhooksClient;
 }
 
 export interface Services {
