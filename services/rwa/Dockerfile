@@ -10,10 +10,10 @@ COPY shared/openrouter/package.json ./shared/openrouter/
 COPY shared/rabbitmq/package.json ./shared/rabbitmq/
 COPY shared/redis-events/package.json ./shared/redis-events/
 COPY shared/errors/package.json ./shared/errors/
-COPY shared/webhooks/package.json ./shared/webhooks/
+COPY shared/outbox-publisher/package.json ./shared/outbox-publisher/
 COPY shared/files/package.json ./shared/files/
 COPY shared/blockchain/package.json ./shared/blockchain/
-COPY shared/ordered-consumer/package.json ./shared/ordered-consumer/
+COPY shared/inbox-consumer/package.json ./shared/inbox-consumer/
 
 COPY services/rwa/package.json ./services/rwa/
 

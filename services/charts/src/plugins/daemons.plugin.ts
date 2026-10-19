@@ -1,37 +1,39 @@
 import { Elysia } from 'elysia';
-import { BlockchainEventsDaemon } from '../daemons/blockchainEvents.daemon';
-import type { OrderedConsumerPlugin } from '@shared/ordered-consumer';
+import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
 import type { ServicesPlugin } from './services.plugin';
+import type { ClientsPlugin } from './clients.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
+import { logger } from '@shared/monitoring/src/monitoring.plugin';
 
 export const createDaemonsPlugin = async (
   servicesPlugin: ServicesPlugin,
-  orderedConsumerPlugin: OrderedConsumerPlugin,
+  clientsPlugin: ClientsPlugin,
 ) => {
-  const blockchainEventsDaemon = withTraceSync(
-    'charts.init.daemons.blockchain_events',
+  const inboxConsumerDaemon = withTraceSync(
+    'charts.init.daemons.inbox_consumer',
     () =>
-      new BlockchainEventsDaemon(
-        orderedConsumerPlugin.decorator.rabbitMQClient,
-        orderedConsumerPlugin.decorator.orderedConsumer,
+      new InboxConsumerDaemon(
+        clientsPlugin.decorator.rabbitMQClient,
+        servicesPlugin.decorator.inboxConsumer,
         servicesPlugin.decorator.chartsService,
         servicesPlugin.decorator.transactionsService,
       ),
   );
 
   await withTraceAsync('charts.init.daemons.initialize', async () => {
-    await blockchainEventsDaemon.initialize();
+    await inboxConsumerDaemon.initialize();
   });
 
   const plugin = withTraceSync('charts.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
       .use(servicesPlugin)
-      .use(orderedConsumerPlugin)
-      .decorate('blockchainEventsDaemon', blockchainEventsDaemon)
+      .use(clientsPlugin)
+      .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
       .onStop(async () => {
         await withTraceAsync('charts.stop.daemons', async () => {
-          if (blockchainEventsDaemon) {
-            await blockchainEventsDaemon.stop();
+          if (inboxConsumerDaemon) {
+            await inboxConsumerDaemon.stop();
+            logger.info('Inbox consumer daemon stopped');
           }
         });
       }),

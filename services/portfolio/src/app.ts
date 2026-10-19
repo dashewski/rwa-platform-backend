@@ -2,18 +2,22 @@ import { Elysia } from 'elysia';
 import { monitoringPlugin } from '@shared/monitoring/src/monitoring.plugin';
 import { healthPlugin } from '@shared/monitoring/src/health.plugin';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
-import { createOrderedConsumerPlugin } from '@shared/ordered-consumer';
 import { createRepositoriesPlugin } from './plugins/repositories.plugin';
+import { createClientsPlugin } from './plugins/clients.plugin';
 import { createServicesPlugin } from './plugins/services.plugin';
-import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { createControllersPlugin } from './plugins/controllers.plugin';
-import { BLOCKCHAIN_EVENTS_EXCHANGE, BLOCKCHAIN_EVENTS_QUEUE } from './daemons/blockchainEvents.daemon';
+import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(port: number, mongoUri: string, rabbitMqUri: string) {
+export async function createApp(mongoUri: string, rabbitMqUri: string) {
   const repositoriesPlugin = await withTraceAsync(
     'portfolio.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),
+  );
+
+  const clientsPlugin = await withTraceAsync(
+    'portfolio.init.clients_plugin',
+    async () => await createClientsPlugin(rabbitMqUri),
   );
 
   const servicesPlugin = withTraceSync('portfolio.init.services_plugin', () =>
@@ -24,14 +28,9 @@ export async function createApp(port: number, mongoUri: string, rabbitMqUri: str
     createControllersPlugin(servicesPlugin),
   );
 
-  const orderedConsumerPlugin = await withTraceAsync(
-    'portfolio.init.ordered_consumer_plugin',
-    async () => await createOrderedConsumerPlugin(rabbitMqUri, BLOCKCHAIN_EVENTS_EXCHANGE, BLOCKCHAIN_EVENTS_QUEUE),
-  );
-
   const daemonsPlugin = await withTraceAsync(
     'portfolio.init.daemons_plugin',
-    async () => await createDaemonsPlugin(servicesPlugin, orderedConsumerPlugin),
+    async () => await createDaemonsPlugin(servicesPlugin, clientsPlugin),
   );
 
   const app = withTraceSync('portfolio.init.elysia', () => {
@@ -40,7 +39,7 @@ export async function createApp(port: number, mongoUri: string, rabbitMqUri: str
       .use(healthPlugin)
       .onError(ErrorHandlerPlugin)
       .use(repositoriesPlugin)
-      .use(orderedConsumerPlugin)
+      .use(clientsPlugin)
       .use(servicesPlugin)
       .use(daemonsPlugin)
       .use(controllersPlugin);

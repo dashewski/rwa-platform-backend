@@ -35,7 +35,7 @@ export class EventRepository {
    * Delete all events for a specific block
    */
   @TraceDecorator()
-  async deleteBlockEvents(chainId: number, blockNumber: number) {
+  async deleteBlockEvents(chainId: string, blockNumber: number) {
     const result = await this.model.deleteMany({
       chainId,
       blockNumber,

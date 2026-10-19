@@ -2,6 +2,7 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { FeesRepository } from '../repositories/fees.repository';
 import { ReferralRepository } from '../repositories/referral.repository';
+import type { BlockchainEvent } from '@shared/blockchain';
 import type { SortOrder } from 'mongoose';
 import mongoose from 'mongoose';
 import type { IReferralEntity } from '../models/entity/referral.entity';
@@ -63,17 +64,12 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processCreateRWAFeeCollected(event: {
-    data: {
+  async processCreateRWAFeeCollected(event: BlockchainEvent<{
       sender: string;
       amount: string;
       token: string;
-    };
-    chainId: number;
-    transactionHash: string;
-    logIndex: number;
-    blockNumber: number;
-  }) {
+    
+  }>) {
     setSpanAttributes({
       wallet: event.data.sender,
       transactionHash: event.transactionHash,
@@ -132,17 +128,12 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processCreatePoolFeeCollected(event: {
-    data: {
+  async processCreatePoolFeeCollected(event: BlockchainEvent<{
       sender: string;
       amount: string;
       token: string;
-    };
-    chainId: number;
-    transactionHash: string;
-    logIndex: number;
-    blockNumber: number;
-  }) {
+    
+  }>) {
     setSpanAttributes({
       wallet: event.data.sender,
       transactionHash: event.transactionHash,
@@ -201,8 +192,7 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processRwaMinted(event: {
-    data: {
+  async processRwaMinted(event: BlockchainEvent<{
       minter: string;
       rwaAmountMinted: string;
       holdAmountPaid: string;
@@ -213,12 +203,8 @@ export class LoyaltyService {
       businessId: string;
       poolId: string;
       holdToken: string;
-    };
-    chainId: number;
-    transactionHash: string;
-    logIndex: number;
-    blockNumber: number;
-  }) {
+    
+  }>) {
     setSpanAttributes({
       wallet: event.data.minter,
       transactionHash: event.transactionHash,
@@ -271,8 +257,7 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processRwaBurned(event: {
-    data: {
+  async processRwaBurned(event: BlockchainEvent<{
       burner: string;
       rwaAmountBurned: string;
       holdAmountReceived: string;
@@ -285,12 +270,8 @@ export class LoyaltyService {
       businessId: string;
       poolId: string;
       holdToken: string;
-    };
-    chainId: number;
-    transactionHash: string;
-    logIndex: number;
-    blockNumber: number;
-  }) {
+    
+  }>) {
     setSpanAttributes({
       wallet: event.data.burner,
       transactionHash: event.transactionHash,
@@ -354,14 +335,12 @@ export class LoyaltyService {
       transactionHash: a[0].transactionHash,
     }),
   })
-  async processReferralTreasuryWithdrawn(event: {
-    data: {
+  async processReferralTreasuryWithdrawn(event: BlockchainEvent<{
       user: string;
       token: string;
       amount: string;
-    };
-    chainId: number;
-  }) {
+    
+  }>) {
     setSpanAttributes({
       wallet: event.data.user,
       chainId: String(event.chainId),
@@ -393,8 +372,6 @@ export class LoyaltyService {
     args: (a) => ({
       userWallet: a[0].userWallet,
       userId: a[0].userId,
-      limit: a[0].limit,
-      offset: a[0].offset,
     }),
   })
   async registerReferral(params: { userWallet: string; userId: string; referrerWallet?: string; referrerId?: string }) {
@@ -605,10 +582,11 @@ export class LoyaltyService {
   @MetricsDecorator()
   @LogDecorator({
     args: (a) => ({
-      userWallet: a[0].userWallet,
-      userId: a[0].userId,
-      limit: a[0].limit,
-      offset: a[0].offset,
+      referrerWallet: a[0].referrerWallet,
+      referrerId: a[0].referrerId,
+      chainId: a[0].chainId,
+      tokenAddress: a[0].tokenAddress,
+      amount: a[0].amount,
     }),
   })
   async createReferrerWithdrawTask(params: {

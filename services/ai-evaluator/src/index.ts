@@ -3,7 +3,6 @@ import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
 const app = await withTraceAsync('ai-evaluator.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.OPENROUTER_API_KEY),
     String(process.env.OPENROUTER_BASE_URL),
@@ -15,8 +14,6 @@ const app = await withTraceAsync('ai-evaluator.init.main', async () => {
     String(process.env.QUESTIONS_SERVICE_URL),
     String(process.env.PORTFOLIO_SERVICE_URL),
     String(process.env.RABBITMQ_URL),
-    Number(process.env.RABBITMQ_MAX_RECONNECT_ATTEMPTS),
-    Number(process.env.RABBITMQ_RECONNECT_INTERVAL),
     Number(process.env.AI_EVALUATOR_MAX_FILES_PER_REQUEST) || 20,
   );
 

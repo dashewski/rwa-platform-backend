@@ -1,33 +1,41 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
-import { EvaluationRequestsDaemon } from '../daemons/evaluationRequests.daemon';
+import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
+import { EvaluationJobDaemon } from '../daemons/evaluationJob.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
-  const evaluationRequestsDaemon = withTraceSync(
-    'ai-evaluator.init.daemons.evaluation_requests',
-    () =>
-      new EvaluationRequestsDaemon(
-        clientsPlugin.decorator.rabbitMQClient,
-        servicesPlugin.decorator.riskEvaluationService,
-      ),
+export const createDaemonsPlugin = async (
+  clientsPlugin: ClientsPlugin,
+  servicesPlugin: ServicesPlugin,
+) => {
+  const evaluationJobDaemon = withTraceSync('ai-evaluator.init.daemons.evaluation_job', () =>
+    new EvaluationJobDaemon(servicesPlugin.decorator.riskEvaluationService, 500, 5),
+  );
+
+  const outboxPublisherDaemon = withTraceSync('ai-evaluator.init.daemons.outbox_publisher', () =>
+    new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
   );
 
   await withTraceAsync('ai-evaluator.init.daemons.initialize', async () => {
     logger.debug('Initializing daemons');
-    await evaluationRequestsDaemon.initialize();
-    logger.info('Evaluation requests daemon initialized');
+    await outboxPublisherDaemon.initialize();
+    evaluationJobDaemon.initialize();
+    logger.info('Daemons initialized');
   });
 
   const plugin = withTraceSync('ai-evaluator.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
       .use(clientsPlugin)
       .use(servicesPlugin)
-      .decorate('evaluationRequestsDaemon', evaluationRequestsDaemon)
+      .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
       .onStop(async () => {
-        logger.info('Daemons stopped');
+        await withTraceAsync('ai-evaluator.stop.daemons_plugin', async () => {
+          outboxPublisherDaemon.stop();
+          evaluationJobDaemon.stop();
+          logger.info('Daemons stopped');
+        });
       }),
   );
 

@@ -3,7 +3,6 @@ import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
 const app = await withTraceAsync('blockchain-scanner.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
     String(process.env.RPC_URL),
@@ -11,7 +10,7 @@ const app = await withTraceAsync('blockchain-scanner.init.main', async () => {
     Number(process.env.BLOCK_CONFIRMATIONS),
     Number(process.env.SCAN_INTERVAL),
     Number(process.env.BATCH_SIZE),
-    Number(process.env.CHAIN_ID),
+    String(process.env.CHAIN_ID),
     Number(process.env.INIT_SCAN_BLOCK_NUMBER ?? process.env.initScanBlockNumber),
   );
 });

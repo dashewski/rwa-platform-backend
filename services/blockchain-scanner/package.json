@@ -10,8 +10,9 @@
   "dependencies": {
     "@shared/monitoring": "workspace:*",
     "@shared/errors": "workspace:*",
-    "@shared/ordered-publisher": "workspace:*",
+    "@shared/outbox-publisher": "workspace:*",
     "@shared/blockchain": "workspace:*",
+    "@shared/rabbitmq": "workspace:*",
     "elysia": "1.3.5",
     "ethers": "6.15.0",
     "mongoose": "8.16.4"

@@ -14,16 +14,16 @@ import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
 import { createControllersPlugin } from '../src/plugins/controllers.plugin';
 import type { RepositoriesPlugin } from '../src/plugins/repositories.plugin';
-import type { OrderedPublisherPlugin } from '@shared/ordered-publisher';
+import type { ClientsPlugin } from '../src/plugins/clients.plugin';
 import { createFakeEventRepository, type FakeEventDoc, type FakeEventRepository } from './fakes/event.repository.fake';
 import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
 import {
-  createFakeOrderedPublisher,
-  type FakeOrderedPublisher,
-} from './fakes/orderedPublisher.fake';
+  createFakeOutboxPublisher,
+  type FakeOutboxPublisher,
+} from './fakes/outboxPublisher.fake';
 
 const CHAIN_ID = 31337;
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
@@ -52,17 +52,21 @@ function seedEvent(
 function buildApp(
   events: FakeEventRepository,
   scannerState: FakeScannerStateRepository,
-  publisher: FakeOrderedPublisher,
+  publisher: FakeOutboxPublisher,
 ) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('eventRepository', events)
-    .decorate('scannerStateRepository', scannerState);
+    .decorate('scannerStateRepository', scannerState)
+    .decorate('outboxPublisherMessageRepository', {});
 
-  const orderedPublisherPlugin = new Elysia({ name: 'OrderedPublisher' }).decorate('orderedPublisher', publisher);
+  const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', {
+    getExchange: (name: string) => name,
+    getTopologyDefinition: () => ({ exchanges: {}, queues: {} }),
+  });
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,
-    orderedPublisherPlugin as unknown as OrderedPublisherPlugin,
+    clientsPlugin as unknown as ClientsPlugin,
     CHAIN_ID,
   );
 
@@ -86,13 +90,13 @@ async function post(app: App, path: string, body: unknown) {
 describe('blockchain-scanner HTTP layer (component, fake repositories + fake publisher)', () => {
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let publisher: FakeOrderedPublisher;
+  let publisher: FakeOutboxPublisher;
   let app: App;
 
   beforeEach(() => {
     events = createFakeEventRepository();
     scannerState = createFakeScannerStateRepository();
-    publisher = createFakeOrderedPublisher();
+    publisher = createFakeOutboxPublisher();
     app = buildApp(events, scannerState, publisher);
   });
 

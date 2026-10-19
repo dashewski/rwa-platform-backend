@@ -12,8 +12,6 @@ x-configs:
   infra:
     rabbit-env: &rabbit-env
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      RABBITMQ_RECONNECT_INTERVAL: ${RABBITMQ_RECONNECT_INTERVAL}
-      RABBITMQ_MAX_RECONNECT_ATTEMPTS: ${RABBITMQ_MAX_RECONNECT_ATTEMPTS}
     
     mongo-env: &mongo-env
       MONGODB_URI: ${MONGODB_BASE_URI}
@@ -562,15 +560,18 @@ services:
       context: ../..
       dockerfile: services/signer/Dockerfile
     environment:
-      <<: [*monitoring-env, *rabbit-env]
+      <<: [*mongo-env, *monitoring-env, *rabbit-env]
       SERVICE_NAME: ${SIGNER_1_SERVICE_NAME}
       SERVICE_VERSION: ${SIGNER_1_SERVICE_VERSION}
+      MONGODB_DBNAME: ${SIGNER_1_MONGODB_DBNAME}
       PORT: ${SIGNER_1_PORT}
       SIGNER_PRIVATE_KEY: ${SIGNER_1_PRIVATE_KEY}
     volumes: *monitoring-volumes
     networks:
       - app-network
     depends_on:
+      mongodb:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
@@ -580,15 +581,18 @@ services:
       context: ../..
       dockerfile: services/signer/Dockerfile
     environment:
-      <<: [*monitoring-env, *rabbit-env]
+      <<: [*mongo-env, *monitoring-env, *rabbit-env]
       SERVICE_NAME: ${SIGNER_2_SERVICE_NAME}
       SERVICE_VERSION: ${SIGNER_2_SERVICE_VERSION}
+      MONGODB_DBNAME: ${SIGNER_2_MONGODB_DBNAME}
       PORT: ${SIGNER_2_PORT}
       SIGNER_PRIVATE_KEY: ${SIGNER_2_PRIVATE_KEY}
     volumes: *monitoring-volumes
     networks:
       - app-network
     depends_on:
+      mongodb:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
@@ -598,15 +602,18 @@ services:
       context: ../..
       dockerfile: services/signer/Dockerfile
     environment:
-      <<: [*monitoring-env, *rabbit-env]
+      <<: [*mongo-env, *monitoring-env, *rabbit-env]
       SERVICE_NAME: ${SIGNER_3_SERVICE_NAME}
       SERVICE_VERSION: ${SIGNER_3_SERVICE_VERSION}
+      MONGODB_DBNAME: ${SIGNER_3_MONGODB_DBNAME}
       PORT: ${SIGNER_3_PORT}
       SIGNER_PRIVATE_KEY: ${SIGNER_3_PRIVATE_KEY}
     volumes: *monitoring-volumes
     networks:
       - app-network
     depends_on:
+      mongodb:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
 

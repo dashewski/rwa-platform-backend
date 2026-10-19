@@ -10,11 +10,8 @@ import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
   mongoUri: string,
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
   redisUrl: string,
   encryptionKey: string,
 ) {
@@ -25,8 +22,6 @@ export async function createApp(
 
   const clientsPlugin = await createClientsPlugin(
     rabbitMqUri,
-    rabbitMqMaxReconnectAttempts,
-    rabbitMqReconnectInterval,
     redisUrl,
   );
 

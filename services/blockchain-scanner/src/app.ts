@@ -2,15 +2,14 @@ import { Elysia } from 'elysia';
 import { monitoringPlugin } from '@shared/monitoring/src/monitoring.plugin';
 import { healthPlugin } from '@shared/monitoring/src/health.plugin';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
-import { createOrderedPublisherPlugin } from '@shared/ordered-publisher';
 import { createRepositoriesPlugin } from './plugins/repositories.plugin';
+import { createClientsPlugin } from './plugins/clients.plugin';
 import { createServicesPlugin } from './plugins/services.plugin';
 import { createControllersPlugin } from './plugins/controllers.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
   mongoUri: string,
   rabbitMqUri: string,
   rpcUrl: string,
@@ -18,7 +17,7 @@ export async function createApp(
   blockConfirmations: number,
   scanIntervalMs: number,
   batchSize: number,
-  chainId: number,
+  chainId: string,
   initScanBlockNumber: number,
 ) {
   const repositoriesPlugin = await withTraceAsync(
@@ -26,14 +25,13 @@ export async function createApp(
     async () => await createRepositoriesPlugin(mongoUri),
   );
 
-  // the publisher owns the RabbitMQ client, the exchange declaration and the outbox relay
-  const orderedPublisherPlugin = await withTraceAsync(
-    'blockchain-scanner.init.ordered_publisher_plugin',
-    async () => await createOrderedPublisherPlugin(rabbitMqUri, 'blockchain.events'),
+  const clientsPlugin = await withTraceAsync(
+    'blockchain-scanner.init.clients_plugin',
+    async () => await createClientsPlugin(rabbitMqUri),
   );
 
   const servicesPlugin = withTraceSync('blockchain-scanner.init.services_plugin', () =>
-    createServicesPlugin(repositoriesPlugin, orderedPublisherPlugin, chainId),
+    createServicesPlugin(repositoriesPlugin, clientsPlugin, chainId),
   );
 
   const controllersPlugin = withTraceSync('blockchain-scanner.init.controllers_plugin', () =>
@@ -45,6 +43,7 @@ export async function createApp(
     async () =>
       await createDaemonsPlugin(
         servicesPlugin,
+        clientsPlugin,
         rpcUrl,
         contractAddress,
         blockConfirmations,
@@ -61,7 +60,7 @@ export async function createApp(
       .use(healthPlugin)
       .onError(ErrorHandlerPlugin)
       .use(repositoriesPlugin)
-      .use(orderedPublisherPlugin)
+      .use(clientsPlugin)
       .use(servicesPlugin)
       .use(daemonsPlugin)
       .use(controllersPlugin);

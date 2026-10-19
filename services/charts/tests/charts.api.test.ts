@@ -36,7 +36,8 @@ function buildApp(
 ) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('priceDataRepository', priceData)
-    .decorate('poolTransactionRepository', poolTransactions);
+    .decorate('poolTransactionRepository', poolTransactions)
+    .decorate('inboxConsumerMessageRepository', {});
 
   const clientsPlugin = new Elysia({ name: 'Clients' })
     .decorate('redisEventsClient', redis)

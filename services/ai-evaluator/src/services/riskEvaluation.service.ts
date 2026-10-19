@@ -1,7 +1,11 @@
+import mongoose, { Types } from 'mongoose';
+import type { EvaluationJob } from '../models/entity/evaluationJob.entity';
+import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { AppError } from '@shared/errors/app-errors';
 import { OpenRouterClient } from '@shared/openrouter/client';
 import type { ChatMessage, TextContentPart, FileContentPart, ImageContentPart } from '@shared/openrouter/types';
 import type { EvaluationRepository } from '../repositories/evaluation.repository';
+import type { EvaluationJobRepository } from '../repositories/evaluationJob.repository';
 import type {
   RwaClient,
   DocumentsClient,
@@ -10,12 +14,17 @@ import type {
   QuestionsClient,
   PortfolioClient,
 } from '../clients/eden.clients';
-import type { EvaluationResultsClient } from '../clients/evaluationResults.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import type { SortOrder } from 'mongoose';
+
+const EVALUATION_RESULT_ROUTING_KEY = {
+  pool: 'poolResult',
+  business: 'businessResult',
+} as const;
 
 type FileMeta = {
   id: string;
@@ -24,9 +33,12 @@ type FileMeta = {
   url: string;
 };
 
+const EVALUATION_JOB_MAX_ATTEMPTS = 3;
+
 export class RiskEvaluationService {
   constructor(
     private readonly evaluationRepository: EvaluationRepository,
+    private readonly evaluationJobRepository: EvaluationJobRepository,
     private readonly openRouterClient: OpenRouterClient,
     private readonly rwaClient: RwaClient,
     private readonly documentsClient: DocumentsClient,
@@ -34,11 +46,14 @@ export class RiskEvaluationService {
     private readonly reactionsClient: ReactionsClient,
     private readonly questionsClient: QuestionsClient,
     private readonly portfolioClient: PortfolioClient,
-    private readonly evaluationResultsClient: EvaluationResultsClient,
+    private readonly outboxPublisher: OutboxPublisherService,
+    private readonly evaluationExchange: string,
     private readonly openRouterModel: string,
     private readonly maxFilesPerRequest: number,
     private readonly useBase64Files: boolean = true,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   @TraceDecorator()
   @MetricsDecorator()
@@ -46,48 +61,54 @@ export class RiskEvaluationService {
     args: (a) => ({ poolId: a[0].poolId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
   async evaluatePool(params: { poolId: string; ownerId: string; ownerType: string }) {
+    if (!params?.poolId || !params?.ownerId || !params?.ownerType) {
+      throw new AppError({
+        message: 'Invalid evaluatePool request format',
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
     setSpanAttributes({ entityId: params.poolId, entityType: 'pool' });
 
     const pool = await this.fetchPool({ poolId: params.poolId });
     const business = await this.fetchBusiness({ businessId: pool.businessId });
 
-    const evaluation = await this.evaluationRepository.create({
-      entityType: 'pool',
-      parentId: params.poolId,
-      grandParentId: pool.businessId,
-      ownerId: params.ownerId,
-      ownerType: params.ownerType,
-      status: 'pending',
-      factors: [],
-      evaluatedDocuments: [],
-      evaluatedImages: [],
-    });
+    const result = await this.evaluate([
+      this.poolModule(pool),
+      this.businessModule(business),
+      this.siblingPoolsModule({ businessId: pool.businessId, excludeId: params.poolId }),
+      this.documentsModule({ parentId: params.poolId }),
+      this.galleryModule({ parentId: params.poolId }),
+      this.reactionsModule({ parentId: params.poolId, parentType: 'pool' }),
+      this.questionsModule({ parentId: params.poolId }),
+      pool.poolAddress ? this.portfolioModule({ poolAddress: pool.poolAddress }) : null,
+    ]);
 
-    const evaluationId = evaluation._id.toString();
+    let evaluationId = '';
 
     try {
-      const result = await this.evaluate([
-        this.poolModule(pool),
-        this.businessModule(business),
-        this.siblingPoolsModule({ businessId: pool.businessId, excludeId: params.poolId }),
-        this.documentsModule({ parentId: params.poolId }),
-        this.galleryModule({ parentId: params.poolId }),
-        this.reactionsModule({ parentId: params.poolId, parentType: 'pool' }),
-        this.questionsModule({ parentId: params.poolId }),
-        pool.poolAddress ? this.portfolioModule({ poolAddress: pool.poolAddress }) : null,
-      ]);
-
-      await this.saveResult(evaluationId, 'pool', params.poolId, result);
-    } catch (error) {
-      await this.evaluationResultsClient
-        .publishEvaluationResult({
-          evaluationId,
+      await mongoose.connection.transaction(async () => {
+        const evaluation = await this.evaluationRepository.create({
           entityType: 'pool',
-          entityId: params.poolId,
-          status: 'failed',
-        })
-        .catch(() => {});
-      await this.evaluationRepository.updateById(evaluationId, { status: 'failed' }).catch(() => {});
+          parentId: params.poolId,
+          grandParentId: pool.businessId,
+          ownerId: params.ownerId,
+          ownerType: params.ownerType,
+          ...this.buildEvaluationResult(result),
+        });
+
+        evaluationId = evaluation._id.toString();
+
+        await this.outboxPublisher.publish(
+          this.evaluationExchange,
+          EVALUATION_RESULT_ROUTING_KEY.pool,
+          { evaluationId, entityType: 'pool', entityId: params.poolId, status: 'completed', riskScore: result.riskScore },
+          `${evaluationId}:completed`,
+        );
+      });
+    } catch (error) {
+      await this.publishFailure(evaluationId, 'pool', params.poolId);
       throw error;
     }
   }
@@ -98,47 +119,124 @@ export class RiskEvaluationService {
     args: (a) => ({ businessId: a[0].businessId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
   async evaluateBusiness(params: { businessId: string; ownerId: string; ownerType: string }) {
+    if (!params?.businessId || !params?.ownerId || !params?.ownerType) {
+      throw new AppError({
+        message: 'Invalid evaluateBusiness request format',
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
     setSpanAttributes({ entityId: params.businessId, entityType: 'business' });
 
     const business = await this.fetchBusiness({ businessId: params.businessId });
 
-    const evaluation = await this.evaluationRepository.create({
-      entityType: 'business',
-      parentId: params.businessId,
-      grandParentId: params.businessId,
-      ownerId: params.ownerId,
-      ownerType: params.ownerType,
-      status: 'pending',
-      factors: [],
-      evaluatedDocuments: [],
-      evaluatedImages: [],
-    });
+    const result = await this.evaluate([
+      this.businessModule(business),
+      this.poolsModule({ businessId: params.businessId }),
+      this.documentsModule({ parentId: params.businessId }),
+      this.galleryModule({ parentId: params.businessId }),
+      this.reactionsModule({ parentId: params.businessId, parentType: 'business' }),
+      this.questionsModule({ parentId: params.businessId }),
+    ]);
 
-    const evaluationId = evaluation._id.toString();
+    let evaluationId = '';
 
     try {
-      const result = await this.evaluate([
-        this.businessModule(business),
-        this.poolsModule({ businessId: params.businessId }),
-        this.documentsModule({ parentId: params.businessId }),
-        this.galleryModule({ parentId: params.businessId }),
-        this.reactionsModule({ parentId: params.businessId, parentType: 'business' }),
-        this.questionsModule({ parentId: params.businessId }),
-      ]);
-
-      await this.saveResult(evaluationId, 'business', params.businessId, result);
-    } catch (error) {
-      await this.evaluationResultsClient
-        .publishEvaluationResult({
-          evaluationId,
+      await mongoose.connection.transaction(async () => {
+        const evaluation = await this.evaluationRepository.create({
           entityType: 'business',
-          entityId: params.businessId,
-          status: 'failed',
-        })
-        .catch(() => {});
-      await this.evaluationRepository.updateById(evaluationId, { status: 'failed' }).catch(() => {});
+          parentId: params.businessId,
+          grandParentId: params.businessId,
+          ownerId: params.ownerId,
+          ownerType: params.ownerType,
+          ...this.buildEvaluationResult(result),
+        });
+
+        evaluationId = evaluation._id.toString();
+
+        await this.outboxPublisher.publish(
+          this.evaluationExchange,
+          EVALUATION_RESULT_ROUTING_KEY.business,
+          { evaluationId, entityType: 'business', entityId: params.businessId, status: 'completed', riskScore: result.riskScore },
+          `${evaluationId}:completed`,
+        );
+      });
+    } catch (error) {
+      await this.publishFailure(evaluationId, 'business', params.businessId);
       throw error;
     }
+  }
+
+  async createPoolEvaluation(params: { poolId: string; ownerId: string; ownerType: string }) {
+    const job = await this.evaluationJobRepository.create({ entityType: 'pool', entityId: params.poolId, params });
+
+    return { jobId: job._id.toString() };
+  }
+
+  async createBusinessEvaluation(params: { businessId: string; ownerId: string; ownerType: string }) {
+    const job = await this.evaluationJobRepository.create({
+      entityType: 'business',
+      entityId: params.businessId,
+      params,
+    });
+
+    return { jobId: job._id.toString() };
+  }
+
+  @TraceDecorator()
+  async processEvaluationJobs(concurrency: number): Promise<void> {
+    await this.evaluationJobRepository.releaseProcessing();
+
+    const inFlight = new Set<Promise<void>>();
+
+    while (true) {
+      if (inFlight.size >= concurrency) await Promise.race(inFlight);
+
+      const job = await this.evaluationJobRepository.claimNext();
+      if (!job) break;
+
+      const processing = this.processEvaluationJob(job);
+      inFlight.add(processing);
+      processing.finally(() => inFlight.delete(processing));
+    }
+
+    await Promise.all(inFlight);
+  }
+
+  private async processEvaluationJob(job: EvaluationJob & { _id: Types.ObjectId },): Promise<void> {
+    const params = job.params as { poolId?: string; businessId?: string; ownerId: string; ownerType: string };
+
+    try {
+      if (job.entityType === 'pool') {
+        await this.evaluatePool(params as { poolId: string; ownerId: string; ownerType: string });
+      } else {
+        await this.evaluateBusiness(params as { businessId: string; ownerId: string; ownerType: string });
+      }
+
+      await this.evaluationJobRepository.markDone(job._id);
+    } catch (error) {
+      const failed = await this.evaluationJobRepository.markAttemptFailed(job._id, EVALUATION_JOB_MAX_ATTEMPTS).catch(() => null);
+
+      logger.error(`Evaluation job "${job._id}" (${job.entityType} ${job.entityId}) failed:`, error);
+
+      if (failed?.status === 'failed') {
+        logger.error(`Evaluation job "${job._id}": attempts exhausted (${failed.attempts}); it is left alone`);
+      }
+    }
+  }
+
+  private async publishFailure(evaluationId: string, entityType: 'pool' | 'business', entityId: string) {
+    await this.outboxPublisher
+      .publish(
+        this.evaluationExchange,
+        EVALUATION_RESULT_ROUTING_KEY[entityType],
+        { evaluationId, entityType, entityId, status: 'failed' },
+        `${evaluationId}:failed`,
+      )
+      .catch(() => {});
+
+    await this.evaluationRepository.updateById(evaluationId, { status: 'failed' }).catch(() => {});
   }
 
   @TraceDecorator()
@@ -331,41 +429,22 @@ riskScore must be an integer between 1 and 100. 0 is not allowed.`,
     };
   }
 
-  private async saveResult(
-    evaluationId: string,
-    entityType: 'pool' | 'business',
-    entityId: string,
-    result: Awaited<ReturnType<typeof this.evaluate>>,
-  ) {
-    const { riskScore, reasoning, factors, llmResponse, selectionResponse, selectedFiles } = result;
-
-    const evaluatedDocuments = selectedFiles
-      .filter((f) => !f.mimeType.startsWith('image/'))
-      .map((d) => ({ id: d.id, name: d.name, mimeType: d.mimeType }));
-
-    const evaluatedImages = selectedFiles
-      .filter((f) => f.mimeType.startsWith('image/'))
-      .map((i) => ({ id: i.id, name: i.name }));
-
-    await this.evaluationRepository.updateById(evaluationId, {
-      status: 'completed',
-      riskScore,
-      reasoning,
-      factors,
-      stage1Response: selectionResponse,
-      stage2Response: llmResponse,
-      evaluatedDocuments,
-      evaluatedImages,
+  private buildEvaluationResult(result: Awaited<ReturnType<typeof this.evaluate>>) {
+    return {
+      status: 'completed' as const,
+      riskScore: result.riskScore,
+      reasoning: result.reasoning,
+      factors: result.factors,
+      stage1Response: result.selectionResponse,
+      stage2Response: result.llmResponse,
+      evaluatedDocuments: result.selectedFiles
+        .filter((file) => !file.mimeType.startsWith('image/'))
+        .map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType })),
+      evaluatedImages: result.selectedFiles
+        .filter((file) => file.mimeType.startsWith('image/'))
+        .map((file) => ({ id: file.id, name: file.name })),
       modelUsed: this.openRouterModel,
-    });
-
-    await this.evaluationResultsClient.publishEvaluationResult({
-      evaluationId,
-      entityType,
-      entityId,
-      status: 'completed',
-      riskScore,
-    });
+    };
   }
 
   private async poolModule(pool: any) {

@@ -3,6 +3,7 @@ import { PoolTransactionRepository } from '../repositories/poolTransaction.repos
 import { PoolTransactionType } from '../models/shared/enums.model';
 import type { SortOrder } from 'mongoose';
 import { ChartEventsClient } from '../clients/redis.client';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -18,12 +19,70 @@ export class TransactionsService {
   @MetricsDecorator()
   @LogDecorator({
     args: (a) => ({
+      poolAddress: a[0].data.emittedFrom,
+      transactionType: PoolTransactionType.MINT,
+      userAddress: a[0].data.minter,
+    }),
+  })
+  async recordMint(event: BlockchainEvent<{
+    emittedFrom: string;
+    minter: string;
+    rwaAmountMinted: string;
+    holdAmountPaid: string;
+    feePaid: string;
+  }>) {
+    return await this.recordTransaction({
+      poolAddress: event.data.emittedFrom,
+      transactionType: PoolTransactionType.MINT,
+      userAddress: event.data.minter,
+      timestamp: event.timestamp,
+      rwaAmount: event.data.rwaAmountMinted,
+      holdAmount: event.data.holdAmountPaid,
+      holdFee: event.data.feePaid,
+    });
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({
+      poolAddress: a[0].data.emittedFrom,
+      transactionType: PoolTransactionType.BURN,
+      userAddress: a[0].data.burner,
+    }),
+  })
+  async recordBurn(event: BlockchainEvent<{
+    emittedFrom: string;
+    burner: string;
+    rwaAmountBurned: string;
+    holdAmountReceived: string;
+    bonusAmountReceived: string;
+    holdFeePaid: string;
+    bonusFeePaid: string;
+  }>) {
+    return await this.recordTransaction({
+      poolAddress: event.data.emittedFrom,
+      transactionType: PoolTransactionType.BURN,
+      userAddress: event.data.burner,
+      timestamp: event.timestamp,
+      rwaAmount: event.data.rwaAmountBurned,
+      holdAmount: event.data.holdAmountReceived,
+      bonusAmount: event.data.bonusAmountReceived,
+      holdFee: event.data.holdFeePaid,
+      bonusFee: event.data.bonusFeePaid,
+    });
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({
       poolAddress: a[0].poolAddress,
       transactionType: a[0].transactionType,
       userAddress: a[0].userAddress,
     }),
   })
-  async recordTransaction(data: {
+  private async recordTransaction(data: {
     poolAddress: string;
     transactionType: PoolTransactionType;
     userAddress: string;
@@ -118,7 +177,12 @@ export class TransactionsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ poolAddress: a[0], interval: a[1], startTime: a[2], endTime: a[3] }),
+    args: (a) => ({ 
+      poolAddress: a[0].poolAddress, 
+      interval: a[0].interval, 
+      startTime: a[0].startTime, 
+      endTime: a[0].endTime 
+    }),
   })
   async getVolumeData(params: {
     poolAddress: string;

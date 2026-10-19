@@ -16,13 +16,22 @@ import { createFakeRedisEventsClient, type FakeRedisEventsClient } from './fakes
 
 const POOL_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 
+// The event as the scanner publishes it: decoded fields in `data`, the
+// envelope (name, chainId, transactionHash, logIndex, blockNumber) on the root.
 const PRICE_DATA = {
-  poolAddress: POOL_ADDRESS,
-  timestamp: 1_700_000_000,
+  chainId: '1',
+  name: 'Pool_ReservesUpdated',
+  transactionHash: '0xtx1',
+  address: POOL_ADDRESS,
+  logIndex: 0,
   blockNumber: 12_345,
-  realHoldReserve: '500',
-  virtualHoldReserve: '1000',
-  virtualRwaReserve: '4',
+  timestamp: 1_700_000_000,
+  data: {
+    emittedFrom: POOL_ADDRESS,
+    realHoldReserve: '500',
+    virtualHoldReserve: '1000',
+    virtualRwaReserve: '4',
+  },
 };
 
 // Every interval the service accepts, with the seconds it must delegate.
@@ -115,9 +124,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   test('recordPriceData: BigInt division truncates the stored price', async () => {
     const result = await service.recordPriceData({
       ...PRICE_DATA,
-      realHoldReserve: '1',
-      virtualHoldReserve: '1000',
-      virtualRwaReserve: '3',
+      data: { ...PRICE_DATA.data, realHoldReserve: '1', virtualHoldReserve: '1000', virtualRwaReserve: '3' },
     });
 
     expect(result.price).toBe('333'); // 1001 / 3 truncates to 333
@@ -130,7 +137,9 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   });
 
   test('recordPriceData: a zero virtualRwaReserve is rejected before any write or publish', async () => {
-    await expect(service.recordPriceData({ ...PRICE_DATA, virtualRwaReserve: '0' })).rejects.toMatchObject({
+    await expect(
+      service.recordPriceData({ ...PRICE_DATA, data: { ...PRICE_DATA.data, virtualRwaReserve: '0' } }),
+    ).rejects.toMatchObject({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
       message: 'virtualRwaReserve cannot be zero for price calculation.',

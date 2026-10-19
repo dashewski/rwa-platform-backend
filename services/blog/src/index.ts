@@ -3,10 +3,8 @@ import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
 const app = await withTraceAsync('blog.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
   );
-
 });
 
 app.listen(Number(process.env.PORT));

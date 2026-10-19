@@ -10,11 +10,8 @@ import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
   mongoUri: string,
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'signers-manager.init.repositories_plugin',
@@ -23,7 +20,7 @@ export async function createApp(
 
   const clientsPlugin = await withTraceAsync(
     'signers-manager.init.clients_plugin',
-    async () => await createClientsPlugin(rabbitMqUri, rabbitMqMaxReconnectAttempts, rabbitMqReconnectInterval),
+    async () => await createClientsPlugin(rabbitMqUri),
   );
 
   const servicesPlugin = withTraceSync('signers-manager.init.services_plugin', () =>

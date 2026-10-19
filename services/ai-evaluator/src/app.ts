@@ -10,7 +10,6 @@ import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
   mongoUri: string,
   openRouterApiKey: string,
   openRouterBaseUrl: string,
@@ -22,8 +21,6 @@ export async function createApp(
   questionsServiceUrl: string,
   portfolioServiceUrl: string,
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
   maxFilesPerRequest: number,
 ) {
   const repositoriesPlugin = await withTraceAsync(
@@ -41,8 +38,6 @@ export async function createApp(
     questionsServiceUrl,
     portfolioServiceUrl,
     rabbitMqUri,
-    rabbitMqMaxReconnectAttempts,
-    rabbitMqReconnectInterval,
   );
 
   const servicesPlugin = withTraceSync('ai-evaluator.init.services_plugin', () =>

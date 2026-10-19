@@ -44,13 +44,13 @@ export class ScannerStateRepository {
   }
 
   @TraceDecorator()
-  async getLastScannedBlock(chainId: number): Promise<number> {
+  async getLastScannedBlock(chainId: string): Promise<number> {
     const doc = await this.model.findOne({ chainId }).lean();
     return doc?.lastScannedBlock ?? 0;
   }
 
   @TraceDecorator()
-  async updateLastScannedBlock(chainId: number, blockNumber: number): Promise<void> {
+  async updateLastScannedBlock(chainId: string, blockNumber: number): Promise<void> {
     const doc = await this.model.findOne({ chainId });
 
     if (doc) {

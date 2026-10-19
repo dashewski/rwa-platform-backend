@@ -3,7 +3,6 @@ import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
 const app = await withTraceAsync('dao.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
   );

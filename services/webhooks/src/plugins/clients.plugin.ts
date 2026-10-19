@@ -8,8 +8,6 @@ import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createClientsPlugin = async (
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
   redisUrl: string,
 ) => {
   const rabbitMQClient = withTraceSync(
@@ -17,8 +15,7 @@ export const createClientsPlugin = async (
     () =>
       new RabbitMQClient({
         uri: rabbitMqUri,
-        reconnectAttempts: rabbitMqMaxReconnectAttempts,
-        reconnectInterval: rabbitMqReconnectInterval,
+        channelName: 'webhooks',
       }),
   );
 

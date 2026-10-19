@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { InboxConsumerService } from '@shared/inbox-consumer';
 import { LoyaltyService } from '../services/loyalty.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
@@ -25,11 +26,18 @@ export const createServicesPlugin = (
       ),
   );
 
+  const inboxConsumer = withTraceSync('loyalty.init.services.inbox_consumer', () =>
+    new InboxConsumerService(
+      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
+    ),
+  );
+
   const plugin = withTraceSync('loyalty.init.services.plugin', () =>
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
-      .decorate('loyaltyService', loyaltyService),
+      .decorate('loyaltyService', loyaltyService)
+      .decorate('inboxConsumer', inboxConsumer),
   );
 
   return plugin;

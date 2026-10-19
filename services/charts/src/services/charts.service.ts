@@ -3,6 +3,7 @@ import type { IPriceDataEntity } from '../models/entity/priceData.entity';
 import type { SortOrder } from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { ChartEventsClient } from '../clients/redis.client';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
@@ -34,16 +35,27 @@ export class ChartsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ poolAddress: a[0].poolAddress, timestamp: a[0].timestamp, blockNumber: a[0].blockNumber }),
+    args: (a) => ({
+      poolAddress: a[0].data.emittedFrom,
+      timestamp: a[0].timestamp,
+      blockNumber: a[0].blockNumber,
+    }),
   })
-  async recordPriceData(data: {
-    poolAddress: string;
-    timestamp: number;
-    blockNumber: number;
+  async recordPriceData(event: BlockchainEvent<{
+    emittedFrom: string;
     realHoldReserve: string;
     virtualHoldReserve: string;
     virtualRwaReserve: string;
-  }): Promise<Omit<IPriceDataEntity, '_id'> & { id: string }> {
+  }>): Promise<Omit<IPriceDataEntity, '_id'> & { id: string }> {
+    const data = {
+      poolAddress: event.data.emittedFrom,
+      timestamp: event.timestamp,
+      blockNumber: event.blockNumber,
+      realHoldReserve: event.data.realHoldReserve,
+      virtualHoldReserve: event.data.virtualHoldReserve,
+      virtualRwaReserve: event.data.virtualRwaReserve,
+    };
+
     setSpanAttributes({
       poolAddress: data.poolAddress,
       blockNumber: data.blockNumber,
@@ -92,7 +104,11 @@ export class ChartsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ poolAddress: a[0], startTime: a[1], endTime: a[2] }),
+    args: (a) => ({
+      poolAddress: a[0].poolAddress,
+      startTime: a[0].startTime,
+      endTime: a[0].endTime,
+    }),
   })
   async getRawPriceData(params: {
     poolAddress: string;
@@ -154,7 +170,12 @@ export class ChartsService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ poolAddress: a[0], interval: a[1], startTime: a[2], endTime: a[3] }),
+    args: (a) => ({ 
+      poolAddress: a[0].poolAddress, 
+      interval: a[0].interval, 
+      startTime: a[0].startTime, 
+      endTime: a[0].endTime 
+    }),
   })
   async getOhlcPriceData(params: {
     poolAddress: string;

@@ -31,16 +31,24 @@ const POOL_ADDRESS = '0x4444444444444444444444444444444444444444';
 const CHAIN_ID = '137';
 const TOKEN_ID = '7';
 
+// The event as the scanner publishes it: decoded fields in `data`, the
+// envelope (name, chainId, transactionHash, logIndex, blockNumber) on the root.
 const TRANSFER = {
-  from: FROM,
-  to: TO,
-  tokenAddress: TOKEN_ADDRESS,
-  tokenId: TOKEN_ID,
-  poolAddress: POOL_ADDRESS,
+  name: 'RWA_Transfer',
+  address: TOKEN_ADDRESS,
   chainId: CHAIN_ID,
   transactionHash: '0xtransfer0001',
+  logIndex: 0,
   blockNumber: 123,
-  amount: 250,
+  timestamp: 1_700_000_000,
+  data: {
+    emittedFrom: TOKEN_ADDRESS,
+    from: FROM,
+    to: TO,
+    tokenId: TOKEN_ID,
+    amount: '250',
+    pool: POOL_ADDRESS,
+  },
 };
 
 describe('PortfolioService (unit, fake repositories)', () => {
@@ -118,8 +126,12 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: accumulates the position across transfers', async () => {
-    await service.processTransfer({ ...TRANSFER, from: OTHER, amount: 100 });
-    await service.processTransfer({ ...TRANSFER, from: OTHER, amount: 40, blockNumber: 124 });
+    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, from: OTHER, amount: '100' } });
+    await service.processTransfer({
+      ...TRANSFER,
+      blockNumber: 124,
+      data: { ...TRANSFER.data, from: OTHER, amount: '40' },
+    });
 
     expect(transactions.store.size).toBe(2);
     // One document per (owner, token, tokenId, pool, chain) position.
@@ -128,7 +140,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
     expect(balanceOf(TO)?.lastUpdateBlock).toBe(124);
   });
   test('processTransfer: a mint from the zero address credits the receiver only', async () => {
-    await service.processTransfer({ ...TRANSFER, from: ZERO_ADDRESS, amount: 1000 });
+    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, from: ZERO_ADDRESS, amount: '1000' } });
 
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(transactions.create).toHaveBeenCalledWith(expect.objectContaining({ from: ZERO_ADDRESS, amount: 1000 }));
@@ -142,7 +154,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: a burn to the zero address debits the sender only', async () => {
-    await service.processTransfer({ ...TRANSFER, to: ZERO_ADDRESS, amount: 500 });
+    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, to: ZERO_ADDRESS, amount: '500' } });
 
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(balances.updateBalance).toHaveBeenCalledTimes(1);
@@ -153,7 +165,10 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: ignores an event where both sides are the zero address', async () => {
-    const result = await service.processTransfer({ ...TRANSFER, from: ZERO_ADDRESS, to: ZERO_ADDRESS });
+    const result = await service.processTransfer({
+      ...TRANSFER,
+      data: { ...TRANSFER.data, from: ZERO_ADDRESS, to: ZERO_ADDRESS },
+    });
 
     expect(result).toBeUndefined();
     expect(transactions.create).toHaveBeenCalledTimes(0);
@@ -161,7 +176,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: a self-transfer applies both legs to the same position', async () => {
-    await service.processTransfer({ ...TRANSFER, to: FROM, amount: 30 });
+    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, to: FROM, amount: '30' } });
 
     // from === to is not special-cased: both legs run, so the net effect on the
     // stored balance is zero while the transaction row is still recorded.

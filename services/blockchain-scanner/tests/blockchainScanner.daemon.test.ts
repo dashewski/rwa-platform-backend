@@ -4,7 +4,7 @@
  * The daemon creates its ethers provider and EventEmitter contract in its own
  * constructor, so this harness swaps both fields for in-memory fakes right
  * after construction (see tests/fakes/ethers.fake.ts). The scanner service
- * runs for real, over fake repositories and a fake ordered publisher, so a scan
+ * runs for real, over fake repositories and a fake outbox publisher, so a scan
  * cycle exercises the whole chain: provider -> contract logs -> block grouping
  * -> service (persist + queue) -> scanner state. Polling is driven
  * explicitly; no RPC endpoint and no broker is ever contacted. Run with
@@ -16,16 +16,17 @@ import { BlockchainScannerDaemon } from '../src/daemons/blockchainScanner.daemon
 import { BlockchainScannerService } from '../src/services/blockchainScanner.service';
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
-import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { createFakeEventRepository, type FakeEventRepository } from './fakes/event.repository.fake';
 import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
 import {
-  createFakeOrderedPublisher,
-  type FakeOrderedPublisher,
-} from './fakes/orderedPublisher.fake';
+  createFakeOutboxPublisher,
+  EXCHANGE,
+  type FakeOutboxPublisher,
+} from './fakes/outboxPublisher.fake';
 import {
   createFakeEthersProvider,
   createFakeEventEmitterContract,
@@ -137,7 +138,7 @@ function rwaDeployedLog(blockNumber: number, index: number, entityId: string, bl
 function buildHarness(initScanBlockNumber: number = 0) {
   const events = createFakeEventRepository();
   const scannerState = createFakeScannerStateRepository();
-  const publisher = createFakeOrderedPublisher();
+  const publisher = createFakeOutboxPublisher();
   const provider = createFakeEthersProvider();
   const contract = createFakeEventEmitterContract();
 
@@ -146,7 +147,8 @@ function buildHarness(initScanBlockNumber: number = 0) {
   const service = new BlockchainScannerService(
     events as unknown as EventRepository,
     scannerState as unknown as ScannerStateRepository,
-    publisher as unknown as OrderedPublisherService,
+    publisher as unknown as OutboxPublisherService,
+    EXCHANGE,
     CHAIN_ID,
   );
 
@@ -194,7 +196,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
   let internals: DaemonInternals;
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let publisher: FakeOrderedPublisher;
+  let publisher: FakeOutboxPublisher;
   let provider: FakeEthersProvider;
   let contract: FakeEventEmitterContract;
 

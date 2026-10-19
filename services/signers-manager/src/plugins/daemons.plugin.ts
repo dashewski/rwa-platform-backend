@@ -1,27 +1,46 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
+import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
+import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
-import { TaskResponsesDaemon } from '../daemons/taskResponses.daemon';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
-  const taskResponsesDaemon = withTraceSync(
-    'signers-manager.init.daemons.task_responses',
-    () => new TaskResponsesDaemon(clientsPlugin.decorator.rabbitMQClient, servicesPlugin.decorator.signaturesService),
+  const inboxConsumerDaemon = withTraceSync(
+    'signers-manager.init.daemons.inbox_consumer',
+    () =>
+      new InboxConsumerDaemon(
+        clientsPlugin.decorator.rabbitMQClient,
+        servicesPlugin.decorator.inboxConsumer,
+        servicesPlugin.decorator.signaturesService,
+      ),
+  );
+
+  const outboxPublisherDaemon = withTraceSync(
+    'signers-manager.init.daemons.outbox_publisher',
+    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
   );
 
   await withTraceAsync('signers-manager.init.daemons.initialize', async () => {
-    logger.debug('Initializing daemons');
-    await taskResponsesDaemon.initialize();
-    logger.info('Task responses daemon started successfully');
+    await inboxConsumerDaemon.initialize();
+    await outboxPublisherDaemon.initialize();
+    logger.info('Daemons started');
   });
 
   const plugin = withTraceSync('signers-manager.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
       .use(clientsPlugin)
       .use(servicesPlugin)
-      .decorate('taskResponsesDaemon', taskResponsesDaemon),
+      .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
+      .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
+      .onStop(async () => {
+        await withTraceAsync('signers-manager.stop.daemons', async () => {
+          inboxConsumerDaemon.stop();
+          outboxPublisherDaemon.stop();
+          logger.info('Daemons stopped');
+        });
+      }),
   );
 
   return plugin;

@@ -11,7 +11,7 @@ import { Types } from 'mongoose';
 import { BlockchainScannerService } from '../src/services/blockchainScanner.service';
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
-import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import {
   createFakeEventRepository,
   type CreateEventInput,
@@ -23,9 +23,10 @@ import {
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
 import {
-  createFakeOrderedPublisher,
-  type FakeOrderedPublisher,
-} from './fakes/orderedPublisher.fake';
+  createFakeOutboxPublisher,
+  EXCHANGE,
+  type FakeOutboxPublisher,
+} from './fakes/outboxPublisher.fake';
 
 const CHAIN_ID = 31337;
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
@@ -67,20 +68,21 @@ function seedEvent(events: FakeEventRepository, event: CreateEventInput): FakeEv
   return doc;
 }
 
-describe('BlockchainScannerService (unit, fake repositories + fake publisher)', () => {
+describe('BlockchainScannerService (unit, fake repositories + fake outbox publisher)', () => {
   let events: FakeEventRepository;
   let scannerState: FakeScannerStateRepository;
-  let publisher: FakeOrderedPublisher;
+  let publisher: FakeOutboxPublisher;
   let service: BlockchainScannerService;
 
   beforeEach(() => {
     events = createFakeEventRepository();
     scannerState = createFakeScannerStateRepository();
-    publisher = createFakeOrderedPublisher();
+    publisher = createFakeOutboxPublisher();
     service = new BlockchainScannerService(
       events as unknown as EventRepository,
       scannerState as unknown as ScannerStateRepository,
-      publisher as unknown as OrderedPublisherService,
+      publisher as unknown as OutboxPublisherService,
+      EXCHANGE,
       CHAIN_ID,
     );
   });
@@ -201,6 +203,7 @@ describe('BlockchainScannerService (unit, fake repositories + fake publisher)', 
 
     // Queued messages: event name as routing key + a chain-stable messageId, in insert order.
     expect(publisher.publish).toHaveBeenCalledTimes(2);
+    expect(publisher.queued.map((message) => message.exchange)).toEqual([EXCHANGE, EXCHANGE]);
     expect(publisher.queued.map((message) => message.routingKey)).toEqual([
       'RWA_Deployed',
       'DaoStaking_TokensStaked',

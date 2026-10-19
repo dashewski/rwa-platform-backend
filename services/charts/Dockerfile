@@ -11,7 +11,7 @@ COPY shared/redis-events/package.json ./shared/redis-events/
 COPY shared/errors/package.json ./shared/errors/
 COPY services/charts/package.json ./services/charts/
 COPY shared/blockchain/package.json ./shared/blockchain/
-COPY shared/ordered-consumer/package.json ./shared/ordered-consumer/
+COPY shared/inbox-consumer/package.json ./shared/inbox-consumer/
 
 COPY bun.lockb .
 

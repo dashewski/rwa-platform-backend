@@ -8,7 +8,7 @@
  * app.handle() — no port is bound, nothing is queried over the network.
  * Run with `bun test` from services/ai-evaluator.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
@@ -23,8 +23,6 @@ import {
 import { createFakeEdenClients } from './fakes/eden.clients.fake';
 import { createFakeOpenRouterClient } from './fakes/openrouter.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-import { createFakeEvaluationRequestsClient } from './fakes/evaluationRequests.client.fake';
-import { createFakeEvaluationResultsClient } from './fakes/evaluationResults.client.fake';
 
 const MODEL = 'test/model';
 
@@ -32,10 +30,18 @@ const MODEL = 'test/model';
 const UNKNOWN_ID = '64b7f8f0f1f2f3f4f5f6f7a8';
 
 function buildApp(evaluationRepository: FakeEvaluationRepository) {
-  const repositoriesPlugin = new Elysia({ name: 'Repositories' }).decorate(
-    'evaluationRepository',
-    evaluationRepository,
-  );
+  const repositoriesPlugin = new Elysia({ name: 'Repositories' })
+    .decorate('evaluationRepository', evaluationRepository)
+    .decorate('inboxConsumerMessageRepository', {
+      runOnce: mock(async (_messageId: string, handler: () => Promise<unknown>) => handler()),
+    })
+    .decorate('outboxPublisherMessageRepository', {
+      create: mock(async (doc: Record<string, unknown>) => ({ _id: 'outbox-1', ...doc })),
+      releaseSending: mock(async (_exchange: string) => 0),
+      markSent: mock(async (_id: unknown) => undefined),
+      release: mock(async (_id: unknown) => undefined),
+      claimNext: mock(async (_exchange: string) => null),
+    });
 
   const eden = createFakeEdenClients();
   const clientsPlugin = new Elysia({ name: 'Clients' })
@@ -46,9 +52,7 @@ function buildApp(evaluationRepository: FakeEvaluationRepository) {
     .decorate('reactionsClient', eden.reactionsClient)
     .decorate('questionsClient', eden.questionsClient)
     .decorate('portfolioClient', eden.portfolioClient)
-    .decorate('rabbitMQClient', createFakeRabbitMQClient())
-    .decorate('evaluationResultsClient', createFakeEvaluationResultsClient())
-    .decorate('evaluationRequestsClient', createFakeEvaluationRequestsClient());
+    .decorate('rabbitMQClient', createFakeRabbitMQClient());
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,

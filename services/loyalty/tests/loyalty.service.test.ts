@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { LoyaltyService } from '../src/services/loyalty.service';
 import type { FeesRepository } from '../src/repositories/fees.repository';
 import type { ReferralRepository } from '../src/repositories/referral.repository';
@@ -59,58 +60,33 @@ const SUPPORTED_NETWORKS = [
 // The builders return exactly the event shapes the service declares for each
 // handler; the daemon passes the full BlockchainEvent decoded from the chain,
 // so the tests build the same full event objects.
-type FeeCollectedSyntheticEvent = {
-  data: { sender: string; amount: string; token: string };
-  chainId: number;
-  transactionHash: string;
-  logIndex: number;
-  blockNumber: number;
-};
+type FeeCollectedSyntheticEvent = BlockchainEvent<{ sender: string; amount: string; token: string }>;
 
-type RwaMintedSyntheticEvent = {
-  data: {
-    minter: string;
-    rwaAmountMinted: string;
-    holdAmountPaid: string;
-    feePaid: string;
-    percentBefore: string;
-    userPercent: string;
-    targetReached: boolean;
-    businessId: string;
-    poolId: string;
-    holdToken: string;
-  };
-  chainId: number;
-  transactionHash: string;
-  logIndex: number;
-  blockNumber: number;
-};
-
-type RwaBurnedSyntheticEvent = {
-  data: {
-    burner: string;
-    rwaAmountBurned: string;
-    holdAmountReceived: string;
-    bonusAmountReceived: string;
-    holdFeePaid: string;
-    bonusFeePaid: string;
-    percentBefore: string;
-    userPercent: string;
-    targetReached: boolean;
-    businessId: string;
-    poolId: string;
-    holdToken: string;
-  };
-  chainId: number;
-  transactionHash: string;
-  logIndex: number;
-  blockNumber: number;
-};
-
-type TreasuryWithdrawnSyntheticEvent = {
-  data: { user: string; token: string; amount: string };
-  chainId: number;
-};
+type RwaMintedSyntheticEvent = BlockchainEvent<{
+  minter: string;
+  rwaAmountMinted: string;
+  holdAmountPaid: string;
+  feePaid: string;
+  percentBefore: string;
+  userPercent: string;
+  targetReached: boolean;
+  businessId: string;
+  poolId: string;
+  holdToken: string;
+}>;type RwaBurnedSyntheticEvent = BlockchainEvent<{
+  burner: string;
+  rwaAmountBurned: string;
+  holdAmountReceived: string;
+  bonusAmountReceived: string;
+  holdFeePaid: string;
+  bonusFeePaid: string;
+  percentBefore: string;
+  userPercent: string;
+  targetReached: boolean;
+  businessId: string;
+  poolId: string;
+  holdToken: string;
+}>;type TreasuryWithdrawnSyntheticEvent = BlockchainEvent<{ user: string; token: string; amount: string }>;
 
 function buildTokenFeeEvent(overrides: { sender?: string; amount?: string; token?: string } = {}): FeeCollectedSyntheticEvent {
   return {
@@ -119,7 +95,10 @@ function buildTokenFeeEvent(overrides: { sender?: string; amount?: string; token
       amount: overrides.amount ?? '1000000',
       token: overrides.token ?? TOKEN_ADDRESS,
     },
-    chainId: Number(CHAIN_ID),
+    chainId: CHAIN_ID,
+    name: 'Factory_CreateRWAFeeCollected',
+    address: TOKEN_ADDRESS,
+    timestamp: 1_700_000_000,
     transactionHash: TRANSACTION_HASH,
     logIndex: LOG_INDEX,
     blockNumber: BLOCK_NUMBER,
@@ -133,7 +112,10 @@ function buildPoolFeeEvent(overrides: { sender?: string; amount?: string; token?
       amount: overrides.amount ?? '2000000',
       token: overrides.token ?? TOKEN_ADDRESS,
     },
-    chainId: Number(CHAIN_ID),
+    chainId: CHAIN_ID,
+    name: 'Factory_CreatePoolFeeCollected',
+    address: TOKEN_ADDRESS,
+    timestamp: 1_700_000_000,
     transactionHash: TRANSACTION_HASH,
     logIndex: LOG_INDEX,
     blockNumber: BLOCK_NUMBER,
@@ -154,7 +136,10 @@ function buildRwaMintedEvent(overrides: { minter?: string; feePaid?: string } = 
       poolId: 'pool-1',
       holdToken: TOKEN_ADDRESS,
     },
-    chainId: Number(CHAIN_ID),
+    chainId: CHAIN_ID,
+    name: 'Pool_RwaMinted',
+    address: TOKEN_ADDRESS,
+    timestamp: 1_700_000_000,
     transactionHash: TRANSACTION_HASH,
     logIndex: LOG_INDEX,
     blockNumber: BLOCK_NUMBER,
@@ -177,7 +162,10 @@ function buildRwaBurnedEvent(overrides: { burner?: string; holdFeePaid?: string;
       poolId: 'pool-1',
       holdToken: TOKEN_ADDRESS,
     },
-    chainId: Number(CHAIN_ID),
+    chainId: CHAIN_ID,
+    name: 'Pool_RwaBurned',
+    address: TOKEN_ADDRESS,
+    timestamp: 1_700_000_000,
     transactionHash: TRANSACTION_HASH,
     logIndex: LOG_INDEX,
     blockNumber: BLOCK_NUMBER,
@@ -191,7 +179,13 @@ function buildTreasuryWithdrawnEvent(overrides: { user?: string; token?: string;
       token: overrides.token ?? TOKEN_ADDRESS,
       amount: overrides.amount ?? '700',
     },
-    chainId: Number(CHAIN_ID),
+    chainId: CHAIN_ID,
+    name: 'ReferralTreasury_Withdrawn',
+    address: REFERRAL_TREASURY_ADDRESS,
+    timestamp: 1_700_000_000,
+    transactionHash: TRANSACTION_HASH,
+    logIndex: LOG_INDEX,
+    blockNumber: BLOCK_NUMBER,
   };
 }
 

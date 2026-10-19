@@ -1,36 +1,44 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
-import { SignatureDaemon } from '../daemons/signature.daemon';
+import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
+import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
 import type { ServicesPlugin } from './services.plugin';
+import type { ClientsPlugin } from './clients.plugin';
 import { withTraceAsync, withTraceSync } from '@shared/monitoring/src/tracing';
 
-export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin) => {
-  const signatureDaemon = withTraceSync(
-    'signer.init.daemons.signature',
+export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, clientsPlugin: ClientsPlugin) => {
+  const inboxConsumerDaemon = withTraceSync(
+    'signer.init.daemons.inbox_consumer',
     () =>
-      new SignatureDaemon(
-        servicesPlugin.decorator.rabbitMQClient,
-        servicesPlugin.decorator.signersManagerClient.requestsQueueName(),
+      new InboxConsumerDaemon(
+        clientsPlugin.decorator.rabbitMQClient,
+        servicesPlugin.decorator.inboxConsumer,
         servicesPlugin.decorator.signatureService,
       ),
   );
 
+  const outboxPublisherDaemon = withTraceSync(
+    'signer.init.daemons.outbox_publisher',
+    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
+  );
+
   await withTraceAsync('signer.init.daemons.initialize', async () => {
-    logger.info('Initializing signature daemon');
-    await signatureDaemon.initialize();
-    await signatureDaemon.start();
-    logger.info('Signature daemon started successfully');
+    await inboxConsumerDaemon.initialize();
+    await outboxPublisherDaemon.initialize();
+    logger.info('Daemons started');
   });
 
   const plugin = withTraceSync('signer.init.daemons.plugin', () =>
     new Elysia({ name: 'Daemons' })
       .use(servicesPlugin)
-      .decorate('signatureDaemon', signatureDaemon)
+      .use(clientsPlugin)
+      .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
+      .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
       .onStop(async () => {
         await withTraceAsync('signer.stop.daemons', async () => {
-          logger.info('Stopping signature daemon');
-          await signatureDaemon.stop();
-          logger.info('Signature daemon stopped successfully');
+          inboxConsumerDaemon.stop();
+          outboxPublisherDaemon.stop();
+          logger.info('Daemons stopped');
         });
       }),
   );

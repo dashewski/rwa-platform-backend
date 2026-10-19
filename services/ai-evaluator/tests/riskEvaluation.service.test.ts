@@ -21,7 +21,7 @@ import type {
   PortfolioClient,
 } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { EvaluationResultsClient } from '../src/clients/evaluationResults.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import {
   createFakeEvaluationRepository,
   type CreateEvaluationInput,
@@ -39,7 +39,7 @@ import {
   type FakeQuestion,
 } from './fakes/eden.clients.fake';
 import { createFakeOpenRouterClient, type FakeChatCompletionRequest } from './fakes/openrouter.client.fake';
-import { createFakeEvaluationResultsClient } from './fakes/evaluationResults.client.fake';
+import { createFakeOutboxPublisher } from './fakes/outbox-publisher.fake';
 
 const MODEL = 'test/model';
 
@@ -127,7 +127,7 @@ function setup(options: SetupOptions = {}) {
   const evaluationRepository: FakeEvaluationRepository = createFakeEvaluationRepository();
   const openRouterClient = createFakeOpenRouterClient();
   const eden = createFakeEdenClients();
-  const evaluationResultsClient = createFakeEvaluationResultsClient();
+  const outbox = createFakeOutboxPublisher();
 
   const service = new RiskEvaluationService(
     evaluationRepository as unknown as EvaluationRepository,
@@ -138,13 +138,14 @@ function setup(options: SetupOptions = {}) {
     eden.reactionsClient as unknown as ReactionsClient,
     eden.questionsClient as unknown as QuestionsClient,
     eden.portfolioClient as unknown as PortfolioClient,
-    evaluationResultsClient as unknown as EvaluationResultsClient,
+    outbox as unknown as OutboxPublisherService,
+    'evaluation',
     MODEL,
     options.maxFilesPerRequest ?? 20,
     options.useBase64Files ?? false,
   );
 
-  return { service, evaluationRepository, openRouterClient, evaluationResultsClient, ...eden };
+  return { service, evaluationRepository, openRouterClient, outbox, ...eden };
 }
 
 type Fakes = ReturnType<typeof setup>;
@@ -277,14 +278,13 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
         modelUsed: MODEL,
       });
 
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledTimes(1);
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledWith({
-        evaluationId: id,
-        entityType: 'pool',
-        entityId: 'pool-1',
-        status: 'completed',
-        riskScore: 42,
-      });
+      expect(fakes.outbox.publish).toHaveBeenCalledTimes(1);
+      expect(fakes.outbox.publish).toHaveBeenCalledWith(
+        'evaluation',
+        'poolResult',
+        { evaluationId: id, entityType: 'pool', entityId: 'pool-1', status: 'completed', riskScore: 42 },
+        `${id}:completed`,
+      );
 
       expect(fakes.evaluationRepository.store.get(id)!.status).toBe('completed');
       expect(fakes.evaluationRepository.store.get(id)!.riskScore).toBe(42);
@@ -352,13 +352,18 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
         JSON.stringify({ riskScore: 42, reasoning: 'Low risk', factors: [] }),
       );
       expect(updatePayload(fakes).evaluatedDocuments).toEqual([]);
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledWith({
-        evaluationId: evaluationId(fakes),
-        entityType: 'pool',
-        entityId: 'pool-1',
-        status: 'completed',
-        riskScore: 42,
-      });
+      expect(fakes.outbox.publish).toHaveBeenCalledWith(
+        'evaluation',
+        'poolResult',
+        {
+          evaluationId: evaluationId(fakes),
+          entityType: 'pool',
+          entityId: 'pool-1',
+          status: 'completed',
+          riskScore: 42,
+        },
+        `${evaluationId(fakes)}:completed`,
+      );
     });
 
     test('skips the portfolio module when the pool has no address', async () => {
@@ -385,7 +390,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       });
 
       expect(fakes.evaluationRepository.create).toHaveBeenCalledTimes(0);
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledTimes(0);
+      expect(fakes.outbox.publish).toHaveBeenCalledTimes(0);
     });
 
     test('treats a successful response without data as an upstream error', async () => {
@@ -427,12 +432,12 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       const id = evaluationId(fakes);
       expect(fakes.evaluationRepository.updateById).toHaveBeenCalledWith(id, { status: 'failed' });
       expect(fakes.evaluationRepository.store.get(id)!.status).toBe('failed');
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledWith({
-        evaluationId: id,
-        entityType: 'pool',
-        entityId: 'pool-1',
-        status: 'failed',
-      });
+      expect(fakes.outbox.publish).toHaveBeenCalledWith(
+        'evaluation',
+        'poolResult',
+        { evaluationId: id, entityType: 'pool', entityId: 'pool-1', status: 'failed' },
+        `${id}:failed`,
+      );
 
       // Modules are started eagerly, so every client still got its call even though one failed.
       expect(fakes.rwaClient.getPools.post).toHaveBeenCalledTimes(1);
@@ -449,7 +454,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.documentsClient.getDocuments.setDefaultResponse(edenError(500));
       // The real publisher / repository may fail too; the service swallows those two
       // errors (`.catch(() => {})`) so the caller still sees the original AppError.
-      fakes.evaluationResultsClient.publishEvaluationResult.mockRejectedValueOnce(new Error('broker down'));
+      fakes.outbox.publish.mockRejectedValueOnce(new Error('broker down'));
       fakes.evaluationRepository.updateById.mockRejectedValueOnce(new Error('mongo down'));
 
       await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
@@ -462,7 +467,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
     test('a publish failure after a successful evaluation flips the stored status to failed', async () => {
       primePoolPath(fakes);
       fakes.openRouterClient.queueJsonResponse({ riskScore: 42, reasoning: 'Low risk', factors: [] });
-      fakes.evaluationResultsClient.publishEvaluationResult.mockRejectedValueOnce(new Error('broker down'));
+      fakes.outbox.publish.mockRejectedValueOnce(new Error('broker down'));
 
       await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toThrow('broker down');
 
@@ -474,7 +479,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       expect(updatePayload(fakes, 1)).toEqual({ status: 'failed' });
       expect(fakes.evaluationRepository.store.get(id)!.status).toBe('failed');
       expect(fakes.evaluationRepository.store.get(id)!.riskScore).toBe(42);
-      expect(fakes.evaluationResultsClient.published).toEqual([
+      expect(fakes.outbox.published).toEqual([
         { evaluationId: id, entityType: 'pool', entityId: 'pool-1', status: 'failed' },
       ]);
     });
@@ -584,7 +589,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       // Only the selection call happened; the risk call is never reached.
       expect(fakes.openRouterClient.chatCompletion).toHaveBeenCalledTimes(1);
       expect(fakes.evaluationRepository.store.get(evaluationId(fakes))!.status).toBe('failed');
-      expect(fakes.evaluationResultsClient.published).toEqual([
+      expect(fakes.outbox.published).toEqual([
         {
           evaluationId: evaluationId(fakes),
           entityType: 'pool',
@@ -658,7 +663,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       });
 
       expect(fakes.evaluationRepository.store.get(evaluationId(fakes))!.status).toBe('failed');
-      expect(fakes.evaluationResultsClient.published).toEqual([
+      expect(fakes.outbox.published).toEqual([
         { evaluationId: evaluationId(fakes), entityType: 'pool', entityId: 'pool-1', status: 'failed' },
       ]);
     });
@@ -750,13 +755,18 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       expect(summary).toContain('Business name: Acme Renewables');
 
       expect(updatePayload(fakes)).toMatchObject({ status: 'completed', riskScore: 64, stage1Response: undefined });
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledWith({
-        evaluationId: evaluationId(fakes),
-        entityType: 'business',
-        entityId: 'business-1',
-        status: 'completed',
-        riskScore: 64,
-      });
+      expect(fakes.outbox.publish).toHaveBeenCalledWith(
+        'evaluation',
+        'businessResult',
+        {
+          evaluationId: evaluationId(fakes),
+          entityType: 'business',
+          entityId: 'business-1',
+          status: 'completed',
+          riskScore: 64,
+        },
+        `${evaluationId(fakes)}:completed`,
+      );
     });
 
     test('a failing module marks the business evaluation failed and publishes it', async () => {
@@ -771,12 +781,12 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       });
 
       expect(fakes.evaluationRepository.updateById).toHaveBeenCalledWith(evaluationId(fakes), { status: 'failed' });
-      expect(fakes.evaluationResultsClient.publishEvaluationResult).toHaveBeenCalledWith({
-        evaluationId: evaluationId(fakes),
-        entityType: 'business',
-        entityId: 'business-1',
-        status: 'failed',
-      });
+      expect(fakes.outbox.publish).toHaveBeenCalledWith(
+        'evaluation',
+        'businessResult',
+        { evaluationId: evaluationId(fakes), entityType: 'business', entityId: 'business-1', status: 'failed' },
+        `${evaluationId(fakes)}:failed`,
+      );
     });
   });
 
@@ -887,6 +897,31 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       const evaluations = await fakes.service.getEvaluations({ filter: { parentId: 'nobody' } });
 
       expect(evaluations).toEqual([]);
+    });
+  });
+  describe('request guards (queue entry points)', () => {
+    test('evaluatePool: rejects a request without ids as VALIDATION_ERROR', async () => {
+      const fakes = setup();
+
+      await expect(fakes.service.evaluatePool({} as any)).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid evaluatePool request format',
+      });
+
+      expect(fakes.evaluationRepository.create).toHaveBeenCalledTimes(0);
+    });
+
+    test('evaluateBusiness: rejects a request without ids as VALIDATION_ERROR', async () => {
+      const fakes = setup();
+
+      await expect(fakes.service.evaluateBusiness({ ownerId: 'owner-1' } as any)).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid evaluateBusiness request format',
+      });
+
+      expect(fakes.evaluationRepository.create).toHaveBeenCalledTimes(0);
     });
   });
 });

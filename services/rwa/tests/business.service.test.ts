@@ -12,8 +12,7 @@ import { BusinessService } from '../src/services/business.service';
 import type { BusinessRepository } from '../src/repositories/business.repository';
 import type { SignersManagerClient } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { EvaluationRequestsClient } from '../src/clients/evaluationRequests.client';
-import type { WebhookEventsPublisher } from '@shared/webhooks/src';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { createFakeBusinessRepository, type FakeBusinessRepository } from './fakes/business.repository.fake';
 import { createFakeOpenRouterClient, type FakeOpenRouterClient } from './fakes/open-router.client.fake';
 import {
@@ -21,14 +20,7 @@ import {
   DEFAULT_SIGNATURE_TASK_ID,
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
-import {
-  createFakeEvaluationRequestsClient,
-  type FakeEvaluationRequestsClient,
-} from './fakes/evaluation-requests.client.fake';
-import {
-  createFakeWebhookEventsPublisher,
-  type FakeWebhookEventsPublisher,
-} from './fakes/webhook-events.publisher.fake';
+import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
 
 const OWNER_ID = 'owner-1';
 const OWNER_TYPE = 'business';
@@ -55,26 +47,38 @@ const BUSINESS_AI_FIELDS = {
 };
 const BUSINESS_AI_CONTENT = `Here is the result: ${JSON.stringify(BUSINESS_AI_FIELDS)}`;
 
+/** Wraps contract-event data into the envelope the broker delivers. */
+function eventOf<TData extends Record<string, any>>(data: TData) {
+  return {
+    chainId: CHAIN_ID,
+    name: 'Unknown',
+    blockNumber: 1,
+    transactionHash: '0xtestevent',
+    address: '0x0000000000000000000000000000000000000000',
+    logIndex: 0,
+    timestamp: 1_700_000_000,
+    data,
+  };
+}
+
 describe('BusinessService (unit, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
-  let evaluationRequests: FakeEvaluationRequestsClient;
-  let webhooks: FakeWebhookEventsPublisher;
+  let outbox: FakeOutboxPublisher;
   let service: BusinessService;
 
   beforeEach(() => {
     businesses = createFakeBusinessRepository();
     openRouter = createFakeOpenRouterClient(BUSINESS_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
-    evaluationRequests = createFakeEvaluationRequestsClient();
-    webhooks = createFakeWebhookEventsPublisher();
+    outbox = createFakeOutboxPublisher();
     service = new BusinessService(
       businesses as unknown as BusinessRepository,
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
-      evaluationRequests as unknown as EvaluationRequestsClient,
-      webhooks as unknown as WebhookEventsPublisher,
+      outbox as unknown as OutboxPublisherService,
+      'evaluation',
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,
@@ -262,11 +266,12 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: expect.any(Number),
     });
-    expect(evaluationRequests.publishEvaluationRequest).toHaveBeenCalledWith('evaluateBusiness', {
-      businessId: created.id,
-      ownerId: OWNER_ID,
-      ownerType: OWNER_TYPE,
-    });
+    expect(outbox.publish).toHaveBeenCalledWith(
+      'evaluation',
+      'evaluateBusiness',
+      { businessId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
+      expect.stringMatching(/^business:/),
+    );
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -283,7 +288,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       message: 'Evaluation already in progress',
     });
 
-    expect(evaluationRequests.publishEvaluationRequest).toHaveBeenCalledTimes(0);
+    expect(outbox.publish).toHaveBeenCalledTimes(0);
   });
 
   test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
@@ -296,7 +301,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
 
     const result = await service.requestEvaluation({ id: created.id });
 
-    expect(evaluationRequests.publishEvaluationRequest).toHaveBeenCalledTimes(1);
+    expect(outbox.publish).toHaveBeenCalledTimes(1);
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -307,7 +312,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       statusCode: 503,
       code: 'SERVICE_UNAVAILABLE',
     });
-    evaluationRequests.publishEvaluationRequest.mockImplementationOnce(async () => {
+    outbox.publish.mockImplementationOnce(async () => {
       throw brokerError;
     });
 
@@ -369,6 +374,78 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationStartedAt: 0,
     });
     expect(result.riskScoreEvaluationProcess).toBe(false);
+  });
+
+  test('applyEvaluationResult: a completed result writes the risk score and clears the flags', async () => {
+    const created = await service.createBusiness(BUSINESS);
+    await businesses.updateBusiness(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
+
+    const result = await service.applyEvaluationResult({
+      evaluationId: 'eval-1',
+      entityType: 'business',
+      entityId: created.id,
+      status: 'completed',
+      riskScore: 77,
+    });
+
+    expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
+      riskScore: 77,
+      riskScoreEvaluationProcess: false,
+      riskScoreEvaluationStartedAt: 0,
+    });
+    expect(result.riskScore).toBe(77);
+  });
+
+  test('applyEvaluationResult: a failed result only clears the flags', async () => {
+    const created = await service.createBusiness(BUSINESS);
+    await businesses.updateBusiness(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
+
+    await service.applyEvaluationResult({
+      evaluationId: 'eval-1',
+      entityType: 'business',
+      entityId: created.id,
+      status: 'failed',
+    });
+
+    expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
+      riskScoreEvaluationProcess: false,
+      riskScoreEvaluationStartedAt: 0,
+    });
+  });
+
+  test('applyEvaluationResult: a result for another entity type is rejected', async () => {
+    const created = await service.createBusiness(BUSINESS);
+
+    await expect(
+      service.applyEvaluationResult({
+        evaluationId: 'eval-1',
+        entityType: 'pool' as 'business',
+        entityId: created.id,
+        status: 'completed',
+        riskScore: 77,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+
+    expect(businesses.updateBusiness).toHaveBeenCalledTimes(0);
+  });
+
+  test('applyEvaluationResult: a completed result without a riskScore is rejected', async () => {
+    const created = await service.createBusiness(BUSINESS);
+
+    await expect(
+      service.applyEvaluationResult({
+        evaluationId: 'eval-1',
+        entityType: 'business',
+        entityId: created.id,
+        status: 'completed',
+      }),
+    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+  });
+
+  test('applyEvaluationResult: an incomplete result is rejected', async () => {
+    await expect(
+      service.applyEvaluationResult({ entityType: 'business' } as never),
+    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
   });
 
   test('requestApprovalSignatures: creates a signers-manager task and stores it on the business', async () => {
@@ -556,18 +633,16 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, { approvalSignaturesTaskId: undefined });
   });
 
-  test('syncAfterDeployment: stores the deployment data and publishes business.deployed', async () => {
+  test('syncAfterDeployment: stores the deployment data', async () => {
     const created = await service.createBusiness(BUSINESS);
     const tokenAddress = '0x00000000000000000000000000000000000000aa';
-    const sourceId = '97:0xdeadbeef:7';
 
     const result = await service.syncAfterDeployment(
-      {
+      eventOf({
         entityId: created.id,
         emittedFrom: tokenAddress,
         owner: OWNER_WALLET,
-      },
-      { sourceId },
+      }),
     );
 
     expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
@@ -577,35 +652,21 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     expect(result.tokenAddress).toBe(tokenAddress);
     expect(result.ownerWallet).toBe(OWNER_WALLET);
 
-    expect(webhooks.publish).toHaveBeenCalledTimes(1);
-    expect(webhooks.publish).toHaveBeenCalledWith(
-      'business.deployed',
-      {
-        businessId: created.id,
-        ownerId: OWNER_ID,
-        ownerType: OWNER_TYPE,
-        ownerWallet: OWNER_WALLET,
-        tokenAddress,
-        chainId: CHAIN_ID,
-        name: BUSINESS.name,
-      },
-      sourceId,
-    );
   });
 
   test('syncPausedState: flips the pause flag on the business found by token address', async () => {
     const created = await service.createBusiness(BUSINESS);
     const tokenAddress = '0x00000000000000000000000000000000000000aa';
-    await service.syncAfterDeployment({ entityId: created.id, emittedFrom: tokenAddress, owner: OWNER_WALLET });
+    await service.syncAfterDeployment(eventOf({ entityId: created.id, emittedFrom: tokenAddress, owner: OWNER_WALLET }));
 
-    const result = await service.syncPausedState({ emittedFrom: tokenAddress, isPaused: true });
+    const result = await service.syncPausedState(eventOf({ emittedFrom: tokenAddress, isPaused: true }));
 
     expect(businesses.updateBusinessByTokenAddress).toHaveBeenLastCalledWith(tokenAddress, { paused: true });
     expect(result.paused).toBe(true);
   });
 
   test('syncPausedState: propagates NOT_FOUND for an unknown token address', async () => {
-    await expect(service.syncPausedState({ emittedFrom: '0xunknown', isPaused: true })).rejects.toMatchObject({
+    await expect(service.syncPausedState(eventOf({ emittedFrom: '0xunknown', isPaused: true }))).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });

@@ -3,7 +3,6 @@ import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
 const app = await withTraceAsync('files.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.STORAGE_ROOT_DIR),
     Number(process.env.MAX_FILE_SIZE),

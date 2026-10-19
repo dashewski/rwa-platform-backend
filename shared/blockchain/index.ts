@@ -1,10 +1,10 @@
-export type BlockchainEvent = {
-  chainId: number;
+export type BlockchainEvent<TData = Record<string, any>> = {
+  chainId: string;
   name: string;
   blockNumber: number;
   transactionHash: string;
   address: string;
   logIndex: number;
-  data: Record<string, any>;
+  data: TData;
   timestamp: number;
 };

@@ -1,7 +1,7 @@
 import { AppError } from '@shared/errors/app-errors';
 import { EventRepository } from '../repositories/event.repository';
 import { ScannerStateRepository } from '../repositories/scannerState.repository';
-import type { OrderedPublisherService } from '@shared/ordered-publisher/src/services/orderedPublisher.service';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -16,8 +16,9 @@ export class BlockchainScannerService {
   constructor(
     private readonly eventRepository: EventRepository,
     private readonly scannerStateRepository: ScannerStateRepository,
-    private readonly orderedPublisher: OrderedPublisherService,
-    private readonly chainId: number,
+    private readonly outboxPublisher: OutboxPublisherService,
+    private readonly exchange: string,
+    private readonly chainId: string,
   ) {}
 
   /**
@@ -60,9 +61,7 @@ export class BlockchainScannerService {
    */
   @TraceDecorator()
   @MetricsDecorator()
-  @LogDecorator({
-    args: (a) => ({ limit: a[2], offset: a[3] }),
-  })
+  @LogDecorator()
   async getEvents(
     filters: {
       chainId?: number;
@@ -113,7 +112,7 @@ export class BlockchainScannerService {
   async applyBlockEvents(
     blockNumber: number,
     events: Array<{
-      chainId: number;
+      chainId: string;
       name: string;
       blockNumber: number;
       transactionHash: string;
@@ -149,7 +148,8 @@ export class BlockchainScannerService {
       for (const event of savedEvents) {
         // chain-stable messageId: a re-scanned block yields the same id and the
         // consumer inbox turns the duplicate delivery into a no-op
-        await this.orderedPublisher.publish(
+        await this.outboxPublisher.publish(
+          this.exchange,
           event.name,
           event,
           `${this.chainId}:${event.transactionHash}:${event.logIndex}`,

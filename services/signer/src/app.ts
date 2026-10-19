@@ -1,34 +1,36 @@
 import { Elysia } from 'elysia';
-import { Wallet } from 'ethers';
 import { monitoringPlugin } from '@shared/monitoring/src/monitoring.plugin';
 import { healthPlugin } from '@shared/monitoring/src/health.plugin';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
+import { createRepositoriesPlugin } from './plugins/repositories.plugin';
 import { createClientsPlugin } from './plugins/clients.plugin';
 import { createServicesPlugin } from './plugins/services.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
+  mongoUri: string,
   rabbitMqUri: string,
-  maxReconnectAttempts: number,
-  reconnectInterval: number,
+  signerName: string,
   privateKey: string,
 ) {
-  const signerAddress = new Wallet(privateKey).address;
+  const repositoriesPlugin = await withTraceAsync(
+    'signer.init.repositories_plugin',
+    async () => await createRepositoriesPlugin(mongoUri),
+  );
 
   const clientsPlugin = await withTraceAsync(
     'signer.init.clients_plugin',
-    async () => await createClientsPlugin(rabbitMqUri, maxReconnectAttempts, reconnectInterval, signerAddress),
+    async () => await createClientsPlugin(rabbitMqUri, signerName),
   );
 
   const servicesPlugin = withTraceSync('signer.init.services_plugin', () =>
-    createServicesPlugin(clientsPlugin, privateKey),
+    createServicesPlugin(repositoriesPlugin, clientsPlugin, privateKey),
   );
 
   const daemonsPlugin = await withTraceAsync(
     'signer.init.daemons_plugin',
-    async () => await createDaemonsPlugin(servicesPlugin),
+    async () => await createDaemonsPlugin(servicesPlugin, clientsPlugin),
   );
 
   const app = withTraceSync('signer.init.elysia', () => {
@@ -36,6 +38,7 @@ export async function createApp(
       .use(monitoringPlugin)
       .use(healthPlugin)
       .onError(ErrorHandlerPlugin)
+      .use(repositoriesPlugin)
       .use(clientsPlugin)
       .use(servicesPlugin)
       .use(daemonsPlugin);

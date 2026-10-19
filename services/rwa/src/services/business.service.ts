@@ -1,4 +1,6 @@
 import { BusinessRepository } from '../repositories/business.repository';
+import type { AiEvaluatorClient } from '../clients/aiEvaluator.client';
+import type { BlockchainEvent } from '@shared/blockchain';
 import { AppError } from '@shared/errors/app-errors';
 import type { IBusinessEntity } from '../models/entity/business.entity';
 
@@ -6,8 +8,6 @@ import { OpenRouterClient } from '@shared/openrouter/client';
 import { ethers } from 'ethers';
 import type { SortOrder } from 'mongoose';
 import type { SignersManagerClient } from '../clients/eden.clients';
-import type { EvaluationRequestsClient } from '../clients/evaluationRequests.client';
-import type { WebhookEventsPublisher } from '@shared/webhooks/src';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -29,8 +29,7 @@ export class BusinessService {
     private readonly businessRepository: BusinessRepository,
     private readonly openRouterClient: OpenRouterClient,
     private readonly signersManagerClient: SignersManagerClient,
-    private readonly evaluationRequestsClient: EvaluationRequestsClient,
-    private readonly webhookEventsPublisher: WebhookEventsPublisher,
+    private readonly aiEvaluatorClient: AiEvaluatorClient,
     private readonly supportedNetworks: NetworkConfig[],
     private readonly openRouterModel: string,
     private readonly filesBaseUrl: string,
@@ -226,7 +225,7 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ id: a[0].id, limit: a[0].limit, offset: a[0].offset }),
+    args: (a) => ({ id: a[0].id }),
   })
   async editBusiness(params: {
     id: string;
@@ -295,25 +294,24 @@ Response format:
       });
     }
 
+    const response = await this.aiEvaluatorClient.createBusinessEvaluation.post({
+      businessId: id,
+      ownerId: business.ownerId,
+      ownerType: business.ownerType,
+    });
+
+    if (response.error) {
+      throw new AppError({
+        message: `ai-evaluator is unavailable (${response.status})`,
+        statusCode: 502,
+        code: 'AI_ERROR',
+      });
+    }
+
     await this.businessRepository.updateBusiness(id, {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: now,
     });
-
-    try {
-      await this.evaluationRequestsClient.publishEvaluationRequest('evaluateBusiness', {
-        businessId: id,
-        ownerId: business.ownerId,
-        ownerType: business.ownerType,
-      });
-    } catch (error) {
-      // The request never went out - clear the flag so the user can retry.
-      await this.businessRepository.updateBusiness(id, {
-        riskScoreEvaluationProcess: false,
-        riskScoreEvaluationStartedAt: 0,
-      });
-      throw error;
-    }
 
     const updated = await this.businessRepository.findById(id);
     return this.mapBusiness(updated);
@@ -343,6 +341,59 @@ Response format:
     return this.mapBusiness(updated);
   }
 
+  /**
+   * Applies an evaluation result delivered back by the ai-evaluator service.
+   *
+   * A completed evaluation writes the risk score; a failed one only clears the
+   * "evaluation in progress" flag so the user can start it again.
+   */
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({
+      evaluationId: a[0].evaluationId,
+      entityId: a[0].entityId,
+      status: a[0].status,
+    }),
+  })
+  async applyEvaluationResult(result: {
+    evaluationId: string;
+    entityType: 'business';
+    entityId: string;
+    status: 'completed' | 'failed';
+    riskScore?: number;
+  }) {
+    if (!result?.evaluationId || !result?.entityId || !result?.status) {
+      throw new AppError({
+        message: 'Invalid evaluation result format',
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
+    if (result.entityType !== 'business') {
+      throw new AppError({
+        message: `Evaluation result for "${result.entityType}" arrived on the business stream`,
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
+    if (result.status === 'failed') {
+      return this.resetEvaluation({ id: result.entityId });
+    }
+
+    if (result.riskScore === undefined) {
+      throw new AppError({
+        message: 'Completed evaluation result without a riskScore',
+        statusCode: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    }
+
+    return this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
+  }
+
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
@@ -360,7 +411,12 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ id: a[0].id, limit: a[0].limit, offset: a[0].offset }),
+    args: (a) => ({ 
+      id: a[0].id,
+      ownerWallet: a[0].ownerWallet,
+      deployerWallet: a[0].deployerWallet,
+      createRWAFee: a[0].createRWAFee,
+    }),
   })
   async requestApprovalSignatures(params: {
     id: string;
@@ -469,38 +525,23 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ entityId: a[0].entityId, emittedFrom: a[0].emittedFrom, owner: a[0].owner }),
+    args: (a) => ({ entityId: a[0].data.entityId, emittedFrom: a[0].data.emittedFrom, owner: a[0].data.owner }),
   })
-  async syncAfterDeployment(
-    eventData: { entityId: string; emittedFrom: string; owner: string },
-    meta?: { sourceId?: string },
-  ) {
+  async syncAfterDeployment(event: BlockchainEvent<{
+    entityId: string; emittedFrom: string; owner: string
+  }>) {
     setSpanAttributes({
-      entityId: eventData.entityId,
+      entityId: event.data.entityId,
       entityType: 'business',
-      tokenAddress: eventData.emittedFrom,
-      ownerWallet: eventData.owner,
+      tokenAddress: event.data.emittedFrom,
+      ownerWallet: event.data.owner,
     });
-    const updated = await this.businessRepository.updateBusiness(eventData.entityId, {
-      tokenAddress: eventData.emittedFrom,
-      ownerWallet: eventData.owner,
+    const updated = await this.businessRepository.updateBusiness(event.data.entityId, {
+      tokenAddress: event.data.emittedFrom,
+      ownerWallet: event.data.owner,
     });
 
     const businessDto = this.mapBusiness(updated);
-
-    await this.webhookEventsPublisher.publish(
-      'business.deployed',
-      {
-        businessId: businessDto.id,
-        ownerId: businessDto.ownerId,
-        ownerType: businessDto.ownerType,
-        ownerWallet: businessDto.ownerWallet,
-        tokenAddress: businessDto.tokenAddress,
-        chainId: businessDto.chainId,
-        name: businessDto.name,
-      },
-      meta?.sourceId,
-    );
 
     return businessDto;
   }
@@ -508,12 +549,14 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ tokenAddress: a[0].emittedFrom, isPaused: a[0].isPaused }),
+    args: (a) => ({ tokenAddress: a[0].data.emittedFrom, isPaused: a[0].data.isPaused }),
   })
-  async syncPausedState(event: { emittedFrom: string; isPaused: boolean }) {
-    setSpanAttributes({ entityType: 'business', tokenAddress: event.emittedFrom });
-    const updated = await this.businessRepository.updateBusinessByTokenAddress(event.emittedFrom, {
-      paused: event.isPaused,
+  async syncPausedState(event: BlockchainEvent<{
+    emittedFrom: string; isPaused: boolean
+  }>) {
+    setSpanAttributes({ entityType: 'business', tokenAddress: event.data.emittedFrom });
+    const updated = await this.businessRepository.updateBusinessByTokenAddress(event.data.emittedFrom, {
+      paused: event.data.isPaused,
     });
     return this.mapBusiness(updated);
   }

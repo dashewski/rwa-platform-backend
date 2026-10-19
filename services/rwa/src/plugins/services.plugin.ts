@@ -4,6 +4,7 @@ import { PoolService } from '../services/pool.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
 import { TokenService } from '../services/token.service';
+import { InboxConsumerService } from '@shared/inbox-consumer';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
 export const createServicesPlugin = (
@@ -14,6 +15,12 @@ export const createServicesPlugin = (
   placeholderImageUrl: string,
   filesBaseUrl: string,
 ) => {
+  const inboxConsumer = withTraceSync('rwa.init.services.inbox_consumer', () =>
+    new InboxConsumerService(
+      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
+    ),
+  );
+
   const businessService = withTraceSync(
     'rwa.init.services.business',
     () =>
@@ -21,8 +28,7 @@ export const createServicesPlugin = (
         repositoriesPlugin.decorator.businessRepository,
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.signersManagerClient,
-        clientsPlugin.decorator.evaluationRequestsClient,
-        clientsPlugin.decorator.webhookEventsPublisher,
+        clientsPlugin.decorator.aiEvaluatorClient,
         supportedNetworks,
         openRouterModel,
         filesBaseUrl,
@@ -37,8 +43,7 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.signersManagerClient,
         clientsPlugin.decorator.poolEventsClient,
-        clientsPlugin.decorator.evaluationRequestsClient,
-        clientsPlugin.decorator.webhookEventsPublisher,
+        clientsPlugin.decorator.aiEvaluatorClient,
         supportedNetworks,
         openRouterModel,
         filesBaseUrl,
@@ -60,6 +65,7 @@ export const createServicesPlugin = (
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
+      .decorate('inboxConsumer', inboxConsumer)
       .decorate('businessService', businessService)
       .decorate('poolService', poolService)
       .decorate('tokenService', tokenService),

@@ -1,19 +1,22 @@
 import { SignatureRepository } from '../repositories/signature.repository';
 import { SignatureTaskRepository } from '../repositories/signatureTask.repository';
-import { SignerClient } from '../clients/signer.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { AppError } from '@shared/errors/app-errors';
 import { ethers } from 'ethers';
+import mongoose from 'mongoose';
 
 export class SignaturesService {
   constructor(
     private readonly signatureRepository: SignatureRepository,
     private readonly signatureTaskRepository: SignatureTaskRepository,
-    private readonly signerClient: SignerClient,
-  ) {}
+    private readonly outboxPublisher: OutboxPublisherService,
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   /**
    * Creates a new signatures task
@@ -49,17 +52,30 @@ export class SignaturesService {
     // the same expiry window is rejected as a duplicate.
     const finalHash = ethers.solidityPackedKeccak256(['bytes32', 'uint256'], [data.hash, data.expired]);
 
-    const task = await this.signatureTaskRepository.create({
-      ...data,
-      hash: finalHash,
+    let taskId = '';
+
+    await mongoose.connection.transaction(async () => {
+      const task = await this.signatureTaskRepository.create({
+        ...data,
+        hash: finalHash,
+      });
+
+      taskId = task._id.toString();
+
+      // Send signature request to signers
+      await this.outboxPublisher.publish(
+        'sign.exchange',
+        'task',
+        {
+          hash: finalHash,
+          taskId,
+          expired: data.expired,
+        },
+        taskId,
+      );
     });
 
-    // Send signature request to signers
-    await this.signerClient.sendSignatureTask({
-      hash: finalHash,
-      taskId: task._id.toString(),
-      expired: data.expired,
-    });
+    const task = await this.signatureTaskRepository.findById(taskId);
 
     return {
       id: task._id.toString(),
@@ -72,13 +88,11 @@ export class SignaturesService {
     };
   }
 
-  /**
-   * Adds a signature to the task
-   */
+
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ taskId: a[0].taskId, signer: a[0].signer }),
+    args: (a) => ({ taskId: a[0]?.taskId, signer: a[0]?.signer }),
   })
   async addSignature(data: { taskId: string; signer: string; signature: string }) {
     setSpanAttributes({

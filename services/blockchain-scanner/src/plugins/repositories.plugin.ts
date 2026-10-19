@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import mongoose from 'mongoose';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
+import { OutboxPublisherMessageRepository } from '@shared/outbox-publisher';
 import { EventRepository } from '../repositories/event.repository';
 import { ScannerStateRepository } from '../repositories/scannerState.repository';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
@@ -11,6 +12,11 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
   const scannerStateRepository = withTraceSync(
     'blockchain-scanner.init.repositories.scanner_state',
     () => new ScannerStateRepository(),
+  );
+
+  const outboxPublisherMessageRepository = withTraceSync(
+    'blockchain-scanner.init.repositories.outbox_publisher_message',
+    () => new OutboxPublisherMessageRepository(),
   );
 
   await withTraceAsync('blockchain-scanner.init.repositories_plugin.mongoose', async (ctx) => {
@@ -26,6 +32,7 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
     new Elysia({ name: 'Repositories' })
       .decorate('eventRepository', eventRepository)
       .decorate('scannerStateRepository', scannerStateRepository)
+      .decorate('outboxPublisherMessageRepository', outboxPublisherMessageRepository)
       .onStop(async () => {
         await withTraceAsync('blockchain-scanner.stop.repositories_plugin', async () => {
           logger.info('Disconnecting from MongoDB');

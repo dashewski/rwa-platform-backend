@@ -1,5 +1,5 @@
 import { ethers, Wallet } from 'ethers';
-import { SignersManagerClient } from '../clients/signersManager.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -14,7 +14,7 @@ export class SignatureService {
   private readonly wallet: Wallet;
 
   constructor(
-    private readonly signersManagerClient: SignersManagerClient,
+    private readonly outboxPublisher: OutboxPublisherService,
     privateKey: string,
   ) {
     this.wallet = new Wallet(privateKey);
@@ -26,15 +26,18 @@ export class SignatureService {
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ hash: a[0], taskId: a[1], expired: a[2] }),
+    args: (a) => ({ hash: a[0].hash, taskId: a[0].taskId, expired: a[0].expired }),
   })
-  async signHash(hash: string, taskId: string, expired: number) {
+  async signHash(task: { hash: string; taskId: string; expired: number }) {
+    const { hash, taskId, expired } = task;
+
     setSpanAttributes({
       wallet: this.wallet.address,
       hash,
       taskId,
       expired,
     });
+
     const now = Math.floor(Date.now() / 1000);
     if (expired < now) {
       throw new AppError({ message: 'Task expired', statusCode: 410, code: 'EXPIRED' });
@@ -45,13 +48,12 @@ export class SignatureService {
     const signer = this.wallet.address;
     const signature = await this.wallet.signMessage(ethers.getBytes(hash));
 
-    // Send signature back to the manager
-    await this.signersManagerClient.sendSignature({
-      taskId,
-      signer,
-      hash,
-      signature,
-    });
+    await this.outboxPublisher.publish(
+      'sign.exchange',
+      'response',
+      { taskId, signer, hash, signature },
+      `${taskId}:${signer}`,
+    );
 
     return { signer, signature };
   }

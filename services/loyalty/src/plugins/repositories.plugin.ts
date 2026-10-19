@@ -6,6 +6,7 @@ import { ReferralRepository } from '../repositories/referral.repository';
 import { ReferrerClaimHistoryRepository } from '../repositories/referrerClaimHistory.repository';
 import { CommissionHistoryRepository } from '../repositories/commissionHistory.repository';
 import { ReferrerWithdrawRepository } from '../repositories/referrerWithdraw.repository';
+import { InboxConsumerMessageRepository } from '@shared/inbox-consumer';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createRepositoriesPlugin = async (mongoUri: string) => {
@@ -28,6 +29,11 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
     () => new ReferrerWithdrawRepository(),
   );
 
+  const inboxConsumerMessageRepository = withTraceSync(
+    'loyalty.init.repositories.inbox_consumer_message',
+    () => new InboxConsumerMessageRepository(),
+  );
+
   await withTraceAsync('loyalty.init.repositories_plugin.mongoose', async (ctx) => {
     logger.info('Connecting to MongoDB', { uri: mongoUri });
     mongoose.connection.once('connected', () => {
@@ -44,6 +50,7 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
       .decorate('referrerClaimHistoryRepository', referrerClaimHistoryRepository)
       .decorate('commissionHistoryRepository', commissionHistoryRepository)
       .decorate('referrerWithdrawRepository', referrerWithdrawRepository)
+      .decorate('inboxConsumerMessageRepository', inboxConsumerMessageRepository)
       .onStop(async () => {
         await withTraceAsync('loyalty.stop.repositories_plugin', async () => {
           logger.info('Disconnecting from MongoDB');

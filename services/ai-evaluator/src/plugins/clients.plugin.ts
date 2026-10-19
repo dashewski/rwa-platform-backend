@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { OpenRouterClient } from '@shared/openrouter/client';
-import { RabbitMQClient } from '@shared/rabbitmq/src/rabbitmq.client';
+import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 import {
@@ -11,8 +11,6 @@ import {
   createQuestionsClient,
   createPortfolioClient,
 } from '../clients/eden.clients';
-import { EvaluationResultsClient } from '../clients/evaluationResults.client';
-import { EvaluationRequestsClient } from '../clients/evaluationRequests.client';
 
 export const createClientsPlugin = async (
   openRouterApiKey: string,
@@ -24,8 +22,6 @@ export const createClientsPlugin = async (
   questionsServiceUrl: string,
   portfolioServiceUrl: string,
   rabbitMqUri: string,
-  rabbitMqMaxReconnectAttempts: number,
-  rabbitMqReconnectInterval: number,
 ) => {
   const openRouterClient = withTraceSync(
     'ai-evaluator.init.clients.openrouter',
@@ -54,32 +50,12 @@ export const createClientsPlugin = async (
     createPortfolioClient(portfolioServiceUrl),
   );
 
-  const rabbitMQClient = withTraceSync(
-    'ai-evaluator.init.clients.rabbitmq',
-    () =>
-      new RabbitMQClient({
-        uri: rabbitMqUri,
-        reconnectAttempts: rabbitMqMaxReconnectAttempts,
-        reconnectInterval: rabbitMqReconnectInterval,
-      }),
-  );
-
-  const evaluationResultsClient = withTraceSync(
-    'ai-evaluator.init.clients.evaluation_results',
-    () => new EvaluationResultsClient(rabbitMQClient),
-  );
-
-  const evaluationRequestsClient = withTraceSync(
-    'ai-evaluator.init.clients.evaluation_requests',
-    () => new EvaluationRequestsClient(rabbitMQClient),
-  );
+  const rabbitMQClient = withTraceSync('ai-evaluator.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
 
   await withTraceAsync('ai-evaluator.init.clients.rabbitmq_connect', async () => {
     logger.debug('Initializing RabbitMQ client');
-    await rabbitMQClient.connect();
-    await evaluationResultsClient.initialize();
-    await evaluationRequestsClient.initialize();
-    logger.info('RabbitMQ client connected, queues initialized');
+    await rabbitMQClient.initialize();
+    logger.info('RabbitMQ client initialized');
   });
 
   const plugin = withTraceSync('ai-evaluator.init.clients.plugin', () =>
@@ -92,8 +68,6 @@ export const createClientsPlugin = async (
       .decorate('questionsClient', questionsClient)
       .decorate('portfolioClient', portfolioClient)
       .decorate('rabbitMQClient', rabbitMQClient)
-      .decorate('evaluationResultsClient', evaluationResultsClient)
-      .decorate('evaluationRequestsClient', evaluationRequestsClient)
       .onStop(async () => {
         await withTraceAsync('ai-evaluator.stop.clients', async () => {
           await rabbitMQClient.disconnect();

@@ -3,7 +3,7 @@ import type { InferRawDocType } from 'mongoose';
 
 const scannerStateSchemaDefinition = {
   chainId: {
-    type: Number,
+    type: String,
     required: true,
   },
   lastScannedBlock: {

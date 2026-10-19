@@ -10,6 +10,9 @@
   "dependencies": {
     "@shared/monitoring": "workspace:*",
     "@shared/errors": "workspace:*",
+    "@shared/rabbitmq": "workspace:*",
+    "@shared/inbox-consumer": "workspace:*",
+    "@shared/outbox-publisher": "workspace:*",
     "@shared/openrouter": "workspace:*",
     "@services/rwa": "workspace:*",
     "@services/documents": "workspace:*",

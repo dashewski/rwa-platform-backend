@@ -19,9 +19,10 @@ import { createFakePoolRepository, type FakePoolRepository } from './fakes/pool.
 import { createFakeOpenRouterClient } from './fakes/open-router.client.fake';
 import { createFakeSignersManagerClient, DEFAULT_SIGNATURE_TASK_ID } from './fakes/signers-manager.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-import { createFakeEvaluationRequestsClient } from './fakes/evaluation-requests.client.fake';
-import { createFakeEvaluationResultsClient } from './fakes/evaluation-results.client.fake';
-import { createFakeWebhookEventsPublisher } from './fakes/webhook-events.publisher.fake';
+import {
+  createFakeInboxConsumerMessageRepository,
+  createFakeOutboxPublisherMessageRepository,
+} from './fakes/inbox-outbox.repositories.fake';
 import { createFakePoolEventsClient } from './fakes/pool-events.client.fake';
 import { createFakeRedisEventsClient } from './fakes/redis-events.client.fake';
 
@@ -64,28 +65,29 @@ function createFakeClients() {
     poolEventsClient: createFakePoolEventsClient(redisEventsClient),
     openRouterClient: createFakeOpenRouterClient(),
     rabbitMQClient: createFakeRabbitMQClient(),
-    evaluationResultsClient: createFakeEvaluationResultsClient(),
-    evaluationRequestsClient: createFakeEvaluationRequestsClient(),
-    webhookEventsPublisher: createFakeWebhookEventsPublisher(),
   };
 }
 
 type FakeClients = ReturnType<typeof createFakeClients>;
 
-function buildApp(businesses: FakeBusinessRepository, pools: FakePoolRepository, clients: FakeClients) {
+function buildApp(
+  businesses: FakeBusinessRepository,
+  pools: FakePoolRepository,
+  clients: FakeClients,
+  outboxRepository: ReturnType<typeof createFakeOutboxPublisherMessageRepository>,
+) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('businessRepository', businesses)
-    .decorate('poolRepository', pools);
+    .decorate('poolRepository', pools)
+    .decorate('inboxConsumerMessageRepository', createFakeInboxConsumerMessageRepository())
+    .decorate('outboxPublisherMessageRepository', outboxRepository);
 
   const clientsPlugin = new Elysia({ name: 'Clients' })
     .decorate('signersManagerClient', clients.signersManagerClient)
     .decorate('redisEventsClient', clients.redisEventsClient)
     .decorate('poolEventsClient', clients.poolEventsClient)
     .decorate('openRouterClient', clients.openRouterClient)
-    .decorate('rabbitMQClient', clients.rabbitMQClient)
-    .decorate('evaluationResultsClient', clients.evaluationResultsClient)
-    .decorate('evaluationRequestsClient', clients.evaluationRequestsClient)
-    .decorate('webhookEventsPublisher', clients.webhookEventsPublisher);
+    .decorate('rabbitMQClient', clients.rabbitMQClient);
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,
@@ -117,13 +119,15 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let pools: FakePoolRepository;
   let clients: FakeClients;
+  let outboxRepository: ReturnType<typeof createFakeOutboxPublisherMessageRepository>;
   let app: App;
 
   beforeEach(() => {
     businesses = createFakeBusinessRepository();
     pools = createFakePoolRepository();
     clients = createFakeClients();
-    app = buildApp(businesses, pools, clients);
+    outboxRepository = createFakeOutboxPublisherMessageRepository();
+    app = buildApp(businesses, pools, clients, outboxRepository);
   });
 
   test('createBusiness -> getBusiness -> getBusinesses round-trip', async () => {
@@ -177,9 +181,13 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.riskScoreEvaluationProcess).toBe(true);
-    expect(clients.evaluationRequestsClient.publishEvaluationRequest).toHaveBeenCalledWith(
-      'evaluateBusiness',
-      expect.objectContaining({ businessId: created.body.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE }),
+    expect(outboxRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exchange: 'evaluation',
+        routingKey: 'evaluateBusiness',
+        messageId: expect.stringMatching(new RegExp(`^business:${created.body.id}:`)),
+        payload: { businessId: created.body.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
+      }),
     );
   });
 

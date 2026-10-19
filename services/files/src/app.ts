@@ -8,7 +8,7 @@ import { createServicesPlugin } from './plugins/services.plugin';
 import { createControllersPlugin } from './plugins/controllers.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(port: number, mongoUri: string, rootDir: string, maxFileSize: number) {
+export async function createApp(mongoUri: string, rootDir: string, maxFileSize: number) {
   const repositoriesPlugin = await withTraceAsync(
     'files.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),

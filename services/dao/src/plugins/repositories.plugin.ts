@@ -7,6 +7,7 @@ import { StakingRepository } from '../repositories/staking.repository';
 import { StakingHistoryRepository } from '../repositories/stakingHistory.repository';
 import { TimelockTaskRepository } from '../repositories/timelockTask.repository';
 import { TreasuryWithdrawRepository } from '../repositories/treasuryWithdraw.repository';
+import { InboxConsumerMessageRepository } from '@shared/inbox-consumer';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createRepositoriesPlugin = async (mongoUri: string) => {
@@ -31,6 +32,11 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
     () => new TreasuryWithdrawRepository(),
   );
 
+  const inboxConsumerMessageRepository = withTraceSync(
+    'dao.init.repositories.inbox_consumer_message',
+    () => new InboxConsumerMessageRepository(),
+  );
+
   await withTraceAsync('dao.init.repositories_plugin.mongoose', async (ctx) => {
     logger.info('Connecting to MongoDB', { uri: mongoUri });
     mongoose.connection.once('connected', () => {
@@ -48,6 +54,7 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
       .decorate('stakingHistoryRepository', stakingHistoryRepository)
       .decorate('timelockTaskRepository', timelockTaskRepository)
       .decorate('treasuryWithdrawRepository', treasuryWithdrawRepository)
+      .decorate('inboxConsumerMessageRepository', inboxConsumerMessageRepository)
       .onStop(async () => {
         await withTraceAsync('dao.stop.repositories_plugin', async () => {
           logger.info('Disconnecting from MongoDB');

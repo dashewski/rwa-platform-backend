@@ -11,6 +11,8 @@
     "@shared/monitoring": "workspace:*",
     "@shared/errors": "workspace:*",
     "@shared/rabbitmq": "workspace:*",
+    "@shared/inbox-consumer": "workspace:*",
+    "@shared/outbox-publisher": "workspace:*",
     "elysia": "1.3.5",
     "ethers": "6.15.0"
   },

@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { InboxConsumerService } from '@shared/inbox-consumer';
 import { ChartsService } from '../services/charts.service';
 import { TransactionsService } from '../services/transactions.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
@@ -21,12 +22,19 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
       ),
   );
 
+  const inboxConsumer = withTraceSync('charts.init.services.inbox_consumer', () =>
+    new InboxConsumerService(
+      repositoriesPlugin.decorator.inboxConsumerMessageRepository,
+    ),
+  );
+
   const plugin = withTraceSync('charts.init.services.plugin', () =>
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
       .decorate('chartsService', chartsService)
-      .decorate('transactionsService', transactionsService),
+      .decorate('transactionsService', transactionsService)
+      .decorate('inboxConsumer', inboxConsumer),
   );
 
   return plugin;

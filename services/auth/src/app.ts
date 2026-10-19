@@ -8,7 +8,6 @@ import { createControllersPlugin } from './plugins/controllers.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export async function createApp(
-  port: number,
   mongoUri: string,
   jwtSecret: string,
   accessTokenExpiry: any,

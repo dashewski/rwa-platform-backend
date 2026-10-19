@@ -22,7 +22,7 @@ export class BlockchainScannerDaemon {
     private blockConfirmations: number,
     private scanIntervalMs: number,
     private batchSize: number,
-    private chainId: number,
+    private chainId: string,
     private initScanBlockNumber: number,
     private scannerService: BlockchainScannerService,
   ) {
@@ -38,7 +38,7 @@ export class BlockchainScannerDaemon {
   async initialize(): Promise<void> {
     try {
       const network = await this.provider.getNetwork();
-      const providerChainId = Number(network.chainId);
+      const providerChainId = network.chainId.toString();
 
       if (providerChainId !== this.chainId) {
         throw new AppError({

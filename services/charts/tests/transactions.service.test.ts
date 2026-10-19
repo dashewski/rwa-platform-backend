@@ -22,14 +22,42 @@ import { createFakeRedisEventsClient, type FakeRedisEventsClient } from './fakes
 const POOL_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const USER_ADDRESS = '0x1234567890AbcdEF1234567890aBcdef12345678';
 
-const TRANSACTION = {
-  poolAddress: POOL_ADDRESS,
-  transactionType: PoolTransactionType.MINT,
-  userAddress: USER_ADDRESS,
+// The events as the scanner publishes them: decoded fields in `data`, the
+// envelope (name, chainId, transactionHash, logIndex, blockNumber) on the root.
+const MINT_EVENT = {
+  chainId: '1',
+  name: 'Pool_RwaMinted',
+  transactionHash: '0xtx1',
+  address: POOL_ADDRESS,
+  logIndex: 0,
+  blockNumber: 12_345,
   timestamp: 1_700_000_000,
-  rwaAmount: '1000',
-  holdAmount: '1000',
-  holdFee: '5',
+  data: {
+    emittedFrom: POOL_ADDRESS,
+    minter: USER_ADDRESS,
+    rwaAmountMinted: '1000',
+    holdAmountPaid: '1000',
+    feePaid: '5',
+  },
+};
+
+const BURN_EVENT = {
+  chainId: '1',
+  name: 'Pool_RwaBurned',
+  transactionHash: '0xtx2',
+  address: POOL_ADDRESS,
+  logIndex: 1,
+  blockNumber: 12_346,
+  timestamp: 1_700_000_100,
+  data: {
+    emittedFrom: POOL_ADDRESS,
+    burner: USER_ADDRESS,
+    rwaAmountBurned: '1000',
+    holdAmountReceived: '1000',
+    bonusAmountReceived: '100',
+    holdFeePaid: '5',
+    bonusFeePaid: '3',
+  },
 };
 
 // Every interval the service accepts, with the seconds it must delegate.
@@ -74,12 +102,18 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     });
   }
 
-  test('recordTransaction: defaults both bonus fields to "0" and publishes the update', async () => {
-    const result = await service.recordTransaction({ ...TRANSACTION });
+  test('recordMint: defaults both bonus fields to "0" and publishes the update', async () => {
+    const result = await service.recordMint({ ...MINT_EVENT });
 
     expect(poolTransactions.create).toHaveBeenCalledTimes(1);
     expect(poolTransactions.create).toHaveBeenCalledWith({
-      ...TRANSACTION,
+      poolAddress: POOL_ADDRESS,
+      transactionType: PoolTransactionType.MINT,
+      userAddress: USER_ADDRESS,
+      timestamp: 1_700_000_000,
+      rwaAmount: '1000',
+      holdAmount: '1000',
+      holdFee: '5',
       bonusAmount: '0',
       bonusFee: '0',
     });
@@ -120,8 +154,8 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 
-  test('recordTransaction: explicit bonus amounts are preserved and forwarded', async () => {
-    const result = await service.recordTransaction({ ...TRANSACTION, bonusAmount: '100', bonusFee: '3' });
+  test('recordMint: explicit bonus amounts are preserved and forwarded', async () => {
+    const result = await service.recordBurn({ ...BURN_EVENT });
 
     expect(poolTransactions.create).toHaveBeenCalledWith(
       expect.objectContaining({ bonusAmount: '100', bonusFee: '3' }),
@@ -135,8 +169,8 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     expect(result.bonusFee).toBe('3');
   });
 
-  test('recordTransaction: an empty-string bonus amount is coerced to "0" (|| fallback, not ??)', async () => {
-    const result = await service.recordTransaction({ ...TRANSACTION, bonusAmount: '', bonusFee: '' });
+  test('recordMint: an empty-string bonus amount is coerced to "0" (|| fallback, not ??)', async () => {
+    const result = await service.recordBurn({ ...BURN_EVENT, data: { ...BURN_EVENT.data, bonusAmountReceived: '', bonusFeePaid: '' } });
 
     expect(poolTransactions.create).toHaveBeenCalledWith(
       expect.objectContaining({ bonusAmount: '0', bonusFee: '0' }),
@@ -145,20 +179,20 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     expect(result.bonusFee).toBe('0');
   });
 
-  test('recordTransaction: propagates a repository failure without publishing', async () => {
+  test('recordMint: propagates a repository failure without publishing', async () => {
     poolTransactions.create.mockRejectedValueOnce(new Error('db unavailable'));
 
-    await expect(service.recordTransaction({ ...TRANSACTION })).rejects.toThrow('db unavailable');
+    await expect(service.recordMint({ ...MINT_EVENT })).rejects.toThrow('db unavailable');
 
     expect(redis.publish).toHaveBeenCalledTimes(0);
   });
 
-  test('recordTransaction: publishes after the write, so a publish failure leaves the stored row', async () => {
+  test('recordMint: publishes after the write, so a publish failure leaves the stored row', async () => {
     // Current ordering: repository.create runs first, the Redis publish second.
     // A publish failure therefore rejects the call while the row stays stored.
     redis.publish.mockRejectedValueOnce(new Error('redis unavailable'));
 
-    await expect(service.recordTransaction({ ...TRANSACTION })).rejects.toThrow('redis unavailable');
+    await expect(service.recordMint({ ...MINT_EVENT })).rejects.toThrow('redis unavailable');
 
     expect(poolTransactions.store.size).toBe(1);
   });

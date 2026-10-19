@@ -3,7 +3,7 @@ import type { InferRawDocType } from 'mongoose';
 
 const eventSchemaDefinition = {
   chainId: {
-    type: Number,
+    type: String,
     required: true,
   },
   blockNumber: {

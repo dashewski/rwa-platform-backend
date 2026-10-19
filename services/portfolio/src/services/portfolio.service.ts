@@ -7,6 +7,7 @@ import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
+import type { BlockchainEvent } from '@shared/blockchain';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -14,7 +15,7 @@ export class PortfolioService {
   constructor(
     private readonly tokenBalanceRepository: TokenBalanceRepository,
     private readonly transactionRepository: TransactionRepository,
-  ) {}
+  ) { }
 
   /**
    * Gets token balances list with filters, pagination and sorting
@@ -86,74 +87,71 @@ export class PortfolioService {
   @MetricsDecorator()
   @LogDecorator({
     args: (a) => ({
-      from: a[0].from,
-      to: a[0].to,
-      tokenAddress: a[0].tokenAddress,
-      tokenId: a[0].tokenId,
-      poolAddress: a[0].poolAddress,
+      from: a[0].data.from,
+      to: a[0].data.to,
+      tokenAddress: a[0].data.emittedFrom,
+      tokenId: a[0].data.tokenId,
+      poolAddress: a[0].data.pool,
       chainId: a[0].chainId,
       transactionHash: a[0].transactionHash,
       blockNumber: a[0].blockNumber,
-      amount: a[0].amount,
+      amount: a[0].data.amount,
     }),
   })
-  async processTransfer(data: {
+  async processTransfer(event: BlockchainEvent<{
+    emittedFrom: string;
     from: string;
     to: string;
-    tokenAddress: string;
     tokenId: string;
-    poolAddress: string;
-    chainId: string;
-    transactionHash: string;
-    blockNumber: number;
-    amount: number;
-  }) {
+    amount: string;
+    pool: string;
+  }>) {
     setSpanAttributes({
-      chainId: data.chainId,
-      blockNumber: data.blockNumber,
-      transactionHash: data.transactionHash,
-      poolAddress: data.poolAddress,
+      chainId: event.chainId,
+      blockNumber: event.blockNumber,
+      transactionHash: event.transactionHash,
+      poolAddress: event.data.pool,
     });
 
     // Skip if both addresses are zero (shouldn't happen)
-    if (data.from === ZERO_ADDRESS && data.to === ZERO_ADDRESS) {
+    if (event.data.from === ZERO_ADDRESS && event.data.to === ZERO_ADDRESS) {
       return;
     }
 
     // Record transaction
     await this.transactionRepository.create({
-      from: data.from,
-      to: data.to,
-      tokenAddress: data.tokenAddress,
-      tokenId: data.tokenId,
-      poolAddress: data.poolAddress,
-      chainId: data.chainId,
-      transactionHash: data.transactionHash,
-      blockNumber: data.blockNumber,
-      amount: data.amount,
+      from: event.data.from,
+      to: event.data.to,
+      tokenAddress: event.data.emittedFrom,
+      tokenId: event.data.tokenId,
+      poolAddress: event.data.pool,
+      chainId: event.chainId,
+      transactionHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      amount: Number(event.data.amount),
     });
 
-    if (data.from !== ZERO_ADDRESS) {
+    if (event.data.from !== ZERO_ADDRESS) {
       await this.tokenBalanceRepository.updateBalance(
-        data.from,
-        data.tokenAddress,
-        data.tokenId,
-        data.poolAddress,
-        data.chainId,
-        -data.amount,
-        data.blockNumber,
+        event.data.from,
+        event.data.emittedFrom,
+        event.data.tokenId,
+        event.data.pool,
+        event.chainId,
+        -Number(event.data.amount),
+        event.blockNumber,
       );
     }
 
-    if (data.to !== ZERO_ADDRESS) {
+    if (event.data.to !== ZERO_ADDRESS) {
       await this.tokenBalanceRepository.updateBalance(
-        data.to,
-        data.tokenAddress,
-        data.tokenId,
-        data.poolAddress,
-        data.chainId,
-        data.amount,
-        data.blockNumber,
+        event.data.to,
+        event.data.emittedFrom,
+        event.data.tokenId,
+        event.data.pool,
+        event.chainId,
+        Number(event.data.amount),
+        event.blockNumber,
       );
     }
   }

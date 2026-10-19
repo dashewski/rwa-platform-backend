@@ -4,7 +4,6 @@ import { buildFilesBaseUrl } from '@shared/files/src/index';
 
 const app = await withTraceAsync('gallery.init.main', async () => {
   return await createApp(
-    Number(process.env.PORT),
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     buildFilesBaseUrl(String(process.env.BASE_DOMAIN), String(process.env.FILES_URL_PATH)),
   );

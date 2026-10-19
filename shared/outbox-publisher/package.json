@@ -1,0 +1,19 @@
+{
+  "name": "@shared/outbox-publisher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 bun test"
+  },
+  "dependencies": {
+    "@shared/errors": "workspace:*",
+    "@shared/monitoring": "workspace:*",
+    "@shared/rabbitmq": "workspace:*",
+    "mongoose": "8.16.4"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.19"
+  }
+}

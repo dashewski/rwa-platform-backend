@@ -15,6 +15,8 @@ export function createFakeRabbitMQClient() {
   const acked: ConsumeMessage[] = [];
   const nacked: Array<{ message: ConsumeMessage; requeue: boolean }> = [];
 
+  let connected = true;
+
   return {
     // Handlers registered through consume(); consumers re-register on reconnect
     // in the real client, so the newest handler per queue wins here as well.
@@ -22,6 +24,20 @@ export function createFakeRabbitMQClient() {
     sent,
     acked,
     nacked,
+
+    initialize: mock(async (): Promise<void> => {}),
+
+    isConnected: mock(() => connected),
+
+    setConnected: (value: boolean) => {
+      connected = value;
+    },
+
+    isExchangeRegistered: mock((_name: string) => true),
+
+    getExchange: mock((name: string) => name),
+
+    getQueue: mock((name: string) => name),
 
     connect: mock(async (): Promise<void> => {}),
 
