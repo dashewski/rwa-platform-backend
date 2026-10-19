@@ -36,7 +36,8 @@ import {
   type FakeEventLog,
 } from './fakes/ethers.fake';
 
-const CHAIN_ID = 31337;
+// The daemon receives the chain id as a string (index.ts does String(process.env.CHAIN_ID)).
+const CHAIN_ID = '31337';
 const RPC_URL = 'http://127.0.0.1:1'; // never contacted: the provider is swapped for a fake
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
 const BLOCK_CONFIRMATIONS = 100;
@@ -259,7 +260,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
   });
 
   test('initialize: a provider chain id mismatch is wrapped into BLOCKCHAIN_ERROR', async () => {
-    provider.state.chainId = BigInt(CHAIN_ID + 1);
+    provider.state.chainId = BigInt(Number(CHAIN_ID) + 1);
 
     const error: any = await daemon.initialize().catch((thrown) => thrown);
 
@@ -268,7 +269,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
       statusCode: 502,
       code: 'BLOCKCHAIN_ERROR',
     });
-    expect(error.cause.message).toBe(`Chain ID mismatch. Expected ${CHAIN_ID}, but provider returned ${CHAIN_ID + 1}`);
+    expect(error.cause.message).toBe(`Chain ID mismatch. Expected ${CHAIN_ID}, but provider returned ${Number(CHAIN_ID) + 1}`);
     // The mismatch is detected before any state is read.
     expect(scannerState.getLastScannedBlock).toHaveBeenCalledTimes(0);
   });

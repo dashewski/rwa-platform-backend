@@ -2,16 +2,15 @@
  * Component tests for the signers-manager HTTP layer.
  *
  * The Elysia app is assembled in-process the way src/app.ts does it, minus the
- * infrastructure-bound pieces: fake Repositories and Clients plugins expose the
- * same decorators the real plugins do, while the services and controllers
- * plugins are the real ones, and repositories/signer client are in-memory
- * fakes. Requests go through app.handle() — no port is bound, no Mongo is
- * queried, no message is published. The daemons plugin is deliberately not
- * mounted: it would register a real consumer. Run with `bun test` from
- * services/signers-manager.
+ * infrastructure-bound pieces: a fake Repositories plugin exposes the same
+ * decorators the real one does, the Clients plugin carries a fake RabbitMQ
+ * client, while the services and controllers plugins are the real ones.
+ * Requests go through app.handle() — no port is bound, no Mongo is queried, no
+ * message is published. The daemons plugin is deliberately not mounted.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Elysia } from 'elysia';
+import mongoose from 'mongoose';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
@@ -25,8 +24,6 @@ import {
   createFakeSignatureTaskRepository,
   type FakeSignatureTaskRepository,
 } from './fakes/signatureTask.repository.fake';
-import { createFakeSignerClient, type FakeSignerClient } from './fakes/signer.client.fake';
-import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
 const INNER_HASH = `0x${'11'.repeat(32)}`; // bytes32 hex, the shape ethers.solidityPackedKeccak256 requires
 const EXPIRED_FUTURE = 2_000_000_000; // 2033-05-18, far after any test run
@@ -43,29 +40,29 @@ const TASK = {
   expired: EXPIRED_FUTURE,
 };
 
-/**
- * Independent derivation of the manager-side final hash:
- * keccak256(abi-packed bytes32 innerHash ++ uint256 expired), recomputed here
- * as raw keccak256 over the manually zero-padded concatenation, so the
- * assertion does not simply re-run the helper under test.
- */
 function finalHash(innerHash: string, expired: number): string {
   return ethers.keccak256(ethers.concat([innerHash, ethers.zeroPadValue(ethers.toBeHex(expired), 32)]));
 }
 
-function buildApp(
-  signatures: FakeSignatureRepository,
-  tasks: FakeSignatureTaskRepository,
-  signerClient: FakeSignerClient,
-) {
-  // Same decorator names the src plugins read (repositories.plugin.ts, clients.plugin.ts).
+function buildApp(signatures: FakeSignatureRepository, tasks: FakeSignatureTaskRepository) {
+  const outboxRows: unknown[] = [];
+
+  // Same decorator names the src plugins read.
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('signatureRepository', signatures)
-    .decorate('signatureTaskRepository', tasks);
+    .decorate('signatureTaskRepository', tasks)
+    .decorate('inboxConsumerMessageRepository', { create: mock(async () => true) })
+    .decorate('outboxPublisherMessageRepository', {
+      create: mock(async (data: unknown) => {
+        outboxRows.push(data);
+        return data;
+      }),
+    });
 
-  const clientsPlugin = new Elysia({ name: 'Clients' })
-    .decorate('rabbitMQClient', createFakeRabbitMQClient())
-    .decorate('signerClient', signerClient);
+  const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', {
+    isExchangeRegistered: mock(() => true),
+    publish: mock(async () => undefined),
+  });
 
   const servicesPlugin = createServicesPlugin(
     repositoriesPlugin as unknown as RepositoriesPlugin,
@@ -74,7 +71,11 @@ function buildApp(
 
   const app = new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
 
-  return { app, signaturesService: servicesPlugin.decorator.signaturesService as unknown as SignaturesService };
+  return {
+    app,
+    outboxRows,
+    signaturesService: servicesPlugin.decorator.signaturesService as unknown as SignaturesService,
+  };
 }
 
 type App = ReturnType<typeof buildApp>['app'];
@@ -91,18 +92,27 @@ async function post(app: App, path: string, body: unknown) {
   return { status: response.status, body: (await response.json()) as any };
 }
 
-describe('signers-manager HTTP layer (component, fake repositories and signer client)', () => {
+describe('signers-manager HTTP layer (component, fake repositories and outbox)', () => {
   let signatures: FakeSignatureRepository;
   let tasks: FakeSignatureTaskRepository;
-  let signerClient: FakeSignerClient;
   let app: App;
+  let outboxRows: unknown[];
   let signaturesService: SignaturesService;
+  let originalTransaction: unknown;
 
   beforeEach(() => {
+    // createTask writes the task and its outbox record in one transaction.
+    originalTransaction = (mongoose.connection as unknown as { transaction: unknown }).transaction;
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(fn: () => Promise<T>) =>
+      await fn();
+
     signatures = createFakeSignatureRepository();
     tasks = createFakeSignatureTaskRepository();
-    signerClient = createFakeSignerClient();
-    ({ app, signaturesService } = buildApp(signatures, tasks, signerClient));
+    ({ app, outboxRows, signaturesService } = buildApp(signatures, tasks));
+  });
+
+  afterEach(() => {
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = originalTransaction;
   });
 
   test('createSignatureTask → getSignatureTask round-trip over the derived final hash', async () => {
@@ -120,11 +130,15 @@ describe('signers-manager HTTP layer (component, fake repositories and signer cl
     expect(typeof created.body.id).toBe('string');
     expect(created.body.id).toHaveLength(24);
     expect(created.body).not.toHaveProperty('_id');
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledWith({
-      hash: finalHash(INNER_HASH, EXPIRED_FUTURE),
-      taskId: created.body.id,
-      expired: EXPIRED_FUTURE,
-    });
+
+    expect(outboxRows).toEqual([
+      {
+        exchange: 'sign.exchange',
+        routingKey: 'task',
+        payload: { hash: finalHash(INNER_HASH, EXPIRED_FUTURE), taskId: created.body.id, expired: EXPIRED_FUTURE },
+        messageId: created.body.id,
+      },
+    ]);
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });
     expect(fetched.status).toBe(200);
@@ -137,7 +151,7 @@ describe('signers-manager HTTP layer (component, fake repositories and signer cl
 
     expect(response.status).not.toBe(200);
     expect(tasks.create).toHaveBeenCalledTimes(0);
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledTimes(0);
+    expect(outboxRows).toEqual([]);
   });
 
   test('getSignatureTask: an unknown id maps to 404 NOT_FOUND', async () => {
@@ -147,10 +161,7 @@ describe('signers-manager HTTP layer (component, fake repositories and signer cl
     expect(response.body).toEqual({ error: { code: 'NOT_FOUND', message: 'SignatureTask unknown-id not found' } });
   });
 
-  test('createSignatureTask: a repository conflict maps to 409 and signers are not notified', async () => {
-    // The real model's unique index on `hash` rejects an identical repeat inside
-    // one expiry window (Mongo E11000); ErrorHandlerPlugin is what turns the
-    // raised error into an HTTP response.
+  test('createSignatureTask: a repository conflict maps to 409 and nothing is queued', async () => {
     tasks.create.mockRejectedValueOnce(
       new AppError({ message: 'Duplicate signature task', statusCode: 409, code: 'CONFLICT' }),
     );
@@ -159,12 +170,12 @@ describe('signers-manager HTTP layer (component, fake repositories and signer cl
 
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ error: { code: 'CONFLICT', message: 'Duplicate signature task' } });
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledTimes(0);
+    expect(outboxRows).toEqual([]);
   });
 
   test('getSignatureTask: a completed task exposes its signatures without ids', async () => {
     const created = await post(app, '/createSignatureTask', { ...TASK, requiredSignatures: 1 });
-    // Simulate what the taskResponses daemon does once a signer replies.
+    // Simulate what the responses inbox does once a signer replies.
     await signaturesService.addSignature({ taskId: created.body.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });

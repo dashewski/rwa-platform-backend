@@ -1,104 +1,121 @@
 /**
- * Unit tests for SignatureService.
+ * Unit tests for SignatureService (signer).
  *
- * Scope: the service layer only. The signers-manager client is replaced with an
- * in-memory fake (tests/fakes/signersManager.client.fake.ts); the wallet is real
- * but deterministic — a well-known throwaway test key, so there is no RPC, no
- * broker and no network anywhere in this file. Run with `bun test` from
- * services/signer.
+ * The service signs the manager-provided hash with its own wallet and queues
+ * the response in the outbox — one write, no direct broker call. The outbox
+ * publisher is a fake, so the assertion is about the exact message that is
+ * queued (and its messageId, which the inbox uses for dedup).
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { ethers } from 'ethers';
-import { AppError } from '@shared/errors/app-errors';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { ethers, Wallet } from 'ethers';
 import { SignatureService } from '../src/services/signature.service';
-import type { SignersManagerClient } from '../src/clients/signersManager.client';
-import { createFakeSignersManagerClient, type FakeSignersManagerClient } from './fakes/signersManager.client.fake';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import { AppError } from '@shared/errors/app-errors';
 
-// Well-known throwaway key (dev account #0) — a deterministic signer, no secrets.
 const PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-const SIGNER_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 
-// 32-byte hex hash — the only shape the manager sends (the daemon regex-gates fields).
-const HASH = `0x${'11'.repeat(32)}`;
-const TASK_ID = 'task-42';
+function createFakeOutbox() {
+  const state = {
+    calls: [] as Array<{ exchange: string; routingKey: string; payload: unknown; messageId: string }>,
+    failWith: null as unknown,
+  };
 
-// Fixed deadlines keep the tests independent of the wall clock. The expiry check
-// is `expired < now` (strict), so equality is deliberately not asserted: a
-// live-clock equality test would be racy, while both sides of the boundary are
-// covered here with wide margins.
-const FUTURE_EXPIRED = 4102444800; // 2100-01-01T00:00:00Z
-const PAST_EXPIRED = 1000000000; // 2001-09-09T01:46:40Z
+  const outbox = {
+    state,
 
-describe('SignatureService (unit, fake signers-manager client)', () => {
-  let manager: FakeSignersManagerClient;
+    publish: mock(
+      async (exchange: string, routingKey: string, payload: unknown, messageId: string): Promise<void> => {
+        if (state.failWith) throw state.failWith;
+        state.calls.push({ exchange, routingKey, payload, messageId });
+      },
+    ),
+  };
+
+  return outbox;
+}
+
+describe('SignatureService (unit, fake outbox)', () => {
+  let outbox: ReturnType<typeof createFakeOutbox>;
   let service: SignatureService;
+  let address: string;
+
+  const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
   beforeEach(() => {
-    manager = createFakeSignersManagerClient();
-    service = new SignatureService(manager as unknown as SignersManagerClient, PRIVATE_KEY);
+    outbox = createFakeOutbox();
+    service = new SignatureService(outbox as unknown as OutboxPublisherService, PRIVATE_KEY);
+    address = new Wallet(PRIVATE_KEY).address;
   });
 
-  test('getSignerAddress: returns the address derived from the configured private key', () => {
-    expect(service.getSignerAddress()).toBe(SIGNER_ADDRESS);
+  test('exposes the address of its wallet', () => {
+    expect(service.getSignerAddress()).toBe(address);
   });
 
-  test('signHash: signs the hash with the wallet and returns only { signer, signature }', async () => {
-    const result = await service.signHash(HASH, TASK_ID, FUTURE_EXPIRED);
+  test('signs the received hash and queues the response with a deterministic messageId', async () => {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    expect(result.signer).toBe(SIGNER_ADDRESS);
-    expect(result.signature).toMatch(/^0x[0-9a-f]{130}$/i); // 65-byte ECDSA signature
-    // The signature must recover to the signer for exactly the bytes that were signed.
-    expect(ethers.verifyMessage(ethers.getBytes(HASH), result.signature)).toBe(SIGNER_ADDRESS);
-    // Plain JSON result — nothing but the two strings, nothing leaking to the caller.
-    expect(Object.keys(result).sort()).toEqual(['signature', 'signer']);
-    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    const result = await service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
+
+    expect(result.signer).toBe(address);
+    expect(ethers.verifyMessage(ethers.getBytes(hash), result.signature)).toBe(address);
+
+    expect(outbox.state.calls).toEqual([
+      {
+        exchange: 'sign.exchange',
+        routingKey: 'response',
+        payload: { taskId: 'task-1', signer: address, hash, signature: result.signature },
+        messageId: `task-1:${address}`,
+      },
+    ]);
   });
 
-  test('signHash: sends the signature back through the manager client with the exact payload', async () => {
-    const result = await service.signHash(HASH, TASK_ID, FUTURE_EXPIRED);
+  test('the signature is recoverable against the same hash only', async () => {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
+    const other = ethers.keccak256(ethers.toUtf8Bytes('other'));
 
-    expect(manager.sendSignature).toHaveBeenCalledTimes(1);
-    expect(manager.sendSignature).toHaveBeenCalledWith({
-      taskId: TASK_ID,
-      signer: SIGNER_ADDRESS,
-      hash: HASH,
-      signature: result.signature,
-    });
+    const { signature } = await service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
+
+    expect(ethers.verifyMessage(ethers.getBytes(other), signature)).not.toBe(address);
   });
 
-  test('signHash: throws EXPIRED (410) when the deadline has passed and sends nothing', async () => {
-    const error = await service.signHash(HASH, TASK_ID, PAST_EXPIRED).catch((e) => e);
+  test('an expired task is rejected before any signing and nothing is queued', async () => {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    expect(error).toBeInstanceOf(AppError);
-    expect(error).toMatchObject({ message: 'Task expired', statusCode: 410, code: 'EXPIRED' });
-    expect(manager.sendSignature).toHaveBeenCalledTimes(0);
+    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toThrow(
+      'Task expired',
+    );
+
+    expect(outbox.state.calls).toEqual([]);
+    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toBeInstanceOf(
+      AppError,
+    );
   });
 
-  test('signHash: a hash that is not hex is rejected by ethers before anything is sent', async () => {
-    // The service does not validate the hash format itself — that gate lives in the
-    // daemon (src/daemons/signature.daemon.ts). A non-hex value reaches
-    // ethers.getBytes() and fails there with a plain error, not an AppError.
-    const error = await service.signHash('not-a-hex-hash', TASK_ID, FUTURE_EXPIRED).catch((e) => e);
+  test('a task that expires exactly now is still signed (boundary: expired < now)', async () => {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
+    const expired = nowSeconds();
 
-    expect(error).toBeInstanceOf(Error);
-    expect(error).not.toBeInstanceOf(AppError);
-    expect(manager.sendSignature).toHaveBeenCalledTimes(0);
+    await service.signHash({ hash, taskId: 'task-1', expired });
+
+    expect(outbox.state.calls).toHaveLength(1);
   });
 
-  test('signHash: does not enforce the 32-byte hash length (that check lives in the daemon)', async () => {
-    // '0x1234' is well-formed hex but only 2 bytes. ethers signs whatever bytes it
-    // is given, so the service signs and forwards it — the daemon's
-    // /^0x[0-9a-f]{64}$/i guard is the only length check on the signing path.
-    const result = await service.signHash('0x1234', TASK_ID, FUTURE_EXPIRED);
+  test('two tasks produce two different messageIds', async () => {
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
+    const expired = nowSeconds() + 600;
 
-    expect(result.signature).toMatch(/^0x[0-9a-f]{130}$/i);
-    expect(ethers.verifyMessage(ethers.getBytes('0x1234'), result.signature)).toBe(SIGNER_ADDRESS);
-    expect(manager.sendSignature).toHaveBeenCalledTimes(1);
-    expect(manager.sendSignature).toHaveBeenCalledWith({
-      taskId: TASK_ID,
-      signer: SIGNER_ADDRESS,
-      hash: '0x1234',
-      signature: result.signature,
-    });
+    await service.signHash({ hash, taskId: 'task-1', expired });
+    await service.signHash({ hash, taskId: 'task-2', expired });
+
+    expect(outbox.state.calls.map((call) => call.messageId)).toEqual([`task-1:${address}`, `task-2:${address}`]);
+  });
+
+  test('a failing outbox publish propagates (the delivery will be retried)', async () => {
+    outbox.state.failWith = new Error('MongoServerSelectionError: server selection timed out');
+    const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
+
+    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 })).rejects.toThrow(
+      'server selection timed out',
+    );
   });
 });

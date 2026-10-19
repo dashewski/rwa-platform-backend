@@ -23,7 +23,6 @@ export function createFakePoolService() {
     applyEvaluationResult: mock(async (_result: Record<string, unknown>) => ({})),
 
     setRiskScore: mock(async (_params: { id: string; riskScore: number }) => ({})),
-    resetEvaluation: mock(async (_params: { id: string }) => ({})),
   };
 }
 

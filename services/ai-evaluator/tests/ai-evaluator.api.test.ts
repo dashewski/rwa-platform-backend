@@ -23,15 +23,33 @@ import {
 import { createFakeEdenClients } from './fakes/eden.clients.fake';
 import { createFakeOpenRouterClient } from './fakes/openrouter.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
+import { ObjectId } from 'mongodb';
 
 const MODEL = 'test/model';
 
 /** Well-formed (hex, 24 chars) but absent id: the repository casts ids before querying. */
 const UNKNOWN_ID = '64b7f8f0f1f2f3f4f5f6f7a8';
 
-function buildApp(evaluationRepository: FakeEvaluationRepository) {
+function createFakeEvaluationJobRepository() {
+  const jobs: Array<Record<string, unknown>> = [];
+
+  return {
+    jobs,
+
+    create: mock(async (input: Record<string, unknown>) => {
+      const job = { _id: new ObjectId(), ...input };
+
+      jobs.push(job);
+
+      return job;
+    }),
+  };
+}
+
+function buildApp(evaluationRepository: FakeEvaluationRepository, jobRepository = createFakeEvaluationJobRepository()) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('evaluationRepository', evaluationRepository)
+    .decorate('evaluationJobRepository', jobRepository)
     .decorate('inboxConsumerMessageRepository', {
       runOnce: mock(async (_messageId: string, handler: () => Promise<unknown>) => handler()),
     })
@@ -80,11 +98,13 @@ async function post(app: App, path: string, body: unknown) {
 
 describe('ai-evaluator HTTP layer (component, fake repository and clients)', () => {
   let evaluationRepository: FakeEvaluationRepository;
+  let jobRepository: ReturnType<typeof createFakeEvaluationJobRepository>;
   let app: App;
 
   beforeEach(() => {
     evaluationRepository = createFakeEvaluationRepository();
-    app = buildApp(evaluationRepository);
+    jobRepository = createFakeEvaluationJobRepository();
+    app = buildApp(evaluationRepository, jobRepository);
   });
 
   /** Seeds a document through the repository fake so ids and timestamps come from the same store. */
@@ -95,7 +115,6 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       grandParentId: 'business-1',
       ownerId: 'owner-1',
       ownerType: 'business',
-      status: 'completed',
       riskScore: 42,
       reasoning: 'Low risk',
       factors: [{ name: 'Revenue', impact: 'positive', detail: 'Paying customers' }],
@@ -121,7 +140,6 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       grandParentId: 'business-1',
       ownerId: 'owner-1',
       ownerType: 'business',
-      status: 'completed',
       riskScore: 42,
       reasoning: 'Low risk',
       factors: [{ name: 'Revenue', impact: 'positive', detail: 'Paying customers' }],
@@ -136,9 +154,8 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
     expect(evaluationRepository.findById).toHaveBeenCalledWith(seeded._id.toString());
   });
 
-  test('getEvaluation: a pending evaluation maps its optional fields away', async () => {
+  test('getEvaluation: an evaluation without result fields maps its optional fields away', async () => {
     const seeded = await seedEvaluation({
-      status: 'pending',
       riskScore: undefined,
       reasoning: undefined,
       stage1Response: undefined,
@@ -152,7 +169,6 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
     const response = await post(app, '/getEvaluation', { id: seeded._id.toString() });
 
     expect(response.status).toBe(200);
-    expect(response.body.status).toBe('pending');
     expect(response.body.riskScore).toBeUndefined();
     expect(response.body.reasoning).toBeUndefined();
     expect(response.body.modelUsed).toBeUndefined();
@@ -250,5 +266,42 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
 
     expect(response.status).not.toBe(200);
     expect(evaluationRepository.findAll).toHaveBeenCalledTimes(0);
+  });
+
+  test('createPoolEvaluation: queues a durable job and returns its id', async () => {
+    const response = await post(app, '/createPoolEvaluation', {
+      poolId: 'pool-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ jobId: (jobRepository.jobs[0]._id as ObjectId).toString() });
+    expect(jobRepository.jobs[0]).toMatchObject({
+      entityType: 'pool',
+      entityId: 'pool-1',
+      params: { poolId: 'pool-1', ownerId: 'owner-1', ownerType: 'business' },
+    });
+  });
+
+  test('createBusinessEvaluation: queues a durable job and returns its id', async () => {
+    const response = await post(app, '/createBusinessEvaluation', {
+      businessId: 'business-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ jobId: (jobRepository.jobs[0]._id as ObjectId).toString() });
+    expect(jobRepository.jobs[0]).toMatchObject({ entityType: 'business', entityId: 'business-1' });
+  });
+
+  test('createPoolEvaluation: a body without ids is rejected and no job is queued', async () => {
+    const response = await post(app, '/createPoolEvaluation', { poolId: 'pool-1' });
+
+    // NOTE: Elysia's body validation surfaces as 500 "Unexpected error" here —
+    // see the review notes; the important part is that no job is queued.
+    expect(response.status).toBe(500);
+    expect(jobRepository.jobs).toHaveLength(0);
   });
 });

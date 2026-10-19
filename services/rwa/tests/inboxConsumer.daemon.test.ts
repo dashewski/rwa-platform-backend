@@ -85,12 +85,22 @@ function createFakeRabbitClient() {
     acked: [] as ConsumeMessage[],
     nacked: [] as Array<{ message: ConsumeMessage; requeue: boolean }>,
     cancelled: [] as string[],
+    parked: [] as Array<{ queue: string; payload: unknown }>,
+    deferAfterAttempts: Number.POSITIVE_INFINITY,
+    parkAfterCycles: Number.POSITIVE_INFINITY,
     connected: true,
     handlers: new Map<string, (message: ConsumeMessage | null) => Promise<void>>(),
   };
 
   const client = {
     state,
+
+    park: mock(async (queue: string, payload: unknown, _options?: { messageId?: string }) => {
+      state.parked.push({ queue, payload });
+    }),
+
+    getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
+    getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
     consume: mock(
       async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
@@ -125,8 +135,7 @@ function createFakeRabbitClient() {
  */
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'halted',
-    statuses: new Map<string, 'running' | 'halted'>(),
+    outcome: 'acked' as 'acked' | 'deferred',
     handlerError: null as unknown,
     deliveries: 0,
   };
@@ -143,14 +152,7 @@ function createFakeConsumerService() {
         state.handlerError = error;
       }
 
-      state.statuses.set(queueName, state.outcome === 'halted' ? 'halted' : 'running');
       return state.outcome;
-    }),
-
-    status: mock((queueName: string) => state.statuses.get(queueName) ?? 'running'),
-
-    markProbed: mock((queueName: string) => {
-      state.statuses.set(queueName, 'running');
     }),
   };
 
@@ -205,8 +207,8 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     }
 
     // The routing table covers the whole chain surface: 13 events, 13 calls.
-    expect(Object.keys(businessService)).toHaveLength(5);
-    expect(Object.keys(poolService)).toHaveLength(14);
+    expect(Object.keys(businessService)).toHaveLength(4);
+    expect(Object.keys(poolService)).toHaveLength(13);
   });
 
   test('a blockchain event is delivered as-is: envelope plus data, nothing flattened', async () => {
@@ -276,8 +278,8 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('a service failure halts the queue: nack with requeue and unsubscribe', async () => {
-    consumerService.state.outcome = 'halted';
+  test('a service failure is handed to the retry queue: nack(requeue=false), the subscription stays', async () => {
+    consumerService.state.outcome = 'deferred';
     poolService.syncPoolPausedState.mockImplementationOnce(async () => {
       throw new Error('mongo is down');
     });
@@ -290,9 +292,8 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     );
 
     expect(rabbit.state.nacked).toHaveLength(1);
-    expect(rabbit.state.nacked[0].requeue).toBe(true);
-    expect(rabbit.state.cancelled).toEqual([`ctag-${BLOCKCHAIN_QUEUE}`]);
-    // The other queue keeps its subscription.
+    expect(rabbit.state.nacked[0].requeue).toBe(false);
+    expect(rabbit.state.cancelled).toEqual([]);
     expect(rabbit.state.handlers.get(RESULTS_QUEUE)).toBeDefined();
   });
 
@@ -306,8 +307,8 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     expect(poolService.syncPoolReserves).toHaveBeenCalledTimes(0);
   });
 
-  test('a malformed evaluation result is reported and halts the queue', async () => {
-    consumerService.state.outcome = 'halted';
+  test('a malformed evaluation result is reported and handed to the retry queue', async () => {
+    consumerService.state.outcome = 'deferred';
     await daemon.initialize();
 
     await deliver(RESULTS_QUEUE, 'poolResult', makeMessage('poolResult', null, { raw: 'not-json', exchange: 'evaluation' }));

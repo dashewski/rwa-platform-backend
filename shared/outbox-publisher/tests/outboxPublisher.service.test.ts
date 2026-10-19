@@ -1,151 +1,188 @@
 /**
- * Unit tests for OutboxPublisherService.
+ * Unit tests for OutboxPublisherService — the publish entry point and one pass
+ * over an exchange (`processOutbox`).
  *
- * Scope: the outbox contract — a message is only marked `sent` after the
- * broker accepted it, and every failure returns the row to `pending` so the
- * next pass retries it. Repositories and the RabbitMQ client are in-memory
- * fakes; no database, no broker, no network.
+ * The repository and the RabbitMQ client are fakes: the assertions are about
+ * the order of claim/publish/markSent, the stop-on-error contract of a sync
+ * exchange, the sliding window of an async one, and the metric names.
  */
 import './setup';
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { Types } from 'mongoose';
 import { OutboxPublisherService } from '../src/services/outboxPublisher.service';
-import { metrics } from '@shared/monitoring/src/metrics';
+import { AppError } from '@shared/errors/app-errors';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
+import { metrics } from '@shared/monitoring/src/metrics';
 import type { OutboxPublisherMessageRepository } from '../src/repositories/outboxPublisherMessage.repository';
 import { asRabbitClient, createFakeRabbitClient, EXCHANGE, type FakeRabbitClient } from './fakes';
 
-const MESSAGE_ID = '31337:0xabc:3';
-
 type Row = {
-  _id: Types.ObjectId;
+  _id: string;
   exchange: string;
   routingKey: string;
   payload: unknown;
   messageId: string;
-  status: 'pending' | 'sending' | 'sent';
+  attempts: number;
+  status: 'pending' | 'sending' | 'sent' | 'failed';
 };
 
-function row(overrides: Partial<Row> = {}): Row {
-  return {
-    _id: new Types.ObjectId(),
-    exchange: EXCHANGE,
-    routingKey: 'Governance_VoteCast',
-    payload: { proposalId: '7' },
-    messageId: MESSAGE_ID,
-    status: 'pending',
-    ...overrides,
-  };
-}
-
 /**
- * In-memory outbox table: `pending` rows are handed out by claimNext (they
- * flip to `sending`, exactly like the atomic findOneAndUpdate does), released
- * rows go back to pending, sent rows are recorded.
+ * In-memory outbox: rows are claimed in insertion order, publishes and status
+ * transitions are recorded as one ordered event log so the pass can be checked
+ * step by step.
  */
-function createFakeOutboxRepository() {
+function createFakeRepository(rows: Row[] = []) {
   const state = {
-    rows: [] as Row[],
-    releaseSendingCalls: [] as string[],
-    releaseCalls: [] as Array<Types.ObjectId | string>,
-    markSentCalls: [] as Array<Types.ObjectId | string>,
-    claimError: null as unknown,
-    markSentError: null as unknown,
-    releaseError: null as unknown,
-    releaseSendingError: null as unknown,
-    created: [] as unknown[],
-    createResult: 'created' as 'created' | 'duplicate',
-    createError: null as unknown,
+    events: [] as string[],
+    rows,
+    releaseCalls: [] as string[],
+    markSentCalls: [] as string[],
+    markAttemptFailedCalls: [] as Array<{ id: string; maxAttempts: number }>,
+    failClaim: null as Error | null,
+    failMarkSent: null as Error | null,
+    failMarkAttemptFailed: null as Error | null,
+    markAttemptFailedResult: null as Row | null,
+    claimDelayMs: 0,
   };
 
   const repository = {
     state,
 
-    create: mock(async (data: Record<string, unknown>) => {
-      state.created.push(data);
-      if (state.createError) throw state.createError;
-      return state.createResult === 'duplicate' ? null : { _id: new Types.ObjectId(), ...data };
-    }),
+    create: mock(
+      async (data: { exchange: string; routingKey: string; payload: unknown; messageId: string }) => {
+        state.events.push(`create:${data.messageId}`);
 
-    releaseSending: mock(async (exchange: string) => {
-      state.releaseSendingCalls.push(exchange);
-      if (state.releaseSendingError) throw state.releaseSendingError;
-      for (const item of state.rows) {
-        if (item.exchange === exchange && item.status === 'sending') item.status = 'pending';
+        const created: Row = {
+          _id: `row-${state.rows.length + 1}`,
+          exchange: data.exchange,
+          routingKey: data.routingKey,
+          payload: data.payload,
+          messageId: data.messageId,
+          attempts: 0,
+          status: 'pending',
+        };
+        state.rows.push(created);
+
+        return { ...created };
+      },
+    ),
+
+    releaseSending: mock(async (exchange: string): Promise<void> => {
+      state.releaseCalls.push(exchange);
+      state.events.push(`release:${exchange}`);
+      for (const row of state.rows) {
+        if (row.exchange === exchange && row.status === 'sending') row.status = 'pending';
       }
     }),
 
-    claimNext: mock(async (exchange: string) => {
-      if (state.claimError) throw state.claimError;
-      const next = state.rows.find((item) => item.exchange === exchange && item.status === 'pending');
-      if (!next) return null;
-      next.status = 'sending';
-      return next;
+    claimNext: mock(async (exchange: string): Promise<Row | null> => {
+      if (state.claimDelayMs) await new Promise((resolve) => setTimeout(resolve, state.claimDelayMs));
+      if (state.failClaim) throw state.failClaim;
+
+      const row = state.rows.find((entry) => entry.exchange === exchange && entry.status === 'pending');
+      if (!row) return null;
+
+      row.status = 'sending';
+      state.events.push(`claim:${row.messageId}`);
+
+      return { ...row };
     }),
 
-    markSent: mock(async (id: Types.ObjectId | string) => {
+    markSent: mock(async (id: string): Promise<void> => {
+      if (state.failMarkSent) {
+        state.events.push(`markSent-failed:${id}`);
+        throw state.failMarkSent;
+      }
+
+      const row = state.rows.find((entry) => entry._id === id);
+      if (row) row.status = 'sent';
+
       state.markSentCalls.push(id);
-      if (state.markSentError) throw state.markSentError;
-      const found = state.rows.find((item) => item._id === id);
-      if (found) found.status = 'sent';
+      state.events.push(`markSent:${id}`);
     }),
 
-    release: mock(async (id: Types.ObjectId | string) => {
-      state.releaseCalls.push(id);
-      if (state.releaseError) throw state.releaseError;
-      const found = state.rows.find((item) => item._id === id);
-      if (found) found.status = 'pending';
+    markAttemptFailed: mock(async (id: string, maxAttempts: number): Promise<Row | null> => {
+      state.markAttemptFailedCalls.push({ id, maxAttempts });
+      if (state.failMarkAttemptFailed) throw state.failMarkAttemptFailed;
+
+      if (state.markAttemptFailedResult) return state.markAttemptFailedResult;
+
+      const row = state.rows.find((entry) => entry._id === id);
+      if (!row) return null;
+
+      row.attempts += 1;
+      row.status = row.attempts >= maxAttempts ? 'failed' : 'sending';
+      state.events.push(`attemptFailed:${id}:${row.attempts}:${row.status}`);
+
+      return { ...row };
     }),
   };
 
   return repository;
 }
 
-type FakeOutboxRepository = ReturnType<typeof createFakeOutboxRepository>;
+type FakeRepository = ReturnType<typeof createFakeRepository>;
 
-// --- spies on metrics / logger -------------------------------------------------
+function row(overrides: Partial<Row> = {}): Row {
+  return {
+    _id: `row-${Math.random().toString(16).slice(2)}`,
+    exchange: EXCHANGE,
+    routingKey: 'Governance_VoteCast',
+    payload: { a: 1 },
+    messageId: `msg-${Math.random().toString(16).slice(2)}`,
+    attempts: 0,
+    status: 'pending',
+    ...overrides,
+  };
+}
 
 let counters: Array<{ name: string; labels?: Record<string, string> }> = [];
-let errors: unknown[][] = [];
-let originalCounter: typeof metrics.counter;
-let originalError: typeof logger.error;
+let logLines: string[] = [];
+const original = {
+  info: logger.info,
+  error: logger.error,
+  counter: metrics.counter,
+};
 
 function captureTelemetry(): void {
   counters = [];
-  errors = [];
-  originalCounter = metrics.counter;
-  originalError = logger.error;
+  logLines = [];
 
+  logger.info = ((...args: unknown[]) => {
+    logLines.push(args.map(String).join(' '));
+  }) as typeof logger.info;
+  logger.error = ((...args: unknown[]) => {
+    logLines.push(args.map(String).join(' '));
+  }) as typeof logger.error;
   metrics.counter = ((name: string, labels?: Record<string, string>) => {
     counters.push({ name, labels });
   }) as typeof metrics.counter;
-
-  logger.error = ((...args: unknown[]) => {
-    errors.push(args);
-  }) as typeof logger.error;
 }
 
 function restoreTelemetry(): void {
-  metrics.counter = originalCounter;
-  logger.error = originalError;
+  logger.info = original.info;
+  logger.error = original.error;
+  metrics.counter = original.counter;
 }
 
-function counterNames(): string[] {
-  return counters.map((entry) => entry.name);
-}
+const names = (): string[] => counters.map((entry) => entry.name);
+const countOf = (name: string): number => names().filter((entry) => entry === name).length;
 
 describe('OutboxPublisherService (unit, fake repository + fake rabbit client)', () => {
-  let repository: FakeOutboxRepository;
   let rabbit: FakeRabbitClient;
+  let repository: FakeRepository;
   let service: OutboxPublisherService;
 
-  beforeEach(() => {
-    repository = createFakeOutboxRepository();
+  function build(rows: Row[] = []): void {
     rabbit = createFakeRabbitClient();
+    repository = createFakeRepository(rows);
     service = new OutboxPublisherService(
       asRabbitClient(rabbit),
       repository as unknown as OutboxPublisherMessageRepository,
     );
+  }
+
+  beforeEach(() => {
+    build();
     captureTelemetry();
   });
 
@@ -153,218 +190,198 @@ describe('OutboxPublisherService (unit, fake repository + fake rabbit client)', 
     restoreTelemetry();
   });
 
-  describe('publish (queue the event)', () => {
-    test('rejects an exchange that is not registered in the client before writing anything', async () => {
-      await expect(
-        service.publish('nope.events', 'Governance_VoteCast', { a: 1 }, MESSAGE_ID),
-      ).rejects.toMatchObject({
-        statusCode: 500,
-        code: 'INTERNAL_ERROR',
-        message: 'Exchange "nope.events" is not registered in the RabbitMQ client',
-      });
+  describe('publish', () => {
+    test('queues a message in the outbox and counts it', async () => {
+      await service.publish(EXCHANGE, 'Governance_VoteCast', { a: 1 }, 'msg-1');
 
-      expect(repository.state.created).toHaveLength(0);
-      expect(counterNames()).toEqual([]);
-    });
-
-    test('stores the row and counts it once', async () => {
-      await service.publish(EXCHANGE, 'Governance_VoteCast', { proposalId: '7' }, MESSAGE_ID);
-
-      expect(repository.state.created).toEqual([
-        { exchange: EXCHANGE, routingKey: 'Governance_VoteCast', payload: { proposalId: '7' }, messageId: MESSAGE_ID },
+      expect(repository.state.rows).toEqual([
+        {
+          _id: 'row-1',
+          exchange: EXCHANGE,
+          routingKey: 'Governance_VoteCast',
+          payload: { a: 1 },
+          messageId: 'msg-1',
+          attempts: 0,
+          status: 'pending',
+        },
       ]);
       expect(counters).toEqual([{ name: 'outbox_publisher_queued_total', labels: { exchange: EXCHANGE } }]);
     });
 
-    test('a duplicate (same event re-scanned) is accepted silently and not counted', async () => {
-      repository.state.createResult = 'duplicate';
-
-      await service.publish(EXCHANGE, 'Governance_VoteCast', { proposalId: '7' }, MESSAGE_ID);
-
-      expect(repository.state.created).toHaveLength(1);
-      expect(counterNames()).toEqual([]);
+    test('an exchange that is not part of the topology is rejected before any write', async () => {
+      await expect(service.publish('blockchain.eventz', 'x', {}, 'msg-1')).rejects.toThrow(AppError);
+      await expect(service.publish('blockchain.eventz', 'x', {}, 'msg-1')).rejects.toThrow(
+        'Exchange "blockchain.eventz" is not registered in the RabbitMQ client',
+      );
     });
 
-    test('a storage failure propagates to the caller and is never counted as queued', async () => {
-      repository.state.createError = new Error('connection 127.0.0.1:27017 closed');
+    test('a duplicate messageId is not counted twice', async () => {
+      const failingRepository = {
+        create: mock(async () => null),
+      };
+      const svc = new OutboxPublisherService(
+        asRabbitClient(rabbit),
+        failingRepository as unknown as OutboxPublisherMessageRepository,
+      );
 
-      await expect(
-        service.publish(EXCHANGE, 'Governance_VoteCast', { proposalId: '7' }, MESSAGE_ID),
-      ).rejects.toThrow('connection 127.0.0.1:27017 closed');
+      await svc.publish(EXCHANGE, 'Governance_VoteCast', {}, 'msg-1');
 
-      expect(counterNames()).toEqual([]);
+      expect(counters).toEqual([]);
+    });
+
+    test('the message is stored with its exchange, routing key, payload and messageId', async () => {
+      const created: unknown[] = [];
+      const recordingRepository = {
+        create: mock(async (data: unknown) => {
+          created.push(data);
+          return { _id: 'row' };
+        }),
+      };
+      const svc = new OutboxPublisherService(
+        asRabbitClient(rabbit),
+        recordingRepository as unknown as OutboxPublisherMessageRepository,
+      );
+
+      await svc.publish(EXCHANGE, 'Pool_RwaMinted', { poolId: '7' }, 'msg-9');
+
+      expect(created).toEqual([
+        { exchange: EXCHANGE, routingKey: 'Pool_RwaMinted', payload: { poolId: '7' }, messageId: 'msg-9' },
+      ]);
     });
   });
 
-  describe('processOutbox (one pass over a single exchange)', () => {
-    test('starts by releasing stuck rows and stops as soon as the exchange is empty', async () => {
-      await service.processOutbox(EXCHANGE);
+  describe('processOutbox, isSync = true (strict order)', () => {
+    test('releases the stuck rows first, then publishes pending rows one by one in order', async () => {
+      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' })]);
 
-      expect(repository.state.releaseSendingCalls).toEqual([EXCHANGE]);
-      expect(rabbit.published).toHaveLength(0);
-      expect(repository.state.markSentCalls).toHaveLength(0);
-    });
+      await service.processOutbox(EXCHANGE, true, 1, 5);
 
-    test('drains the whole exchange in insertion order, publishing and marking each row', async () => {
-      const first = row({ routingKey: 'Governance_ProposalCreated', messageId: '31337:0x01:0' });
-      const second = row({ routingKey: 'Governance_VoteCast', messageId: '31337:0x02:1' });
-      const third = row({ routingKey: 'Treasury_Withdrawal', messageId: '31337:0x03:2' });
-      repository.state.rows.push(first, second, third);
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(rabbit.published.map((message) => message.routingKey)).toEqual([
-        'Governance_ProposalCreated',
-        'Governance_VoteCast',
-        'Treasury_Withdrawal',
+      expect(repository.state.releaseCalls).toEqual([EXCHANGE]);
+      expect(repository.state.events).toEqual([
+        `release:${EXCHANGE}`,
+        'claim:m1',
+        'markSent:a',
+        'claim:m2',
+        'markSent:b',
       ]);
-      expect(rabbit.published.map((message) => message.options?.messageId)).toEqual([
-        '31337:0x01:0',
-        '31337:0x02:1',
-        '31337:0x03:2',
+      expect(rabbit.published.map((entry) => entry.options?.messageId)).toEqual(['m1', 'm2']);
+      expect(countOf('outbox_publisher_published_total')).toBe(2);
+      expect(repository.state.rows.every((entry) => entry.status === 'sent')).toBe(true);
+    });
+
+    test('a publish failure stops the pass at the first row and leaves the rest untouched', async () => {
+      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' })]);
+      rabbit.state.failNextPublish = new Error('channel closed');
+
+      await service.processOutbox(EXCHANGE, true, 1, 5);
+
+      expect(repository.state.events).toEqual([
+        `release:${EXCHANGE}`,
+        'claim:m1',
+        'attemptFailed:a:1:sending',
       ]);
-      expect(rabbit.published[0].exchange).toBe(EXCHANGE);
-      expect(rabbit.published[0].payload).toEqual({ proposalId: '7' });
-      expect(repository.state.markSentCalls).toEqual([first._id, second._id, third._id]);
-      expect(repository.state.rows.every((item) => item.status === 'sent')).toBe(true);
-      expect(counterNames().filter((name) => name === 'outbox_publisher_published_total')).toHaveLength(3);
+      expect(repository.state.rows.find((entry) => entry._id === 'b')?.status).toBe('pending');
+      expect(countOf('outbox_publisher_published_total')).toBe(0);
     });
 
-    test('leaves other exchanges untouched', async () => {
-      const mine = row();
-      const foreign = row({ exchange: 'other.events', messageId: 'other:1' });
-      repository.state.rows.push(mine, foreign);
+    test('one attempt per pass: the failed row is not retried inside the same pass', async () => {
+      build([row({ _id: 'a', messageId: 'm1', attempts: 2 })]);
+      rabbit.state.failNextPublish = new Error('channel closed');
 
-      await service.processOutbox(EXCHANGE);
+      await service.processOutbox(EXCHANGE, true, 1, 5);
 
-      expect(rabbit.published).toHaveLength(1);
-      expect(foreign.status).toBe('pending');
-      expect(mine.status).toBe('sent');
+      expect(rabbit.publish).toHaveBeenCalledTimes(1);
+      expect(repository.state.markAttemptFailedCalls).toEqual([{ id: 'a', maxAttempts: 5 }]);
     });
 
-    test('a row already marked sending by a previous crash is retried in the same pass', async () => {
-      const stuck = row({ status: 'sending' });
-      repository.state.rows.push(stuck);
+    test('reaching maxAttempts marks the row failed and does not retry it anymore', async () => {
+      build([row({ _id: 'a', messageId: 'm1', attempts: 4 })]);
+      rabbit.state.failNextPublish = new Error('channel closed');
 
-      await service.processOutbox(EXCHANGE);
+      await service.processOutbox(EXCHANGE, true, 1, 5);
 
-      expect(repository.state.releaseSendingCalls).toEqual([EXCHANGE]);
-      expect(rabbit.published).toHaveLength(1);
-      expect(stuck.status).toBe('sent');
-    });
+      expect(repository.state.rows[0].status).toBe('failed');
+      expect(countOf('outbox_publisher_failed_total')).toBe(1);
+      expect(logLines.some((line) => line.includes('failed after 5 attempts'))).toBe(true);
 
-    test('no route for the routing key: the row goes back to pending and the pass stops', async () => {
-      const first = row({ routingKey: 'Unknown_Event', messageId: '31337:0x01:0' });
-      const second = row({ routingKey: 'Governance_VoteCast', messageId: '31337:0x02:1' });
-      repository.state.rows.push(first, second);
-      rabbit.state.failPublishAlways = Object.assign(
-        new Error('message "31337:0x01:0" was returned (312 NO_ROUTE)'),
-        { name: 'AppError' },
-      );
+      rabbit.state.failNextPublish = null;
+      await service.processOutbox(EXCHANGE, true, 1, 5);
 
-      await service.processOutbox(EXCHANGE);
-
-      // The failing row is released, the broker never saw a markSent, and the
-      // pass stops: the next pending row is not published ahead of it.
-      expect(repository.state.releaseCalls).toEqual([first._id]);
-      expect(repository.state.markSentCalls).toEqual([]);
-      expect(counterNames().filter((name) => name === 'outbox_publisher_published_total')).toEqual([]);
-      expect(first.status).toBe('pending');
-      expect(second.status).toBe('pending');
-      expect(errors).toHaveLength(1);
-      expect(String(errors[0][0])).toContain('outbox send failed; the message stays queued');
-    });
-
-    test('a broker nack (confirm rejected) releases the row the same way', async () => {
-      const failing = row();
-      repository.state.rows.push(failing);
-      rabbit.state.failPublishAlways = new Error('Channel closed by broker: basic.nack received');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(repository.state.releaseCalls).toEqual([failing._id]);
-      expect(failing.status).toBe('pending');
-    });
-
-    test('a closed channel / connection loss releases the row instead of losing it', async () => {
-      const failing = row();
-      repository.state.rows.push(failing);
-      rabbit.state.failPublishAlways = new Error('RabbitMQ channel is not connected');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(repository.state.releaseCalls).toEqual([failing._id]);
-      expect(failing.status).toBe('pending');
-      expect(repository.state.markSentCalls).toEqual([]);
-    });
-
-    test('a publish timeout (no confirm within the deadline) releases the row', async () => {
-      const failing = row();
-      repository.state.rows.push(failing);
-      rabbit.state.failPublishAlways = new Error('publish was not confirmed within 1000 ms');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(repository.state.releaseCalls).toEqual([failing._id]);
-      expect(failing.status).toBe('pending');
-    });
-
-    test('a successful publish whose markSent fails is released and not counted as published', async () => {
-      const failing = row();
-      repository.state.rows.push(failing);
-      repository.state.markSentError = new Error('primary stepped down');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(rabbit.published).toHaveLength(1);
-      expect(repository.state.releaseCalls).toEqual([failing._id]);
-      expect(counterNames().filter((name) => name === 'outbox_publisher_published_total')).toEqual([]);
-      expect(failing.status).toBe('pending');
-      expect(errors).toHaveLength(1);
-    });
-
-    test('when the release itself fails the pass still stops quietly (the row stays sending)', async () => {
-      const failing = row();
-      repository.state.rows.push(failing);
-      rabbit.state.failPublishAlways = new Error('RabbitMQ channel is not connected');
-      repository.state.releaseError = new Error('MongoServerSelectionError: server selection timed out');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(repository.state.releaseCalls).toEqual([failing._id]);
-      expect(failing.status).toBe('sending');
-      expect(errors).toHaveLength(1);
-    });
-
-    test('a claim failure ends the pass after the release sweep without publishing anything', async () => {
-      repository.state.rows.push(row());
-      repository.state.claimError = new Error('MongoNetworkError: connection lost');
-
-      await service.processOutbox(EXCHANGE);
-
-      expect(repository.state.releaseSendingCalls).toEqual([EXCHANGE]);
-      expect(rabbit.published).toHaveLength(0);
-      expect(errors).toHaveLength(1);
-      expect(String(errors[0][0])).toContain('outbox claim failed');
-      expect(repository.state.rows[0].status).toBe('pending');
-    });
-
-    test('a releaseSending failure ends the pass (nothing is claimed)', async () => {
-      repository.state.rows.push(row());
-      repository.state.releaseSendingError = new Error('not primary');
-
-      await expect(service.processOutbox(EXCHANGE)).rejects.toThrow('not primary');
       expect(rabbit.published).toHaveLength(0);
     });
 
-    test('two consecutive passes send nothing twice once the exchange is drained', async () => {
-      repository.state.rows.push(row());
+    test('a markSent failure after a successful publish is retried later (at-least-once)', async () => {
+      build([row({ _id: 'a', messageId: 'm1' })]);
+      repository.state.failMarkSent = new Error('write concern failed');
 
-      await service.processOutbox(EXCHANGE);
-      await service.processOutbox(EXCHANGE);
+      await service.processOutbox(EXCHANGE, true, 1, 5);
 
       expect(rabbit.published).toHaveLength(1);
+      expect(repository.state.markAttemptFailedCalls).toEqual([{ id: 'a', maxAttempts: 5 }]);
+      expect(countOf('outbox_publisher_published_total')).toBe(0);
+    });
+
+    test('a claim failure ends the pass quietly', async () => {
+      build([row({ _id: 'a', messageId: 'm1' })]);
+      repository.state.failClaim = new Error('MongoServerSelectionError');
+
+      await service.processOutbox(EXCHANGE, true, 1, 5);
+
+      expect(rabbit.published).toHaveLength(0);
+      expect(logLines.some((line) => line.includes('outbox claim failed'))).toBe(true);
+    });
+
+    test('an empty outbox is a no-op after the release step', async () => {
+      await service.processOutbox(EXCHANGE, true, 1, 5);
+
+      expect(repository.state.events).toEqual([`release:${EXCHANGE}`]);
+      expect(counters).toEqual([]);
+    });
+  });
+
+  describe('processOutbox, isSync = false (sliding window)', () => {
+    test('publishes several rows concurrently up to the configured window', async () => {
+      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' }), row({ _id: 'c', messageId: 'm3' })]);
+      let inFlight = 0;
+      let maxInFlight = 0;
+
+      rabbit.publish.mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+      });
+
+      await service.processOutbox(EXCHANGE, false, 2, 5);
+
+      expect(maxInFlight).toBe(2);
+      expect(repository.state.markSentCalls).toHaveLength(3);
+      expect(countOf('outbox_publisher_published_total')).toBe(3);
+    });
+
+    test('an error does not stop the pass: the remaining rows are still processed', async () => {
+      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' })]);
+      rabbit.state.failNextPublish = new Error('channel closed');
+
+      await service.processOutbox(EXCHANGE, false, 1, 5);
+
       expect(repository.state.markSentCalls).toHaveLength(1);
+      expect(repository.state.markAttemptFailedCalls).toHaveLength(1);
+      expect(repository.state.rows.filter((entry) => entry.status === 'sent')).toHaveLength(1);
+    });
+
+    test('the pass waits for the whole window before it returns', async () => {
+      build([row({ _id: 'a', messageId: 'm1' }), row({ _id: 'b', messageId: 'm2' })]);
+      let finished = 0;
+
+      rabbit.publish.mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        finished += 1;
+      });
+
+      await service.processOutbox(EXCHANGE, false, 5, 5);
+
+      expect(finished).toBe(2);
     });
   });
 });

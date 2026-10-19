@@ -61,14 +61,6 @@ export class RiskEvaluationService {
     args: (a) => ({ poolId: a[0].poolId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
   async evaluatePool(params: { poolId: string; ownerId: string; ownerType: string }) {
-    if (!params?.poolId || !params?.ownerId || !params?.ownerType) {
-      throw new AppError({
-        message: 'Invalid evaluatePool request format',
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
-
     setSpanAttributes({ entityId: params.poolId, entityType: 'pool' });
 
     const pool = await this.fetchPool({ poolId: params.poolId });
@@ -85,32 +77,25 @@ export class RiskEvaluationService {
       pool.poolAddress ? this.portfolioModule({ poolAddress: pool.poolAddress }) : null,
     ]);
 
-    let evaluationId = '';
-
-    try {
-      await mongoose.connection.transaction(async () => {
-        const evaluation = await this.evaluationRepository.create({
-          entityType: 'pool',
-          parentId: params.poolId,
-          grandParentId: pool.businessId,
-          ownerId: params.ownerId,
-          ownerType: params.ownerType,
-          ...this.buildEvaluationResult(result),
-        });
-
-        evaluationId = evaluation._id.toString();
-
-        await this.outboxPublisher.publish(
-          this.evaluationExchange,
-          EVALUATION_RESULT_ROUTING_KEY.pool,
-          { evaluationId, entityType: 'pool', entityId: params.poolId, status: 'completed', riskScore: result.riskScore },
-          `${evaluationId}:completed`,
-        );
+    await mongoose.connection.transaction(async () => {
+      const evaluation = await this.evaluationRepository.create({
+        entityType: 'pool',
+        parentId: params.poolId,
+        grandParentId: pool.businessId,
+        ownerId: params.ownerId,
+        ownerType: params.ownerType,
+        ...this.buildEvaluationResult(result),
       });
-    } catch (error) {
-      await this.publishFailure(evaluationId, 'pool', params.poolId);
-      throw error;
-    }
+
+      const evaluationId = evaluation._id.toString();
+
+      await this.outboxPublisher.publish(
+        this.evaluationExchange,
+        EVALUATION_RESULT_ROUTING_KEY.pool,
+        { evaluationId, entityType: 'pool', entityId: params.poolId, riskScore: result.riskScore },
+        evaluationId,
+      );
+    });
   }
 
   @TraceDecorator()
@@ -119,14 +104,6 @@ export class RiskEvaluationService {
     args: (a) => ({ businessId: a[0].businessId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
   async evaluateBusiness(params: { businessId: string; ownerId: string; ownerType: string }) {
-    if (!params?.businessId || !params?.ownerId || !params?.ownerType) {
-      throw new AppError({
-        message: 'Invalid evaluateBusiness request format',
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
-
     setSpanAttributes({ entityId: params.businessId, entityType: 'business' });
 
     const business = await this.fetchBusiness({ businessId: params.businessId });
@@ -140,32 +117,25 @@ export class RiskEvaluationService {
       this.questionsModule({ parentId: params.businessId }),
     ]);
 
-    let evaluationId = '';
-
-    try {
-      await mongoose.connection.transaction(async () => {
-        const evaluation = await this.evaluationRepository.create({
-          entityType: 'business',
-          parentId: params.businessId,
-          grandParentId: params.businessId,
-          ownerId: params.ownerId,
-          ownerType: params.ownerType,
-          ...this.buildEvaluationResult(result),
-        });
-
-        evaluationId = evaluation._id.toString();
-
-        await this.outboxPublisher.publish(
-          this.evaluationExchange,
-          EVALUATION_RESULT_ROUTING_KEY.business,
-          { evaluationId, entityType: 'business', entityId: params.businessId, status: 'completed', riskScore: result.riskScore },
-          `${evaluationId}:completed`,
-        );
+    await mongoose.connection.transaction(async () => {
+      const evaluation = await this.evaluationRepository.create({
+        entityType: 'business',
+        parentId: params.businessId,
+        grandParentId: params.businessId,
+        ownerId: params.ownerId,
+        ownerType: params.ownerType,
+        ...this.buildEvaluationResult(result),
       });
-    } catch (error) {
-      await this.publishFailure(evaluationId, 'business', params.businessId);
-      throw error;
-    }
+
+      const evaluationId = evaluation._id.toString();
+
+      await this.outboxPublisher.publish(
+        this.evaluationExchange,
+        EVALUATION_RESULT_ROUTING_KEY.business,
+        { evaluationId, entityType: 'business', entityId: params.businessId, riskScore: result.riskScore },
+        evaluationId,
+      );
+    });
   }
 
   async createPoolEvaluation(params: { poolId: string; ownerId: string; ownerType: string }) {
@@ -224,19 +194,6 @@ export class RiskEvaluationService {
         logger.error(`Evaluation job "${job._id}": attempts exhausted (${failed.attempts}); it is left alone`);
       }
     }
-  }
-
-  private async publishFailure(evaluationId: string, entityType: 'pool' | 'business', entityId: string) {
-    await this.outboxPublisher
-      .publish(
-        this.evaluationExchange,
-        EVALUATION_RESULT_ROUTING_KEY[entityType],
-        { evaluationId, entityType, entityId, status: 'failed' },
-        `${evaluationId}:failed`,
-      )
-      .catch(() => {});
-
-    await this.evaluationRepository.updateById(evaluationId, { status: 'failed' }).catch(() => {});
   }
 
   @TraceDecorator()
@@ -431,7 +388,6 @@ riskScore must be an integer between 1 and 100. 0 is not allowed.`,
 
   private buildEvaluationResult(result: Awaited<ReturnType<typeof this.evaluate>>) {
     return {
-      status: 'completed' as const,
       riskScore: result.riskScore,
       reasoning: result.reasoning,
       factors: result.factors,
@@ -674,7 +630,6 @@ Tags: ${business.tags?.join(', ') ?? 'N/A'}`,
       grandParentId: evaluation.grandParentId,
       ownerId: evaluation.ownerId,
       ownerType: evaluation.ownerType,
-      status: evaluation.status,
       riskScore: evaluation.riskScore ?? undefined,
       reasoning: evaluation.reasoning ?? undefined,
       factors: evaluation.factors ?? [],

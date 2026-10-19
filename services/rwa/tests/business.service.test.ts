@@ -12,7 +12,7 @@ import { BusinessService } from '../src/services/business.service';
 import type { BusinessRepository } from '../src/repositories/business.repository';
 import type { SignersManagerClient } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { AiEvaluatorClient } from '../src/clients/aiEvaluator.client';
 import { createFakeBusinessRepository, type FakeBusinessRepository } from './fakes/business.repository.fake';
 import { createFakeOpenRouterClient, type FakeOpenRouterClient } from './fakes/open-router.client.fake';
 import {
@@ -20,7 +20,7 @@ import {
   DEFAULT_SIGNATURE_TASK_ID,
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
-import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
+import { createFakeAiEvaluatorClient, type FakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
 
 const OWNER_ID = 'owner-1';
 const OWNER_TYPE = 'business';
@@ -65,20 +65,19 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
-  let outbox: FakeOutboxPublisher;
+  let aiEvaluator: FakeAiEvaluatorClient;
   let service: BusinessService;
 
   beforeEach(() => {
     businesses = createFakeBusinessRepository();
     openRouter = createFakeOpenRouterClient(BUSINESS_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
-    outbox = createFakeOutboxPublisher();
+    aiEvaluator = createFakeAiEvaluatorClient();
     service = new BusinessService(
       businesses as unknown as BusinessRepository,
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
-      outbox as unknown as OutboxPublisherService,
-      'evaluation',
+      aiEvaluator as unknown as AiEvaluatorClient,
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,
@@ -266,12 +265,11 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: expect.any(Number),
     });
-    expect(outbox.publish).toHaveBeenCalledWith(
-      'evaluation',
-      'evaluateBusiness',
-      { businessId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      expect.stringMatching(/^business:/),
-    );
+    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledWith({
+      businessId: created.id,
+      ownerId: OWNER_ID,
+      ownerType: OWNER_TYPE,
+    });
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -288,7 +286,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       message: 'Evaluation already in progress',
     });
 
-    expect(outbox.publish).toHaveBeenCalledTimes(0);
+    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledTimes(0);
   });
 
   test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
@@ -301,27 +299,21 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
 
     const result = await service.requestEvaluation({ id: created.id });
 
-    expect(outbox.publish).toHaveBeenCalledTimes(1);
+    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledTimes(1);
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
-  test('requestEvaluation: clears the flags and rethrows when the request publish fails', async () => {
+  test('requestEvaluation: an unavailable evaluator is reported as 502 and the flags stay untouched', async () => {
     const created = await service.createBusiness(BUSINESS);
-    const brokerError = new AppError({
-      message: 'RabbitMQ channel not initialized',
-      statusCode: 503,
-      code: 'SERVICE_UNAVAILABLE',
-    });
-    outbox.publish.mockImplementationOnce(async () => {
-      throw brokerError;
+    aiEvaluator.state.nextStatus = 502;
+    aiEvaluator.state.nextError = 'ai-evaluator is unavailable';
+
+    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'AI_ERROR',
     });
 
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toBe(brokerError);
-
-    expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
+    expect(businesses.updateBusiness).toHaveBeenCalledTimes(0); // the flag is written only after a successful request
     const stored = businesses.store.get(created.id)!;
     expect(stored.riskScoreEvaluationProcess).toBe(false);
     expect(stored.riskScoreEvaluationStartedAt).toBe(0);
@@ -360,22 +352,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     expect(businesses.updateBusiness).toHaveBeenCalledTimes(0);
   });
 
-  test('resetEvaluation: clears the evaluation flags', async () => {
-    const created = await service.createBusiness(BUSINESS);
-    await businesses.updateBusiness(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: 42,
-    });
-
-    const result = await service.resetEvaluation({ id: created.id });
-
-    expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
-    expect(result.riskScoreEvaluationProcess).toBe(false);
-  });
-
   test('applyEvaluationResult: a completed result writes the risk score and clears the flags', async () => {
     const created = await service.createBusiness(BUSINESS);
     await businesses.updateBusiness(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
@@ -384,7 +360,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       evaluationId: 'eval-1',
       entityType: 'business',
       entityId: created.id,
-      status: 'completed',
       riskScore: 77,
     });
 
@@ -394,58 +369,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationStartedAt: 0,
     });
     expect(result.riskScore).toBe(77);
-  });
-
-  test('applyEvaluationResult: a failed result only clears the flags', async () => {
-    const created = await service.createBusiness(BUSINESS);
-    await businesses.updateBusiness(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
-
-    await service.applyEvaluationResult({
-      evaluationId: 'eval-1',
-      entityType: 'business',
-      entityId: created.id,
-      status: 'failed',
-    });
-
-    expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
-  });
-
-  test('applyEvaluationResult: a result for another entity type is rejected', async () => {
-    const created = await service.createBusiness(BUSINESS);
-
-    await expect(
-      service.applyEvaluationResult({
-        evaluationId: 'eval-1',
-        entityType: 'pool' as 'business',
-        entityId: created.id,
-        status: 'completed',
-        riskScore: 77,
-      }),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
-
-    expect(businesses.updateBusiness).toHaveBeenCalledTimes(0);
-  });
-
-  test('applyEvaluationResult: a completed result without a riskScore is rejected', async () => {
-    const created = await service.createBusiness(BUSINESS);
-
-    await expect(
-      service.applyEvaluationResult({
-        evaluationId: 'eval-1',
-        entityType: 'business',
-        entityId: created.id,
-        status: 'completed',
-      }),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
-  });
-
-  test('applyEvaluationResult: an incomplete result is rejected', async () => {
-    await expect(
-      service.applyEvaluationResult({ entityType: 'business' } as never),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
   });
 
   test('requestApprovalSignatures: creates a signers-manager task and stores it on the business', async () => {

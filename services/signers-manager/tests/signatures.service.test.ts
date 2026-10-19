@@ -1,24 +1,25 @@
 /**
  * Unit tests for SignaturesService.
  *
- * Scope: the service layer only. Repositories and the signer client are
+ * Scope: the service layer only. Repositories and the outbox publisher are
  * replaced with in-memory fakes (tests/fakes/*.fake.ts), so these tests need
  * no database, no broker and no network. Run with `bun test` from
  * services/signers-manager.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
 import { SignaturesService } from '../src/services/signatures.service';
 import type { SignatureRepository } from '../src/repositories/signature.repository';
 import type { SignatureTaskRepository } from '../src/repositories/signatureTask.repository';
-import type { SignerClient } from '../src/clients/signer.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { createFakeSignatureRepository, type FakeSignatureRepository } from './fakes/signature.repository.fake';
 import {
   createFakeSignatureTaskRepository,
   type FakeSignatureTaskRepository,
 } from './fakes/signatureTask.repository.fake';
-import { createFakeSignerClient, type FakeSignerClient } from './fakes/signer.client.fake';
+import { createFakeOutbox, type FakeOutbox } from './fakes/outbox.fake';
 
 const INNER_HASH = `0x${'11'.repeat(32)}`; // bytes32 hex, the shape ethers.solidityPackedKeccak256 requires
 const EXPIRED_FUTURE = 2_000_000_000; // 2033-05-18, far after any test run
@@ -48,21 +49,34 @@ function finalHash(innerHash: string, expired: number): string {
   return ethers.keccak256(ethers.concat([innerHash, ethers.zeroPadValue(ethers.toBeHex(expired), 32)]));
 }
 
-describe('SignaturesService (unit, fake repositories and signer client)', () => {
+describe('SignaturesService (unit, fake repositories and outbox)', () => {
   let signatures: FakeSignatureRepository;
   let tasks: FakeSignatureTaskRepository;
-  let signerClient: FakeSignerClient;
+  let outbox: FakeOutbox;
   let service: SignaturesService;
 
+  let originalTransaction: unknown;
+
   beforeEach(() => {
+    // createTask runs its insert and the outbox write in one mongoose
+    // transaction; there is no database here, so the callback is run inline.
+    originalTransaction = (mongoose.connection as unknown as { transaction: unknown }).transaction;
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => await fn();
+
     signatures = createFakeSignatureRepository();
     tasks = createFakeSignatureTaskRepository();
-    signerClient = createFakeSignerClient();
+    outbox = createFakeOutbox();
     service = new SignaturesService(
       signatures as unknown as SignatureRepository,
       tasks as unknown as SignatureTaskRepository,
-      signerClient as unknown as SignerClient,
+      outbox as unknown as OutboxPublisherService,
     );
+  });
+
+  afterEach(() => {
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = originalTransaction;
   });
 
   test('createTask: persists the derived final hash, notifies signers and returns a mapped task', async () => {
@@ -72,12 +86,13 @@ describe('SignaturesService (unit, fake repositories and signer client)', () => 
 
     expect(tasks.create).toHaveBeenCalledTimes(1);
     expect(tasks.create).toHaveBeenCalledWith({ ...TASK, hash: expectedHash });
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledTimes(1);
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledWith({
-      hash: expectedHash,
-      taskId: task.id,
-      expired: EXPIRED_FUTURE,
-    });
+    expect(outbox.publish).toHaveBeenCalledTimes(1);
+    expect(outbox.publish).toHaveBeenCalledWith(
+      'sign.exchange',
+      'task',
+      { hash: expectedHash, taskId: task.id, expired: EXPIRED_FUTURE },
+      task.id,
+    );
 
     expect(task).toMatchObject({ ...TASK, hash: expectedHash, completed: false });
     expect(task.hash).toBe(expectedHash);
@@ -116,7 +131,7 @@ describe('SignaturesService (unit, fake repositories and signer client)', () => 
 
     await expect(service.createTask(TASK)).rejects.toMatchObject({ statusCode: 409, code: 'CONFLICT' });
     expect(tasks.create).toHaveBeenCalledTimes(1);
-    expect(signerClient.sendSignatureTask).toHaveBeenCalledTimes(0);
+    expect(outbox.publish).toHaveBeenCalledTimes(0);
   });
 
   test('addSignature: propagates NOT_FOUND for an unknown taskId and stores nothing', async () => {

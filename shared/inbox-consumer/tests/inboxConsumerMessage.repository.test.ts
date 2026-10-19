@@ -1,53 +1,23 @@
 /**
- * Unit tests for InboxConsumerMessageRepository (the dedup inbox).
+ * Unit tests for InboxConsumerMessageRepository (the dedup marker table).
  *
- * The repository owns the exactly-once guarantee of the consumer: the marker
- * row and the handler must run in one transaction, and a duplicate key means
- * "already processed". Mongoose is used unconnected here — the transaction
- * wrapper is replaced with a driver-level stub on the connection instance and
- * the model is injected, so no database is needed.
+ * The repository is deliberately thin: it only inserts the marker and reports
+ * whether the insert was new. The transaction and the process-wide ALS switch
+ * live in InboxConsumerService, so nothing driver-level is needed here.
  */
 import './setup';
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import mongoose from 'mongoose';
 import type { Model } from 'mongoose';
 import { InboxConsumerMessageRepository } from '../src/repositories/inboxConsumerMessage.repository';
 
 const MESSAGE_ID = '31337:0xabc:3';
 
-type TransactionFn = () => Promise<void>;
-
-/** Driver-level stub: runs the callback directly (no replica set needed). */
-function stubTransaction() {
-  const calls: Array<{ startedAt: number; finishedAt: number }> = [];
-  const state = {
-    calls,
-    error: null as unknown,
-    beforeRun: null as null | (() => Promise<void> | void),
-  };
-
-  (mongoose.connection as unknown as { transaction: (fn: TransactionFn) => Promise<void> }).transaction = async (
-    fn: TransactionFn,
-  ) => {
-    const record = { startedAt: Date.now(), finishedAt: 0 };
-    calls.push(record);
-
-    if (state.beforeRun) await state.beforeRun();
-    if (state.error) throw state.error;
-
-    await fn();
-    record.finishedAt = Date.now();
-  };
-
-  return state;
-}
-
 /** Marker table with the unique messageId behaviour of the real index. */
 function createFakeModel() {
   const state = {
     markers: new Set<string>(),
     createCalls: [] as Array<{ messageId: string }>,
-    existsCalls: [] as string[],
     createError: null as unknown,
   };
 
@@ -60,18 +30,13 @@ function createFakeModel() {
 
       if (state.markers.has(data.messageId)) {
         throw Object.assign(
-          new Error(`E11000 duplicate key error collection: inboxconsumermessages index: messageId_1`),
+          new Error('E11000 duplicate key error collection: inboxconsumermessages index: messageId_1'),
           { code: 11000 },
         );
       }
 
       state.markers.add(data.messageId);
       return { toObject: () => ({ ...data }) };
-    }),
-
-    exists: mock(async (filter: { messageId: string }) => {
-      state.existsCalls.push(filter.messageId);
-      return state.markers.has(filter.messageId) ? { _id: 'marker' } : null;
     }),
   };
 
@@ -84,140 +49,87 @@ function repoWith(model: FakeModel): InboxConsumerMessageRepository {
   return new InboxConsumerMessageRepository(model as unknown as Model<unknown>);
 }
 
-describe('InboxConsumerMessageRepository (unit, stubbed transaction + fake model)', () => {
-  let transaction: ReturnType<typeof stubTransaction>;
+describe('InboxConsumerMessageRepository (unit, fake model)', () => {
   let model: FakeModel;
   let repository: InboxConsumerMessageRepository;
-  let setSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    transaction = stubTransaction();
     model = createFakeModel();
-    setSpy = spyOn(mongoose, 'set').mockImplementation((() => mongoose) as typeof mongoose.set);
     repository = repoWith(model);
   });
 
-  afterEach(() => {
-    setSpy.mockRestore();
-  });
+  test('the first insert reports "created"', async () => {
+    const created = await repository.create(MESSAGE_ID);
 
-  test('runs the marker insert and the handler inside one transaction and reports "applied"', async () => {
-    const events: string[] = [];
-    transaction.calls.length = 0;
-    const originalCreate = model.create.getMockImplementation()!;
-    model.create.mockImplementation(async (data: { messageId: string }) => {
-      events.push('create');
-      return originalCreate(data);
-    });
-
-    const applied = await repository.runOnce(MESSAGE_ID, async () => {
-      events.push('handler');
-    });
-
-    expect(applied).toBe(true);
-    expect(events).toEqual(['create', 'handler']);
-    expect(transaction.calls).toHaveLength(1);
+    expect(created).toBe(true);
     expect(model.state.createCalls).toEqual([{ messageId: MESSAGE_ID }]);
+    expect(model.state.markers.has(MESSAGE_ID)).toBe(true);
   });
 
-  test('the marker is inserted before the handler (a crash between them rolls both back)', async () => {
-    const order: string[] = [];
-    const originalCreate = model.create.getMockImplementation()!;
-    model.create.mockImplementation(async (data: { messageId: string }) => {
-      order.push('marker');
-      return originalCreate(data);
+  test('a duplicate key error (code 11000) reports "already processed" instead of throwing', async () => {
+    await repository.create(MESSAGE_ID);
+
+    const created = await repository.create(MESSAGE_ID);
+
+    expect(created).toBe(false);
+    expect(model.state.createCalls).toHaveLength(2);
+  });
+
+  test('a duplicate key error is not recognised when the code sits deeper in a cause chain', async () => {
+    // The repository checks `error.code` directly: a wrapped error is a real
+    // failure, not a duplicate — the service treats it as a failed delivery.
+    const wrapped = new Error('write failed', {
+      cause: Object.assign(new Error('E11000 duplicate key'), { code: 11000 }),
     });
+    model.state.createError = wrapped;
 
-    await repository.runOnce(MESSAGE_ID, async () => {
-      order.push('handler');
-    });
-
-    expect(order).toEqual(['marker', 'handler']);
+    await expect(repository.create(MESSAGE_ID)).rejects.toThrow('write failed');
   });
 
-  test('a handler failure propagates (the transaction is aborted, nothing is marked as processed)', async () => {
-    await expect(
-      repository.runOnce(MESSAGE_ID, async () => {
-        throw new Error('db write failed inside the handler');
-      }),
-    ).rejects.toThrow('db write failed inside the handler');
-
-    // The duplicate check is not consulted: this is not a duplicate, it is a failure.
-    expect(model.state.existsCalls).toEqual([]);
-    expect(transaction.calls).toHaveLength(1);
-  });
-
-  test('a second delivery of the same messageId is a no-op and reports "duplicate"', async () => {
-    await repository.runOnce(MESSAGE_ID, async () => undefined);
-
-    let handlerRuns = 0;
-    const applied = await repository.runOnce(MESSAGE_ID, async () => {
-      handlerRuns += 1;
-    });
-
-    expect(applied).toBe(false);
-    expect(handlerRuns).toBe(0);
-    expect(model.state.existsCalls).toEqual([MESSAGE_ID]);
-    expect(transaction.calls).toHaveLength(2);
-  });
-
-  test('the duplicate is detected when the key error sits deeper in the cause chain', async () => {
-    model.state.markers.add(MESSAGE_ID);
-    const duplicate = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
-    model.state.createError = new Error('write failed', { cause: duplicate });
-
-    const applied = await repository.runOnce(MESSAGE_ID, async () => undefined);
-
-    expect(applied).toBe(false);
-    expect(model.state.existsCalls).toEqual([MESSAGE_ID]);
-  });
-
-  test('an error whose chain carries no duplicate code is rethrown even when the marker exists', async () => {
-    model.state.markers.add(MESSAGE_ID);
-    model.state.createError = new Error('WriteConflict during write');
-
-    await expect(repository.runOnce(MESSAGE_ID, async () => undefined)).rejects.toThrow('WriteConflict during write');
-    expect(model.state.existsCalls).toEqual([]);
-  });
-
-  test('a duplicate code with no marker row present is rethrown (a rollback race must be visible)', async () => {
-    model.state.createError = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
-    // markers stays empty: the row this error talks about is gone.
-
-    await expect(repository.runOnce(MESSAGE_ID, async () => undefined)).rejects.toThrow('E11000 duplicate key');
-    expect(model.state.existsCalls).toEqual([MESSAGE_ID]);
-  });
-
-  test('a non-duplicate storage error is rethrown without touching the marker table', async () => {
+  test('a storage error that is not a duplicate key is rethrown', async () => {
     model.state.createError = new Error('MongoServerSelectionError: server selection timed out');
 
-    await expect(repository.runOnce(MESSAGE_ID, async () => undefined)).rejects.toThrow('server selection timed out');
-    expect(model.state.existsCalls).toEqual([]);
+    await expect(repository.create(MESSAGE_ID)).rejects.toThrow('server selection timed out');
   });
 
-  test('a transaction-level failure (replica set unavailable) is rethrown as-is', async () => {
-    transaction.error = new Error('Transaction numbers are only allowed on a replica set member or mongos');
+  test('the repository does not open transactions itself', async () => {
+    const transaction = mock(async (fn: () => Promise<void>) => {
+      await fn();
+    });
+    const original = (mongoose.connection as unknown as { transaction: unknown }).transaction;
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = transaction;
 
-    await expect(repository.runOnce(MESSAGE_ID, async () => undefined)).rejects.toThrow(
+    try {
+      await repository.create(MESSAGE_ID);
+    } finally {
+      (mongoose.connection as unknown as { transaction: unknown }).transaction = original;
+    }
+
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  test('the repository does not switch mongoose to transactionAsyncLocalStorage (the service does)', () => {
+    const sets: unknown[][] = [];
+    const originalSet = mongoose.set;
+    (mongoose as unknown as { set: unknown }).set = (...args: unknown[]) => {
+      sets.push(args);
+      return mongoose;
+    };
+
+    try {
+      repoWith(createFakeModel());
+    } finally {
+      (mongoose as unknown as { set: unknown }).set = originalSet;
+    }
+
+    expect(sets).toEqual([]);
+  });
+
+  test('a transaction-level failure from the caller is not swallowed by the marker insert', async () => {
+    model.state.createError = new Error('Transaction numbers are only allowed on a replica set member or mongos');
+
+    await expect(repository.create(MESSAGE_ID)).rejects.toThrow(
       'Transaction numbers are only allowed on a replica set member or mongos',
     );
-    expect(model.state.createCalls).toEqual([]);
-  });
-
-  test('every delivery gets its own transaction', async () => {
-    await repository.runOnce('id-1', async () => undefined);
-    await repository.runOnce('id-2', async () => undefined);
-    await repository.runOnce('id-1', async () => undefined);
-
-    expect(transaction.calls).toHaveLength(3);
-    expect(model.state.createCalls.map((call) => call.messageId)).toEqual(['id-1', 'id-2', 'id-1']);
-  });
-
-  test('constructing the repository switches mongoose to transactionAsyncLocalStorage (process-wide)', () => {
-    setSpy.mockClear();
-
-    repoWith(createFakeModel());
-
-    expect(setSpy).toHaveBeenCalledWith('transactionAsyncLocalStorage', true);
   });
 });

@@ -19,10 +19,8 @@ import { createFakePoolRepository, type FakePoolRepository } from './fakes/pool.
 import { createFakeOpenRouterClient } from './fakes/open-router.client.fake';
 import { createFakeSignersManagerClient, DEFAULT_SIGNATURE_TASK_ID } from './fakes/signers-manager.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-import {
-  createFakeInboxConsumerMessageRepository,
-  createFakeOutboxPublisherMessageRepository,
-} from './fakes/inbox-outbox.repositories.fake';
+import { createFakeInboxConsumerMessageRepository } from './fakes/inbox-outbox.repositories.fake';
+import { createFakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
 import { createFakePoolEventsClient } from './fakes/pool-events.client.fake';
 import { createFakeRedisEventsClient } from './fakes/redis-events.client.fake';
 
@@ -60,6 +58,7 @@ function createFakeClients() {
   const redisEventsClient = createFakeRedisEventsClient();
 
   return {
+    aiEvaluatorClient: createFakeAiEvaluatorClient(),
     signersManagerClient: createFakeSignersManagerClient(),
     redisEventsClient,
     poolEventsClient: createFakePoolEventsClient(redisEventsClient),
@@ -74,15 +73,14 @@ function buildApp(
   businesses: FakeBusinessRepository,
   pools: FakePoolRepository,
   clients: FakeClients,
-  outboxRepository: ReturnType<typeof createFakeOutboxPublisherMessageRepository>,
 ) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('businessRepository', businesses)
     .decorate('poolRepository', pools)
-    .decorate('inboxConsumerMessageRepository', createFakeInboxConsumerMessageRepository())
-    .decorate('outboxPublisherMessageRepository', outboxRepository);
+    .decorate('inboxConsumerMessageRepository', createFakeInboxConsumerMessageRepository());
 
   const clientsPlugin = new Elysia({ name: 'Clients' })
+    .decorate('aiEvaluatorClient', clients.aiEvaluatorClient)
     .decorate('signersManagerClient', clients.signersManagerClient)
     .decorate('redisEventsClient', clients.redisEventsClient)
     .decorate('poolEventsClient', clients.poolEventsClient)
@@ -119,15 +117,13 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let pools: FakePoolRepository;
   let clients: FakeClients;
-  let outboxRepository: ReturnType<typeof createFakeOutboxPublisherMessageRepository>;
   let app: App;
 
   beforeEach(() => {
     businesses = createFakeBusinessRepository();
     pools = createFakePoolRepository();
     clients = createFakeClients();
-    outboxRepository = createFakeOutboxPublisherMessageRepository();
-    app = buildApp(businesses, pools, clients, outboxRepository);
+    app = buildApp(businesses, pools, clients);
   });
 
   test('createBusiness -> getBusiness -> getBusinesses round-trip', async () => {
@@ -174,21 +170,18 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
     expect(fetched.body.name).toBe('Renamed');
   });
 
-  test('requestBusinessEvaluation: flags the evaluation and publishes the request', async () => {
+  test('requestBusinessEvaluation: asks the evaluator and flags the evaluation after the reply', async () => {
     const created = await post(app, '/createBusiness', BUSINESS);
 
     const response = await post(app, '/requestBusinessEvaluation', { id: created.body.id });
 
     expect(response.status).toBe(200);
     expect(response.body.riskScoreEvaluationProcess).toBe(true);
-    expect(outboxRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        exchange: 'evaluation',
-        routingKey: 'evaluateBusiness',
-        messageId: expect.stringMatching(new RegExp(`^business:${created.body.id}:`)),
-        payload: { businessId: created.body.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      }),
-    );
+    expect(clients.aiEvaluatorClient.createBusinessEvaluation.post).toHaveBeenCalledWith({
+      businessId: created.body.id,
+      ownerId: OWNER_ID,
+      ownerType: OWNER_TYPE,
+    });
   });
 
   test('requestBusinessApprovalSignatures: returns the task id, a second call is rejected', async () => {

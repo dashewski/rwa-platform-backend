@@ -308,8 +308,8 @@ Example response:
   /**
    * Applies an evaluation result delivered back by the ai-evaluator service.
    *
-   * A completed evaluation writes the risk score; a failed one only clears the
-   * "evaluation in progress" flag so the user can start it again.
+   * Only a completed evaluation reaches this method: the evaluator retries its
+   * job and parks it instead of reporting a failure.
    */
   @TraceDecorator()
   @MetricsDecorator()
@@ -317,59 +317,15 @@ Example response:
     args: (a) => ({
       evaluationId: a[0].evaluationId,
       entityId: a[0].entityId,
-      status: a[0].status,
     }),
   })
   async applyEvaluationResult(result: {
     evaluationId: string;
     entityType: 'pool';
     entityId: string;
-    status: 'completed' | 'failed';
-    riskScore?: number;
+    riskScore: number;
   }) {
-    if (!result?.evaluationId || !result?.entityId || !result?.status) {
-      throw new AppError({
-        message: 'Invalid evaluation result format',
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
-
-    if (result.entityType !== 'pool') {
-      throw new AppError({
-        message: `Evaluation result for "${result.entityType}" arrived on the pool stream`,
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
-
-    if (result.status === 'failed') {
-      return this.resetEvaluation({ id: result.entityId });
-    }
-
-    if (result.riskScore === undefined) {
-      throw new AppError({
-        message: 'Completed evaluation result without a riskScore',
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
-
     return this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
-  }
-
-  @TraceDecorator()
-  @MetricsDecorator()
-  @LogDecorator({
-    args: (a) => ({ id: a[0].id }),
-  })
-  async resetEvaluation({ id }: { id: string }) {
-    setSpanAttributes({ entityId: id, entityType: 'pool' });
-    const updated = await this.poolRepository.updatePool(id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
-    return this.mapPool(updated);
   }
 
   private generatePoolMessageHash(
@@ -919,13 +875,6 @@ Example response:
       ownerWallet: event.data.owner,
     });
     const pool = await this.poolRepository.findById(event.data.entityId);
-    if (!pool) {
-      throw new AppError({
-        message: `Pool ${event.data.entityId} not found`,
-        statusCode: 404,
-        code: 'NOT_FOUND',
-      });
-    }
 
     const updateData: any = {
       poolAddress: event.data.emittedFrom,
@@ -1061,13 +1010,6 @@ Example response:
   }>) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
-    if (!pool) {
-      throw new AppError({
-        message: `Pool with address ${event.data.emittedFrom} not found`,
-        statusCode: 404,
-        code: 'NOT_FOUND',
-      });
-    }
 
     const incomingTranches = [...pool.incomingTranches];
     if (event.data.trancheIndex >= incomingTranches.length) {

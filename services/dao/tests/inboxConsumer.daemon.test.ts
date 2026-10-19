@@ -62,12 +62,22 @@ function createFakeRabbitClient() {
     acked: [] as ConsumeMessage[],
     nacked: [] as Array<{ message: ConsumeMessage; requeue: boolean }>,
     cancelled: [] as string[],
+    parked: [] as Array<{ queue: string; payload: unknown }>,
+    deferAfterAttempts: Number.POSITIVE_INFINITY,
+    parkAfterCycles: Number.POSITIVE_INFINITY,
     connected: true,
     handler: null as null | ((message: ConsumeMessage | null) => Promise<void>),
   };
 
   const client = {
     state,
+
+    park: mock(async (queue: string, payload: unknown, _options?: { messageId?: string }) => {
+      state.parked.push({ queue, payload });
+    }),
+
+    getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
+    getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
     consume: mock(async (queue: string, handler: (message: ConsumeMessage | null) => Promise<void>, options: unknown) => {
       state.consumed.push({ queue, options });
@@ -100,8 +110,7 @@ function createFakeRabbitClient() {
  */
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'halted',
-    statuses: new Map<string, 'running' | 'halted'>(),
+    outcome: 'acked' as 'acked' | 'deferred',
     handlerError: null as unknown,
     deliveries: 0,
   };
@@ -117,15 +126,7 @@ function createFakeConsumerService() {
       } catch (error) {
         state.handlerError = error;
       }
-
-      state.statuses.set(queueName, state.outcome === 'halted' ? 'halted' : 'running');
       return state.outcome;
-    }),
-
-    status: mock((queueName: string) => state.statuses.get(queueName) ?? 'running'),
-
-    markProbed: mock((queueName: string) => {
-      state.statuses.set(queueName, 'running');
     }),
   };
 
@@ -201,9 +202,9 @@ describe('dao InboxConsumerDaemon (unit, fakes for client / consumer service / D
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('a service failure is not swallowed: the delivery is halted and the message requeued', async () => {
+  test('a service failure is not swallowed: the delivery is deferred to the retry queue', async () => {
     await daemon.initialize();
-    consumerService.state.outcome = 'halted';
+    consumerService.state.outcome = 'deferred';
     daoService.processTokensStaked.mockRejectedValueOnce(new Error('db is down'));
 
     await deliver('DaoStaking_TokensStaked', makeMessage('DaoStaking_TokensStaked', makeEvent('DaoStaking_TokensStaked')));
@@ -211,14 +212,15 @@ describe('dao InboxConsumerDaemon (unit, fakes for client / consumer service / D
     expect(consumerService.state.handlerError).toBeInstanceOf(Error);
     expect((consumerService.state.handlerError as Error).message).toBe('db is down');
     expect(rabbit.state.nacked).toHaveLength(1);
-    expect(rabbit.state.nacked[0].requeue).toBe(true);
+    expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
-    expect(rabbit.state.cancelled).toEqual(['ctag-1']);
+    // The subscription is not cancelled: the retry queue decides what happens next.
+    expect(rabbit.state.cancelled).toEqual([]);
   });
 
   test('a malformed payload fails the delivery instead of silently dropping the event', async () => {
     await daemon.initialize();
-    consumerService.state.outcome = 'halted';
+    consumerService.state.outcome = 'deferred';
 
     await deliver('Governance_VoteCast', makeMessage('Governance_VoteCast', {}, { raw: '{"proposalId":' }));
 

@@ -12,7 +12,7 @@ import type { PoolRepository } from '../src/repositories/pool.repository';
 import type { PoolEventsClient } from '../src/clients/poolEvents.client';
 import type { SignersManagerClient } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { AiEvaluatorClient } from '../src/clients/aiEvaluator.client';
 import { createFakePoolRepository, type CreatePoolInput, type FakePoolRepository } from './fakes/pool.repository.fake';
 import { createFakeOpenRouterClient, type FakeOpenRouterClient } from './fakes/open-router.client.fake';
 import {
@@ -21,7 +21,7 @@ import {
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
 import { createFakePoolEventsClient, type FakePoolEventsClient } from './fakes/pool-events.client.fake';
-import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
+import { createFakeAiEvaluatorClient, type FakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
 import type { FakePoolService } from './fakes/pool.service.fake';
 
 const OWNER_ID = 'owner-1';
@@ -215,7 +215,7 @@ describe('PoolService (unit, fake repositories and clients)', () => {
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
   let poolEvents: FakePoolEventsClient;
-  let outbox: FakeOutboxPublisher;
+  let aiEvaluator: FakeAiEvaluatorClient;
   let service: PoolService;
 
   beforeEach(() => {
@@ -223,14 +223,13 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     openRouter = createFakeOpenRouterClient(POOL_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
     poolEvents = createFakePoolEventsClient();
-    outbox = createFakeOutboxPublisher();
+    aiEvaluator = createFakeAiEvaluatorClient();
     service = new PoolService(
       pools as unknown as PoolRepository,
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
       poolEvents as unknown as PoolEventsClient,
-      outbox as unknown as OutboxPublisherService,
-      'evaluation',
+      aiEvaluator as unknown as AiEvaluatorClient,
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,
@@ -468,12 +467,11 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: expect.any(Number),
     });
-    expect(outbox.publish).toHaveBeenCalledWith(
-      'evaluation',
-      'evaluatePool',
-      { poolId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      expect.stringMatching(/^pool:/),
-    );
+    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledWith({
+      poolId: created.id,
+      ownerId: OWNER_ID,
+      ownerType: OWNER_TYPE,
+    });
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -490,7 +488,7 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       message: 'Evaluation already in progress',
     });
 
-    expect(outbox.publish).toHaveBeenCalledTimes(0);
+    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledTimes(0);
   });
 
   test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
@@ -503,27 +501,21 @@ describe('PoolService (unit, fake repositories and clients)', () => {
 
     const result = await service.requestEvaluation({ id: created.id });
 
-    expect(outbox.publish).toHaveBeenCalledTimes(1);
+    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledTimes(1);
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
-  test('requestEvaluation: clears the flags and rethrows when the request publish fails', async () => {
+  test('requestEvaluation: an unavailable evaluator is reported as 502 and the flags stay untouched', async () => {
     const created = await service.createPool(POOL);
-    const brokerError = new AppError({
-      message: 'RabbitMQ channel not initialized',
-      statusCode: 503,
-      code: 'SERVICE_UNAVAILABLE',
-    });
-    outbox.publish.mockImplementationOnce(async () => {
-      throw brokerError;
+    aiEvaluator.state.nextStatus = 502;
+    aiEvaluator.state.nextError = 'ai-evaluator is unavailable';
+
+    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'AI_ERROR',
     });
 
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toBe(brokerError);
-
-    expect(pools.updatePool).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
+    expect(pools.updatePool).toHaveBeenCalledTimes(0); // the flag is written only after a successful request
     const stored = pools.store.get(created.id)!;
     expect(stored.riskScoreEvaluationProcess).toBe(false);
     expect(stored.riskScoreEvaluationStartedAt).toBe(0);
@@ -559,19 +551,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(pools.updatePool).toHaveBeenCalledTimes(0);
   });
 
-  test('resetEvaluation: clears the evaluation flags', async () => {
-    const created = await service.createPool(POOL);
-    await pools.updatePool(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
-
-    const result = await service.resetEvaluation({ id: created.id });
-
-    expect(pools.updatePool).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
-    expect(result.riskScoreEvaluationProcess).toBe(false);
-  });
-
   test('applyEvaluationResult: a completed result writes the risk score and clears the flags', async () => {
     const created = await service.createPool(POOL);
     await pools.updatePool(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
@@ -580,7 +559,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       evaluationId: 'eval-1',
       entityType: 'pool',
       entityId: created.id,
-      status: 'completed',
       riskScore: 77,
     });
 
@@ -590,58 +568,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationStartedAt: 0,
     });
     expect(result.riskScore).toBe(77);
-  });
-
-  test('applyEvaluationResult: a failed result only clears the flags', async () => {
-    const created = await service.createPool(POOL);
-    await pools.updatePool(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 42 });
-
-    await service.applyEvaluationResult({
-      evaluationId: 'eval-1',
-      entityType: 'pool',
-      entityId: created.id,
-      status: 'failed',
-    });
-
-    expect(pools.updatePool).toHaveBeenLastCalledWith(created.id, {
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
-    });
-  });
-
-  test('applyEvaluationResult: a result for another entity type is rejected', async () => {
-    const created = await service.createPool(POOL);
-
-    await expect(
-      service.applyEvaluationResult({
-        evaluationId: 'eval-1',
-        entityType: 'business' as 'pool',
-        entityId: created.id,
-        status: 'completed',
-        riskScore: 77,
-      }),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
-
-    expect(pools.updatePool).toHaveBeenCalledTimes(0);
-  });
-
-  test('applyEvaluationResult: a completed result without a riskScore is rejected', async () => {
-    const created = await service.createPool(POOL);
-
-    await expect(
-      service.applyEvaluationResult({
-        evaluationId: 'eval-1',
-        entityType: 'pool',
-        entityId: created.id,
-        status: 'completed',
-      }),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
-  });
-
-  test('applyEvaluationResult: an incomplete result is rejected', async () => {
-    await expect(
-      service.applyEvaluationResult({ entityType: 'pool' } as never),
-    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
   });
 
   test('requestApprovalSignatures: creates a signers-manager task and stores it on the pool', async () => {

@@ -64,7 +64,7 @@ export class BlockchainScannerService {
   @LogDecorator()
   async getEvents(
     filters: {
-      chainId?: number;
+      chainId?: string;
       blockNumber?: number;
       transactionHash?: string;
       address?: string;
@@ -72,15 +72,6 @@ export class BlockchainScannerService {
     },
     pagination?: { limit?: number; offset?: number },
   ) {
-    setSpanAttributes({
-      entityType: 'blockchain_event',
-      ...(filters.chainId !== undefined && { chainId: filters.chainId }),
-      ...(filters.blockNumber !== undefined && { blockNumber: filters.blockNumber }),
-      ...(filters.transactionHash !== undefined && {
-        transactionHash: filters.transactionHash,
-      }),
-      ...(filters.name !== undefined && { eventName: filters.name }),
-    });
     const events = await this.eventRepository.findAll(
       filters,
       { blockNumber: -1, logIndex: -1 },

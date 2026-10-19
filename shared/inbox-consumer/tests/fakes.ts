@@ -15,7 +15,12 @@ export type ConsumedMessage = ConsumeMessage;
 export function makeMessage(
   routingKey: string,
   body: unknown,
-  options: { messageId?: string | null; redelivered?: boolean; raw?: string } = {},
+  options: {
+    messageId?: string | null;
+    redelivered?: boolean;
+    raw?: string;
+    headers?: Record<string, unknown>;
+  } = {},
 ): ConsumedMessage {
   const raw = options.raw ?? JSON.stringify(body);
   const messageId = options.messageId === undefined ? '31337:0xabc:3' : options.messageId;
@@ -31,13 +36,23 @@ export function makeMessage(
     },
     properties: {
       ...(messageId === null ? {} : { messageId }),
+      ...(options.headers ? { headers: options.headers } : {}),
     },
   } as unknown as ConsumeMessage;
 }
 
+/** x-death entry as RabbitMQ writes it: an array of {key, value} pairs. */
+export function xDeathEntry(queue: string, reason: string, count: number): Array<[string, unknown]> {
+  return [
+    ['queue', queue],
+    ['reason', reason],
+    ['count', count],
+  ];
+}
+
 /**
  * Stand-in for BaseRabbitMQClient: records consumer registrations, the ack /
- * nack / cancel calls and lets a test make any of them fail.
+ * nack / park calls and lets a test make any of them fail.
  */
 export function createFakeRabbitClient() {
   const state = {
@@ -45,13 +60,17 @@ export function createFakeRabbitClient() {
     consumerTags: [] as string[],
     acked: [] as ConsumeMessage[],
     nacked: [] as Array<{ message: ConsumeMessage; requeue: boolean }>,
+    parked: [] as Array<{ queue: string; payload: unknown; messageId?: string }>,
     cancelled: [] as string[],
     handlers: new Map<string, (message: ConsumeMessage | null) => Promise<void>>(),
     consumedOptions: [] as Array<{ queue: string; options: unknown }>,
+    deferAfterAttempts: new Map<string, number>(),
+    parkAfterCycles: new Map<string, number>(),
     failConsumeFor: null as string | null,
     failCancel: null as Error | null,
     failAck: null as Error | null,
     failNack: null as Error | null,
+    failPark: null as Error | null,
   };
 
   let sequence = 0;
@@ -94,6 +113,21 @@ export function createFakeRabbitClient() {
       if (state.failNack) throw state.failNack;
     }),
 
+    park: mock(
+      async (queue: string, payload: unknown, options?: { messageId?: string }): Promise<void> => {
+        state.parked.push({ queue, payload, messageId: options?.messageId });
+        if (state.failPark) throw state.failPark;
+      },
+    ),
+
+    getQueueDeferAfterAttempts: mock((queue: string): number => {
+      return state.deferAfterAttempts.get(queue) ?? Number.POSITIVE_INFINITY;
+    }),
+
+    getQueueParkAfterCycles: mock((queue: string): number => {
+      return state.parkAfterCycles.get(queue) ?? Number.POSITIVE_INFINITY;
+    }),
+
     isConnected: mock((): boolean => state.connected),
   };
 
@@ -108,21 +142,19 @@ export function asRabbitClient(fake: FakeRabbitClient): BaseRabbitMQClient {
 
 /**
  * Stand-in for InboxConsumerService. Unlike the real service it does not run
- * attempts itself: the test decides the outcome of a delivery, so the daemon's
- * ack / halt / probe wiring can be asserted in isolation. When `runHandler` is
- * true the fake invokes the delivery callback exactly like the real service
- * does (inside its dedup transaction), which is how the JSON-parse and
- * unknown-routing-key paths are exercised.
+ * attempts itself: the test decides the outcome of a delivery. When
+ * `runHandler` is true the fake invokes the delivery callback exactly like the
+ * real service does, which is how the JSON-parse and unknown-routing-key paths
+ * are exercised.
  */
 export function createFakeConsumerService() {
   const state = {
-    nextOutcome: 'acked' as 'acked' | 'halted',
-    outcomes: [] as Array<'acked' | 'halted'>,
-    statuses: new Map<string, 'running' | 'halted'>(),
-    handles: [] as Array<{ queueName: string; message: ConsumeMessage }>,
-    probed: [] as string[],
+    nextOutcome: 'acked' as 'acked' | 'deferred',
+    outcomes: [] as Array<'acked' | 'deferred'>,
+    handles: [] as Array<{ queueName: string; message: ConsumeMessage; maxAttempts?: number }>,
+    handlerResults: [] as Array<'ok' | 'failed'>,
     runHandler: true,
-    handlerError: null as unknown,
+    throwFromHandle: null as unknown,
   };
 
   const service = {
@@ -133,30 +165,24 @@ export function createFakeConsumerService() {
         queueName: string,
         message: ConsumeMessage,
         handler: () => Promise<void>,
-      ): Promise<'acked' | 'halted'> => {
-        state.handles.push({ queueName, message });
+        maxAttempts?: number,
+      ): Promise<'acked' | 'deferred'> => {
+        state.handles.push({ queueName, message, maxAttempts });
 
         if (state.runHandler) {
           try {
             await handler();
-          } catch (error) {
-            state.handlerError = error;
+            state.handlerResults.push('ok');
+          } catch {
+            state.handlerResults.push('failed');
           }
         }
 
-        const outcome = state.outcomes.length ? (state.outcomes.shift() as 'acked' | 'halted') : state.nextOutcome;
-        state.statuses.set(queueName, outcome === 'halted' ? 'halted' : 'running');
+        if (state.throwFromHandle) throw state.throwFromHandle;
 
-        return outcome;
+        return state.outcomes.length ? (state.outcomes.shift() as 'acked' | 'deferred') : state.nextOutcome;
       },
     ),
-
-    status: mock((queueName: string): 'running' | 'halted' => state.statuses.get(queueName) ?? 'running'),
-
-    markProbed: mock((queueName: string): void => {
-      state.probed.push(queueName);
-      state.statuses.set(queueName, 'running');
-    }),
   };
 
   return service;

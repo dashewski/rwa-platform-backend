@@ -8,7 +8,6 @@ export const evaluationSchema = t.Object({
   grandParentId: t.String(),
   ownerId: t.String(),
   ownerType: t.String(),
-  status: t.Union([t.Literal('pending'), t.Literal('completed'), t.Literal('failed')]),
   riskScore: t.Optional(t.Number()),
   reasoning: t.Optional(t.String()),
   factors: t.Array(

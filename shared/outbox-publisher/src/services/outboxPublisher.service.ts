@@ -30,7 +30,6 @@ export class OutboxPublisherService {
       messageId,
     });
 
-    // A duplicate (same event already queued) returns null: nothing new was queued.
     if (created) {
       metrics.counter('outbox_publisher_queued_total', { exchange });
     }

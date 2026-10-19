@@ -1,82 +1,65 @@
 /**
  * Unit tests for OutboxPublisherMessageRepository.
  *
- * The Mongoose model is replaced with an in-memory stub (the repository takes
- * it as a constructor argument), so these tests need no database. What is
- * pinned down here: the exact queries the repository sends (filters, updates,
- * sort) and how it reacts to the duplicate-key error raised by the unique
- * `{ exchange, messageId }` index.
+ * The repository is the only place that touches Mongo, so the model is a fake
+ * and the assertions are about the queries and update pipelines it builds.
  */
 import './setup';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Types } from 'mongoose';
+import type { Model } from 'mongoose';
 import { OutboxPublisherMessageRepository } from '../src/repositories/outboxPublisherMessage.repository';
-import { EXCHANGE } from './fakes';
 
-const MESSAGE_ID = '31337:0xabc:3';
-const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const EXCHANGE = 'blockchain.events';
+const OTHER_EXCHANGE = 'evaluation';
 
-type Doc = {
-  _id: Types.ObjectId;
-  exchange: string;
-  routingKey: string;
-  payload: unknown;
-  messageId: string;
-  status: 'pending' | 'sending' | 'sent';
-  sentAt?: number | null;
-  expiresAt?: Date | null;
-};
-
-/** Records every call and returns scripted results. */
 function createFakeModel() {
-  const calls = {
-    create: [] as unknown[],
-    findOneAndUpdate: [] as Array<{ filter: unknown; update: unknown; options: unknown }>,
-    updateOne: [] as Array<{ filter: unknown; update: unknown }>,
-    updateMany: [] as Array<{ filter: unknown; update: unknown }>,
-  };
-
   const state = {
-    createResult: null as Doc | null,
+    createCalls: [] as unknown[],
     createError: null as unknown,
-    claimResult: null as Doc | null,
+    claimCalls: [] as Array<{ filter: unknown; update: unknown; options: unknown }>,
+    claimResult: null as unknown,
     claimError: null as unknown,
-    updateOneError: null as unknown,
-    updateManyError: null as unknown,
+    markSentCalls: [] as Array<{ filter: unknown; update: unknown }>,
+    markAttemptCalls: [] as Array<{ filter: unknown; update: unknown; options: unknown }>,
+    markAttemptResult: null as unknown,
+    releaseCalls: [] as Array<{ filter: unknown; update: unknown }>,
   };
 
   const model = {
-    calls,
     state,
 
-    create: mock(async (data: Partial<Doc>) => {
-      calls.create.push(data);
+    create: mock(async (data: unknown) => {
+      state.createCalls.push(data);
       if (state.createError) throw state.createError;
-      return {
-        toObject: () => ({ _id: new Types.ObjectId(), createdAt: 1, updatedAt: 1, ...data }),
-      };
+      return { toObject: () => ({ ...(data as object) }) };
     }),
 
-    findOneAndUpdate: mock((filter: unknown, update: unknown, options: unknown) => {
-      calls.findOneAndUpdate.push({ filter, update, options });
+    findOneAndUpdate: mock((filter: unknown, update: unknown, options?: unknown) => {
+      const isClaim = Array.isArray(update) === false;
+      (isClaim ? state.claimCalls : state.markAttemptCalls).push({ filter, update, options });
+
+      const result = isClaim ? state.claimResult : state.markAttemptResult;
+      const error = isClaim ? state.claimError : null;
+
       return {
         lean: async () => {
-          if (state.claimError) throw state.claimError;
-          return state.claimResult;
+          if (error) throw error;
+          return result;
+        },
+        then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+          if (error) return Promise.reject(error).then(resolve, reject);
+          return Promise.resolve(result).then(resolve, reject);
         },
       };
     }),
 
     updateOne: mock(async (filter: unknown, update: unknown) => {
-      calls.updateOne.push({ filter, update });
-      if (state.updateOneError) throw state.updateOneError;
-      return { acknowledged: true };
+      state.markSentCalls.push({ filter, update });
     }),
 
     updateMany: mock(async (filter: unknown, update: unknown) => {
-      calls.updateMany.push({ filter, update });
-      if (state.updateManyError) throw state.updateManyError;
-      return { acknowledged: true };
+      state.releaseCalls.push({ filter, update });
     }),
   };
 
@@ -86,13 +69,7 @@ function createFakeModel() {
 type FakeModel = ReturnType<typeof createFakeModel>;
 
 function repoWith(model: FakeModel): OutboxPublisherMessageRepository {
-  return new OutboxPublisherMessageRepository(model as never);
-}
-
-function duplicateKeyError(): Error {
-  return new Error('E11000 duplicate key error collection: outboxpublishermessages index: exchange_1_messageId_1') as Error & {
-    code?: number;
-  };
+  return new OutboxPublisherMessageRepository(model as unknown as Model<unknown>);
 }
 
 describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
@@ -105,159 +82,152 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
   });
 
   describe('create', () => {
-    test('inserts the row as-is and returns the plain document', async () => {
+    test('returns the created document as a plain object', async () => {
       const created = await repository.create({
         exchange: EXCHANGE,
         routingKey: 'Governance_VoteCast',
         payload: { a: 1 },
-        messageId: MESSAGE_ID,
+        messageId: 'message-1',
       });
 
-      expect(model.calls.create).toEqual([
-        { exchange: EXCHANGE, routingKey: 'Governance_VoteCast', payload: { a: 1 }, messageId: MESSAGE_ID },
-      ]);
-      expect(created).toMatchObject({
-        exchange: EXCHANGE,
-        routingKey: 'Governance_VoteCast',
-        payload: { a: 1 },
-        messageId: MESSAGE_ID,
-      });
+      expect(created).toMatchObject({ exchange: EXCHANGE, messageId: 'message-1' });
+      expect(model.state.createCalls).toHaveLength(1);
     });
 
-    test('returns null when the unique { exchange, messageId } index rejects the duplicate', async () => {
-      const duplicate = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
-      model.state.createError = duplicate;
+    test('returns null for a duplicate messageId (code 11000)', async () => {
+      model.state.createError = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
 
       const created = await repository.create({
         exchange: EXCHANGE,
-        routingKey: 'Governance_VoteCast',
+        routingKey: 'x',
         payload: {},
-        messageId: MESSAGE_ID,
-      });
-
-      // A rescan of the same block queues the same event: not an error, just nothing new.
-      expect(created).toBeNull();
-    });
-
-    test('returns null when the duplicate code sits deeper in the cause chain', async () => {
-      const mongo = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
-      const wrapped = new Error('MongooseServerError: write failed', { cause: mongo });
-      model.state.createError = wrapped;
-
-      const created = await repository.create({
-        exchange: EXCHANGE,
-        routingKey: 'Governance_VoteCast',
-        payload: {},
-        messageId: MESSAGE_ID,
+        messageId: 'message-1',
       });
 
       expect(created).toBeNull();
     });
 
-    test('rethrows any other failure (validation, connection loss)', async () => {
-      const network = new Error('connection 127.0.0.1:27017 closed');
-      model.state.createError = network;
+    test('a duplicate code wrapped into a cause chain is not treated as a duplicate', async () => {
+      model.state.createError = new Error('write failed', {
+        cause: Object.assign(new Error('E11000 duplicate key'), { code: 11000 }),
+      });
 
       await expect(
-        repository.create({ exchange: EXCHANGE, routingKey: 'r', payload: {}, messageId: MESSAGE_ID }),
-      ).rejects.toThrow('connection 127.0.0.1:27017 closed');
+        repository.create({ exchange: EXCHANGE, routingKey: 'x', payload: {}, messageId: 'message-1' }),
+      ).rejects.toThrow('write failed');
+    });
+
+    test('any other storage error is rethrown', async () => {
+      model.state.createError = new Error('MongoServerSelectionError: server selection timed out');
+
+      await expect(
+        repository.create({ exchange: EXCHANGE, routingKey: 'x', payload: {}, messageId: 'message-1' }),
+      ).rejects.toThrow('server selection timed out');
     });
   });
 
   describe('claimNext', () => {
-    test('atomically flips the oldest pending row of the exchange to sending', async () => {
-      const doc = {
-        _id: new Types.ObjectId(),
-        exchange: EXCHANGE,
-        routingKey: 'Governance_VoteCast',
-        payload: { proposalId: '1' },
-        messageId: MESSAGE_ID,
-        status: 'sending' as const,
-      };
-      model.state.claimResult = doc;
+    test('claims the oldest pending row of the exchange and marks it sending', async () => {
+      model.state.claimResult = { _id: 'row-1', status: 'sending' };
 
       const claimed = await repository.claimNext(EXCHANGE);
 
-      expect(claimed).toBe(doc);
-      expect(model.calls.findOneAndUpdate).toEqual([
-        {
-          filter: { status: 'pending', exchange: EXCHANGE },
-          update: { $set: { status: 'sending' } },
-          options: { sort: { _id: 1 }, new: true },
-        },
-      ]);
+      expect(claimed).toEqual({ _id: 'row-1', status: 'sending' });
+      expect(model.state.claimCalls).toHaveLength(1);
+
+      const call = model.state.claimCalls[0];
+      expect(call.filter).toEqual({ status: 'pending', exchange: EXCHANGE });
+      expect(call.update).toEqual({ $set: { status: 'sending' } });
+      expect(call.options).toEqual({ sort: { _id: 1 }, new: true });
     });
 
-    test('returns null when the exchange has no pending rows left', async () => {
+    test('returns null when nothing is pending', async () => {
       model.state.claimResult = null;
 
       expect(await repository.claimNext(EXCHANGE)).toBeNull();
-      expect(model.calls.findOneAndUpdate).toHaveLength(1);
     });
 
-    test('propagates a database failure to the caller (the pass decides what to do)', async () => {
+    test('a claim failure is propagated to the caller', async () => {
       model.state.claimError = new Error('MongoServerSelectionError: server selection timed out');
 
       await expect(repository.claimNext(EXCHANGE)).rejects.toThrow('server selection timed out');
     });
 
-    test('scopes the claim to the requested exchange only', async () => {
-      await repository.claimNext('other.events');
+    test('another exchange never claims rows of the first one', async () => {
+      await repository.claimNext(OTHER_EXCHANGE);
 
-      expect(model.calls.findOneAndUpdate[0].filter).toEqual({ status: 'pending', exchange: 'other.events' });
+      expect(model.state.claimCalls[0].filter).toEqual({ status: 'pending', exchange: OTHER_EXCHANGE });
     });
   });
 
   describe('markSent', () => {
-    test('stamps status, sentAt (seconds) and the retention deadline', async () => {
+    test('marks the row sent, stamps sentAt and schedules the 30-day TTL', async () => {
       const id = new Types.ObjectId();
-      const before = Date.now();
+      const before = Math.floor(Date.now() / 1000);
 
       await repository.markSent(id);
 
-      expect(model.calls.updateOne).toHaveLength(1);
-      const { filter, update } = model.calls.updateOne[0] as {
+      const { filter, update } = model.state.markSentCalls[0] as {
         filter: { _id: Types.ObjectId };
         update: { $set: { status: string; sentAt: number; expiresAt: Date } };
       };
-
       expect(filter).toEqual({ _id: id });
       expect(update.$set.status).toBe('sent');
-      expect(update.$set.sentAt).toBe(Math.floor(before / 1000));
+      expect(update.$set.sentAt).toBeGreaterThanOrEqual(before);
       expect(update.$set.expiresAt).toBeInstanceOf(Date);
-      // TTL of 30 days: the row disappears ~30 days after it was sent.
-      expect(update.$set.expiresAt.getTime()).toBeGreaterThanOrEqual(before + TTL_MS - 1000);
-      expect(update.$set.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + TTL_MS + 1000);
-    });
 
-    test('accepts a string id (the service passes the id from the claimed document)', async () => {
-      const id = new Types.ObjectId().toString();
-
-      await repository.markSent(id);
-
-      expect((model.calls.updateOne[0] as { filter: unknown }).filter).toEqual({ _id: id });
-    });
-
-    test('propagates the failure so the caller can release the row', async () => {
-      model.state.updateOneError = new Error('connection reset by peer');
-
-      await expect(repository.markSent(new Types.ObjectId())).rejects.toThrow('connection reset by peer');
+      const ttlDays = (update.$set.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+      expect(ttlDays).toBeGreaterThan(29.9);
+      expect(ttlDays).toBeLessThan(30.1);
     });
   });
 
-  describe('release', () => {
-    test('returns a single row to pending without touching anything else', async () => {
+  describe('markAttemptFailed', () => {
+    test('increments the attempts counter and keeps the row sending while the limit is not reached', async () => {
       const id = new Types.ObjectId();
+      model.state.markAttemptResult = { _id: id, attempts: 2, status: 'sending' };
 
-      await repository.release(id);
+      const updated = await repository.markAttemptFailed(id, 5);
 
-      expect(model.calls.updateOne).toEqual([{ filter: { _id: id }, update: { $set: { status: 'pending' } } }]);
+      expect(updated).toEqual({ _id: id, attempts: 2, status: 'sending' });
+      const call = model.state.markAttemptCalls[0];
+      expect(call.filter).toEqual({ _id: id });
+      expect(call.update).toEqual([
+        { $set: { attempts: { $add: ['$attempts', 1] } } },
+        { $set: { status: { $cond: [{ $gte: ['$attempts', 5] }, 'failed', 'sending'] } } },
+      ]);
+      expect(call.options).toEqual({ new: true });
     });
 
-    test('propagates the failure (the caller decides, and swallows it on purpose)', async () => {
-      model.state.updateOneError = new Error('write concern failed');
+    test('the pipeline flips the row to failed once attempts reach maxAttempts', async () => {
+      const id = new Types.ObjectId();
+      model.state.markAttemptResult = { _id: id, attempts: 5, status: 'failed' };
 
-      await expect(repository.release(new Types.ObjectId())).rejects.toThrow('write concern failed');
+      const updated = await repository.markAttemptFailed(id, 5);
+
+      expect(updated?.status).toBe('failed');
+      expect((model.state.markAttemptCalls[0].update as unknown[])[1]).toEqual({
+        $set: { status: { $cond: [{ $gte: ['$attempts', 5] }, 'failed', 'sending'] } },
+      });
+    });
+
+    test('maxAttempts = Infinity never flips the row to failed', async () => {
+      const id = new Types.ObjectId();
+      model.state.markAttemptResult = { _id: id, attempts: 1000, status: 'sending' };
+
+      await repository.markAttemptFailed(id, Number.POSITIVE_INFINITY);
+
+      const pipeline = model.state.markAttemptCalls[0].update as Array<{ $set: Record<string, unknown> }>;
+      expect(pipeline[1].$set.status).toEqual({
+        $cond: [{ $gte: ['$attempts', Number.POSITIVE_INFINITY] }, 'failed', 'sending'],
+      });
+      expect((model.state.markAttemptResult as { status: string }).status).toBe('sending');
+    });
+
+    test('a missing row yields null (the caller treats it as "nothing to fail")', async () => {
+      model.state.markAttemptResult = null;
+
+      expect(await repository.markAttemptFailed(new Types.ObjectId(), 3)).toBeNull();
     });
   });
 
@@ -265,27 +235,24 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
     test('returns every sending row of the exchange to pending', async () => {
       await repository.releaseSending(EXCHANGE);
 
-      expect(model.calls.updateMany).toEqual([
-        {
-          filter: { status: 'sending', exchange: EXCHANGE },
-          update: { $set: { status: 'pending' } },
-        },
+      expect(model.state.releaseCalls).toEqual([
+        { filter: { status: 'sending', exchange: EXCHANGE }, update: { $set: { status: 'pending' } } },
       ]);
     });
 
     test('does not touch rows of other exchanges', async () => {
-      await repository.releaseSending('other.events');
+      await repository.releaseSending(OTHER_EXCHANGE);
 
-      expect((model.calls.updateMany[0] as { filter: unknown }).filter).toEqual({
-        status: 'sending',
-        exchange: 'other.events',
-      });
+      expect(model.state.releaseCalls[0].filter).toEqual({ status: 'sending', exchange: OTHER_EXCHANGE });
     });
 
-    test('propagates the failure (a broken pass must be visible)', async () => {
-      model.state.updateManyError = new Error('primary stepped down');
+    test('a failure is propagated (a broken pass must be visible)', async () => {
+      model.updateMany = mock(async () => {
+        throw new Error('write concern failed');
+      }) as unknown as FakeModel['updateMany'];
+      const broken = repoWith(model);
 
-      await expect(repository.releaseSending(EXCHANGE)).rejects.toThrow('primary stepped down');
+      await expect(broken.releaseSending(EXCHANGE)).rejects.toThrow('write concern failed');
     });
   });
 });

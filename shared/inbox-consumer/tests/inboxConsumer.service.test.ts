@@ -1,57 +1,72 @@
 /**
- * Unit tests for InboxConsumerService — the attempt / halt state machine.
+ * Unit tests for InboxConsumerService — attempts, dedup outcome and the
+ * transaction boundary.
  *
- * The inbox repository is a fake, so the transaction itself is not exercised
- * here (its own test file covers that). What is pinned down: how many attempts
- * a delivery gets, the backoff between them, what a duplicate does, when the
- * stream halts and what brings it back.
+ * The transaction lives here (not in the repository), so the mongoose
+ * connection is stubbed to run the callback inline and to record how often it
+ * was opened. The repository itself is a fake: its own file pins the marker
+ * behaviour.
  */
 import './setup';
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { InboxConsumerService } from '../src/services/inboxConsumer.service';
 import { metrics } from '@shared/monitoring/src/metrics';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import type { InboxConsumerMessageRepository } from '../src/repositories/inboxConsumerMessage.repository';
 import { makeMessage, QUEUE } from './fakes';
 
-type RunOnceOutcome = 'apply' | 'duplicate' | 'fail';
+type CreateOutcome = 'created' | 'duplicate' | 'fail';
+
+/** Runs the callback inline and records every transaction the service opens. */
+function stubTransaction() {
+  const state = {
+    calls: 0,
+    error: null as unknown,
+    beforeRun: null as null | (() => Promise<void> | void),
+  };
+
+  const original = (mongoose.connection as unknown as { transaction: unknown }).transaction;
+
+  (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+    fn: () => Promise<T>,
+  ): Promise<T> => {
+    state.calls += 1;
+
+    if (state.beforeRun) await state.beforeRun();
+    if (state.error) throw state.error;
+
+    return await fn();
+  };
+
+  return {
+    state,
+    restore: () => {
+      (mongoose.connection as unknown as { transaction: unknown }).transaction = original;
+    },
+  };
+}
 
 function createFakeRepository() {
   const state = {
-    outcomes: [] as RunOnceOutcome[],
-    calls: [] as Array<{ messageId: string; handlerCalled: boolean }>,
-    failError: new Error('inbox repository is unavailable'),
+    outcomes: [] as CreateOutcome[],
+    calls: [] as string[],
+    failError: new Error('inbox repository is unavailable') as unknown,
     handlerRuns: 0,
-    handlerError: null as unknown,
   };
 
-  const nextOutcome = (): RunOnceOutcome => (state.outcomes.length ? (state.outcomes.shift() as RunOnceOutcome) : 'apply');
+  const nextOutcome = (): CreateOutcome => (state.outcomes.length ? (state.outcomes.shift() as CreateOutcome) : 'created');
 
   const repository = {
     state,
 
-    runOnce: mock(async (messageId: string, handler: () => Promise<void>): Promise<boolean> => {
+    create: mock(async (messageId: string): Promise<boolean> => {
       const outcome = nextOutcome();
+      state.calls.push(messageId);
 
-      if (outcome === 'fail') {
-        state.calls.push({ messageId, handlerCalled: false });
-        throw state.failError;
-      }
+      if (outcome === 'fail') throw state.failError;
+      if (outcome === 'duplicate') return false;
 
-      if (outcome === 'duplicate') {
-        state.calls.push({ messageId, handlerCalled: false });
-        return false;
-      }
-
-      state.calls.push({ messageId, handlerCalled: true });
-      if (state.handlerError) {
-        // The real repository runs the handler inside the transaction: a handler
-        // failure aborts it and surfaces as a rejection of runOnce().
-        throw state.handlerError;
-      }
-
-      state.handlerRuns += 1;
-      await handler();
       return true;
     }),
   };
@@ -63,18 +78,16 @@ type FakeRepository = ReturnType<typeof createFakeRepository>;
 
 let counters: Array<{ name: string; labels?: Record<string, string> }> = [];
 let logLines: string[] = [];
-let originalCounter: typeof metrics.counter;
-let originalInfo: typeof logger.info;
-let originalError: typeof logger.error;
-let originalDebug: typeof logger.debug;
+const original = {
+  counter: metrics.counter,
+  info: logger.info,
+  error: logger.error,
+  debug: logger.debug,
+};
 
 function captureTelemetry(): void {
   counters = [];
   logLines = [];
-  originalCounter = metrics.counter;
-  originalInfo = logger.info;
-  originalError = logger.error;
-  originalDebug = logger.debug;
 
   metrics.counter = ((name: string, labels?: Record<string, string>) => {
     counters.push({ name, labels });
@@ -91,26 +104,30 @@ function captureTelemetry(): void {
 }
 
 function restoreTelemetry(): void {
-  metrics.counter = originalCounter;
-  logger.info = originalInfo;
-  logger.error = originalError;
-  logger.debug = originalDebug;
+  metrics.counter = original.counter;
+  logger.info = original.info;
+  logger.error = original.error;
+  logger.debug = original.debug;
 }
 
-function names(): string[] {
-  return counters.map((entry) => entry.name);
-}
+const names = (): string[] => counters.map((entry) => entry.name);
+const countOf = (name: string): number => names().filter((entry) => entry === name).length;
 
-describe('InboxConsumerService (unit, fake repository)', () => {
+describe('InboxConsumerService (unit, fake repository + stubbed transaction)', () => {
   let repository: FakeRepository;
   let service: InboxConsumerService;
+  let transaction: ReturnType<typeof stubTransaction>;
   let handlerRuns: number;
 
+  const handler = async (): Promise<void> => {
+    handlerRuns += 1;
+  };
+
   beforeEach(() => {
+    transaction = stubTransaction();
     repository = createFakeRepository();
     service = new InboxConsumerService(
       repository as unknown as InboxConsumerMessageRepository,
-      3,
       5,
       20,
     );
@@ -120,170 +137,185 @@ describe('InboxConsumerService (unit, fake repository)', () => {
 
   afterEach(() => {
     restoreTelemetry();
+    transaction.restore();
   });
 
-  const handler = async (): Promise<void> => {
-    handlerRuns += 1;
-  };
-
-  test('a successful delivery is acked and counted once, and the queue is running', async () => {
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+  test('a successful delivery is acked inside one transaction and counted as processed', async () => {
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
     expect(outcome).toBe('acked');
     expect(handlerRuns).toBe(1);
-    expect(repository.state.calls).toHaveLength(1);
+    expect(repository.state.calls).toEqual(['31337:0xabc:3']);
+    expect(transaction.state.calls).toBe(1);
     expect(names()).toEqual(['inbox_consumer_processed_total']);
     expect(counters[0].labels).toEqual({ queue: QUEUE });
-    expect(service.status(QUEUE)).toBe('running');
   });
 
-  test('a duplicate is acked without running the handler and counted as a duplicate', async () => {
+  test('a duplicate marker acks the delivery without running the handler', async () => {
     repository.state.outcomes = ['duplicate'];
 
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
     expect(outcome).toBe('acked');
     expect(handlerRuns).toBe(0);
+    expect(transaction.state.calls).toBe(1);
     expect(names()).toEqual(['inbox_consumer_duplicates_total']);
     expect(logLines.some((line) => line.includes('duplicate message skipped'))).toBe(true);
   });
 
-  test('a delivery without messageId cannot be deduplicated: it retries and then halts', async () => {
+  test('the handler runs in the same transaction as the marker insert', async () => {
+    const order: string[] = [];
+    const create = repository.create.getMockImplementation()!;
+    repository.create.mockImplementation(async (messageId: string) => {
+      order.push('marker');
+      return create(messageId);
+    });
+
+    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), async () => {
+      order.push('handler');
+    });
+
+    expect(order).toEqual(['marker', 'handler']);
+    expect(transaction.state.calls).toBe(1);
+  });
+
+  test('a delivery without messageId is retried and then deferred (the inbox cannot deduplicate it)', async () => {
     const message = makeMessage('Governance_VoteCast', {}, { messageId: null });
 
-    const outcome = await service.handle(QUEUE, message, handler);
+    const outcome = await service.handle(QUEUE, message, handler, 3);
 
-    expect(outcome).toBe('halted');
+    expect(outcome).toBe('deferred');
     expect(handlerRuns).toBe(0);
-    // No attempt ever reaches the repository: the guard fires before runOnce.
-    expect(repository.state.calls).toHaveLength(0);
-    expect(names().filter((name) => name === 'inbox_consumer_retries_total')).toHaveLength(3);
-    expect(names()).toContain('inbox_consumer_halted_total');
-    expect(service.status(QUEUE)).toBe('halted');
+    expect(repository.state.calls).toEqual([]);
+    expect(transaction.state.calls).toBe(0);
+    expect(countOf('inbox_consumer_retries_total')).toBe(3);
+    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
     expect(logLines.some((line) => line.includes('the message has no messageId'))).toBe(true);
   });
 
-  test('a failure is retried and a later success acks the delivery', async () => {
-    repository.state.outcomes = ['fail', 'apply'];
+  test('a failure followed by a success acks the delivery and logs the retry', async () => {
+    repository.state.outcomes = ['fail', 'created'];
 
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
     expect(outcome).toBe('acked');
     expect(handlerRuns).toBe(1);
     expect(repository.state.calls).toHaveLength(2);
-    expect(names()).toContain('inbox_consumer_retries_total');
-    expect(names()).toContain('inbox_consumer_processed_total');
-    expect(service.status(QUEUE)).toBe('running');
+    expect(countOf('inbox_consumer_retries_total')).toBe(1);
+    expect(countOf('inbox_consumer_processed_total')).toBe(1);
     expect(logLines.some((line) => line.includes('attempt 1/3 failed; retrying in 5ms'))).toBe(true);
   });
 
-  test('a handler failure inside the transaction is retried and can succeed on the next attempt', async () => {
-    repository.state.outcomes = ['apply', 'apply'];
-    repository.state.handlerError = new Error('db write failed inside the handler');
+  test('a handler failure aborts the transaction and the delivery is retried', async () => {
+    await expect(
+      service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), async () => {
+        throw new Error('db write failed inside the handler');
+      }, 3),
+    ).resolves.toBe('deferred');
 
-    const first = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-    expect(first).toBe('halted');
-
-    // The same message is redelivered later (after the probe) and now succeeds.
-    repository.state.handlerError = null;
-    const second = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-
-    expect(second).toBe('acked');
+    expect(transaction.state.calls).toBe(3);
+    expect(countOf('inbox_consumer_retries_total')).toBe(3);
+    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
+    expect(logLines.some((line) => line.includes('db write failed inside the handler'))).toBe(true);
   });
 
-  test('after the last attempt the stream halts and the queue is marked halted', async () => {
+  test('after the last attempt the delivery is deferred to the retry queue', async () => {
     repository.state.outcomes = ['fail', 'fail', 'fail'];
 
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
-    expect(outcome).toBe('halted');
+    expect(outcome).toBe('deferred');
     expect(repository.state.calls).toHaveLength(3);
-    expect(names().filter((name) => name === 'inbox_consumer_retries_total')).toHaveLength(3);
-    expect(names().filter((name) => name === 'inbox_consumer_halted_total')).toHaveLength(1);
-    expect(service.status(QUEUE)).toBe('halted');
-    expect(logLines.some((line) => line.includes('HALTED: inbox repository is unavailable'))).toBe(true);
+    expect(countOf('inbox_consumer_retries_total')).toBe(3);
+    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
+    expect(logLines.some((line) => line.includes('attempts exhausted (3)'))).toBe(true);
   });
 
-  test('a delivery to an already halted queue runs the whole cycle again (the requeued head message)', async () => {
-    repository.state.outcomes = ['fail', 'fail', 'fail'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-    expect(service.status(QUEUE)).toBe('halted');
+  test('maxAttempts comes from the queue config, not the constructor', async () => {
+    repository.state.outcomes = ['fail', 'fail'];
 
-    repository.state.outcomes = ['apply'];
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await service.handle(
+      QUEUE,
+      makeMessage('Governance_VoteCast', {}),
+      handler,
+      2,
+    );
 
-    expect(outcome).toBe('acked');
-    expect(service.status(QUEUE)).toBe('running');
-    expect(logLines.some((line) => line.includes('retrying the halted message'))).toBe(true);
+    expect(outcome).toBe('deferred');
+    expect(repository.state.calls).toHaveLength(2);
+    expect(countOf('inbox_consumer_retries_total')).toBe(2);
   });
 
-  test('the backoff grows between attempts and stays inside the cap', async () => {
-    const slow = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 5, 5, 10);
-    repository.state.outcomes = ['fail', 'fail', 'fail', 'fail', 'fail'];
-    const startedAt = Date.now();
-
-    const outcome = await slow.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-
-    // Delays between five attempts: 5 + 10 + 10 + 10 = 35ms (5ms doubling into the 10ms cap).
-    const elapsed = Date.now() - startedAt;
-    expect(outcome).toBe('halted');
-    expect(elapsed).toBeGreaterThanOrEqual(35);
-    expect(repository.state.calls).toHaveLength(5);
-  });
-
-  test('with a single allowed attempt a failure halts immediately, without waiting', async () => {
-    const strict = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 1, 5_000, 5_000);
+  test('a single allowed attempt defers immediately, without waiting', async () => {
     repository.state.outcomes = ['fail'];
     const startedAt = Date.now();
 
-    const outcome = await strict.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 1);
 
-    expect(outcome).toBe('halted');
+    expect(outcome).toBe('deferred');
     expect(Date.now() - startedAt).toBeLessThan(1_000);
     expect(repository.state.calls).toHaveLength(1);
   });
 
-  test('a non-Error value thrown by the repository still halts with a readable reason', async () => {
-    repository.state.failError = 'plain string failure' as unknown as Error;
-    repository.state.outcomes = ['fail', 'fail', 'fail'];
+  test('the backoff grows between attempts and is capped', async () => {
+    const slow = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 5, 10);
+    repository.state.outcomes = ['fail', 'fail', 'fail', 'fail'];
+    const startedAt = Date.now();
 
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+    const outcome = await slow.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 4);
 
-    expect(outcome).toBe('halted');
-    expect(logLines.some((line) => line.includes('HALTED: plain string failure'))).toBe(true);
+    // Delays: 5 + 10 + 10 = 25ms (5ms doubling into the 10ms cap).
+    expect(outcome).toBe('deferred');
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(25);
+    expect(repository.state.calls).toHaveLength(4);
   });
 
-  test('status defaults to running and markProbed brings a halted queue back', async () => {
-    expect(service.status('never-seen-queue')).toBe('running');
-
+  test('a non-Error failure is still reported readably', async () => {
+    repository.state.failError = 'plain string failure';
     repository.state.outcomes = ['fail', 'fail', 'fail'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-    expect(service.status(QUEUE)).toBe('halted');
 
-    service.markProbed(QUEUE);
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
-    expect(service.status(QUEUE)).toBe('running');
-    expect(logLines.some((line) => line.includes('probed — resubscribed to the queue'))).toBe(true);
+    expect(outcome).toBe('deferred');
+    expect(logLines.some((line) => line.includes('plain string failure'))).toBe(true);
   });
 
-  test('queues do not share halt state', async () => {
-    repository.state.outcomes = ['fail', 'fail', 'fail'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
+  test('each delivery counts only its own retries', async () => {
+    repository.state.outcomes = ['fail', 'created'];
+    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
+    const afterFirst = countOf('inbox_consumer_retries_total');
 
-    expect(service.status(QUEUE)).toBe('halted');
-    expect(service.status('blockchain.events.other')).toBe('running');
-  });
-
-  test('each delivery counts its own retries (the counter is not cumulative)', async () => {
-    repository.state.outcomes = ['fail', 'apply'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-    const afterFirst = names().filter((name) => name === 'inbox_consumer_retries_total').length;
-
-    repository.state.outcomes = ['apply'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler);
-    const afterSecond = names().filter((name) => name === 'inbox_consumer_retries_total').length;
+    repository.state.outcomes = ['created'];
+    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
 
     expect(afterFirst).toBe(1);
-    expect(afterSecond).toBe(1);
+    expect(countOf('inbox_consumer_retries_total')).toBe(1);
+  });
+
+  test('the constructor switches mongoose to transactionAsyncLocalStorage (process-wide)', () => {
+    const sets: unknown[][] = [];
+    const originalSet = mongoose.set;
+    (mongoose as unknown as { set: unknown }).set = (...args: unknown[]) => {
+      sets.push(args);
+      return mongoose;
+    };
+
+    try {
+      new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository);
+    } finally {
+      (mongoose as unknown as { set: unknown }).set = originalSet;
+    }
+
+    expect(sets).toContainEqual(['transactionAsyncLocalStorage', true]);
+  });
+
+  test('a transaction-level failure is retried and finally deferred', async () => {
+    transaction.state.error = new Error('Transaction numbers are only allowed on a replica set member or mongos');
+
+    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
+
+    expect(outcome).toBe('deferred');
+    expect(transaction.state.calls).toBe(3);
+    expect(repository.state.calls).toEqual([]);
   });
 });

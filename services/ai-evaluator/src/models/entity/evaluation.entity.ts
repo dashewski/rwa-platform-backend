@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import type { InferRawDocType, Types } from 'mongoose';
-import { EntityTypeList, EvaluationStatusList } from '../shared/enums.model';
+import { EntityTypeList } from '../shared/enums.model';
 
 const evaluationSchemaDefinition = {
   entityType: {
@@ -27,12 +27,6 @@ const evaluationSchemaDefinition = {
     type: String,
     required: true,
     trim: true,
-  },
-  status: {
-    type: String,
-    required: true,
-    enum: EvaluationStatusList,
-    default: 'pending',
   },
   riskScore: {
     type: Number,
