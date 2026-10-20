@@ -237,14 +237,12 @@ describe('scenario: scanner → blockchain.events → listeners', () => {
     expect(await OutboxPublisherMessageEntity.countDocuments({ exchange: EXCHANGE })).toBe(4);
   }, 60_000);
 
-  test('an event with no bound queue stops the scanner stream at that message (head-of-line)', async () => {
+  test('an event with no bound queue lands in the quarantine and the stream keeps going', async () => {
     const block = 101;
     const unbound = event('ReferralTreasury_EmergencyWithdrawn', block, 0);
     const behindIt = event('Pool_TargetReached', block, 1);
 
     await scanner.applyBlockEvents(block, [unbound, behindIt]);
-
-    // the pass publishes the unbound event, the broker returns it, the pass stops
     await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY);
 
     const unboundRow = await OutboxPublisherMessageEntity.findOne({
@@ -256,17 +254,19 @@ describe('scenario: scanner → blockchain.events → listeners', () => {
       messageId: `${CHAIN_ID}:${behindIt.transactionHash}:1`,
     }).lean();
 
-    // markAttemptFailed keeps the row 'sending' (the next pass releases it), it never becomes 'failed' with ∞
-    expect(unboundRow?.status).toBe('sending');
-    expect(unboundRow?.attempts).toBe(1);
-    expect(behindRow?.status).toBe('pending');
-    expect(behindRow?.attempts).toBe(0);
+    // alternate-exchange keeps the unroutable event from bouncing back: both rows are sent
+    expect(unboundRow?.status).toBe('sent');
+    expect(behindRow?.status).toBe('sent');
 
-    await Bun.sleep(300);
-    expect(poolService.callsOf('syncPoolTargetReached')).toHaveLength(0);
+    // the unbound event waits in the quarantine queue nobody consumes yet
+    const quarantine = await raw.channel.checkQueue(scannerClient.queueName('blockchain.events.unrouted'));
+    expect(quarantine.messageCount).toBe(1);
+
+    // and the event behind it was delivered normally
+    await waitFor(() => poolService.callsOf('syncPoolTargetReached').length === 1, 30_000);
   }, 60_000);
 
-  test('the scanner advanced its state even though the stream is stuck — a restart will not rescan the block', async () => {
+  test('the scanner advanced its state, so a restart will not rescan the block', async () => {
     expect(await new ScannerStateRepository().getLastScannedBlock(CHAIN_ID)).toBe(101);
     expect(await EventEntity.countDocuments({ chainId: CHAIN_ID, blockNumber: 101 })).toBe(2);
   });

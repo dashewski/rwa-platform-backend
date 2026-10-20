@@ -24,7 +24,7 @@ describe('signers-manager RabbitMQ topology', () => {
   test('declares the responses queue and the shared signing exchange', () => {
     expect(Object.keys(topology.queues)).toEqual(['sign.responses']);
     expect(topology.exchanges).toEqual({
-      'sign.exchange': { type: 'direct', options: { durable: true } },
+      'sign.exchange': { type: 'direct', options: { durable: true }, allowUnrouted: false },
     });
     expect(topology.queues['sign.responses'].bindings).toEqual({ 'sign.exchange': ['response'] });
   });

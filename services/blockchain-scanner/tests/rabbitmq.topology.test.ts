@@ -5,9 +5,10 @@
  *  1. the exchange the outbox daemon polls is the exchange the client declares
  *     (the exchange name itself comes from RABBITMQ_EXCHANGE, the client
  *     topology is hardcoded — a mismatch makes every publish fail);
- *  2. the scanner publishes strictly in order with no attempt limit: a single
- *     unroutable event (mandatory publish → basic.return) stops the whole
- *     stream at that message forever.
+ *  2. the scanner publishes strictly in order with no attempt limit, so an
+ *     event nobody bound must not bounce back: `blockchain.events` carries an
+ *     `alternate-exchange`, and every unroutable event lands in the fanout
+ *     quarantine queue instead of stalling the stream.
  *
  * No broker, no database.
  */
@@ -38,11 +39,18 @@ const UNCONSUMED_EVENTS = [
 ];
 
 describe('blockchain-scanner RabbitMQ topology', () => {
-  test('declares only the blockchain events exchange', () => {
-    expect(topology).toEqual({
-      exchanges: { 'blockchain.events': { type: 'direct', options: { durable: true } } },
-      queues: {},
+  test('declares the blockchain events exchange with the unrouted quarantine flag', () => {
+    expect(topology.exchanges).toEqual({
+      'blockchain.events': {
+        type: 'direct',
+        options: { durable: true },
+        allowUnrouted: true,
+      },
     });
+
+    // The fanout quarantine exchange and its queue are derived by the base
+    // client from `allowUnrouted`, so they never appear in the topology.
+    expect(topology.queues).toEqual({});
   });
 
   test('the outbox polls the very exchange the client declares', () => {
@@ -77,7 +85,7 @@ describe('blockchain-scanner RabbitMQ topology', () => {
     expect([...consumed].filter((event) => !declared.has(event))).toEqual([]);
   });
 
-  test('the ABI declares exactly four events with no consumer — publishing one would freeze the stream', () => {
+  test('the ABI declares exactly four events with no consumer — they land in the quarantine queue', () => {
     const declared = EventEmitterABI.abi
       .filter((item) => item.type === 'event')
       .map((item) => item.name as string);

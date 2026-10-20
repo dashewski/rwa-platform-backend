@@ -142,8 +142,10 @@ describe('signers-manager HTTP layer (component, fake repositories and outbox)',
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });
     expect(fetched.status).toBe(200);
-    expect(fetched.body).toEqual(created.body);
-    expect(fetched.body.signatures).toBeUndefined(); // an open task exposes no signatures
+
+    const { signatures, ...fetchedTask } = fetched.body;
+    expect(fetchedTask).toEqual(created.body);
+    expect(signatures).toEqual([]); // an open task carries no signatures yet
   });
 
   test('createSignatureTask: an invalid payload never reaches the service', async () => {

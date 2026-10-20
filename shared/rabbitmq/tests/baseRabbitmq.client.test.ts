@@ -91,6 +91,26 @@ class InfinitePolicyClient extends BaseRabbitMQClient {
   }
 }
 
+/** A client whose exchange keeps unroutable messages in a quarantine queue. */
+class ClientWithUnroutedExchange extends BaseRabbitMQClient {
+  constructor() {
+    super('amqp://guest:***@localhost:5672', 'scanner', 1);
+  }
+
+  getTopologyDefinition() {
+    return {
+      exchanges: {
+        'blockchain.events': {
+          type: 'direct' as const,
+          options: { durable: true },
+          allowUnrouted: true,
+        },
+      },
+      queues: {},
+    } as const;
+  }
+}
+
 /** A client whose topology throws on the first declaration only. */
 class FailOnceClient extends BaseRabbitMQClient {
   private calls = 0;
@@ -624,6 +644,43 @@ describe('BaseRabbitMQClient (unit, fake amqplib)', () => {
       expect(broker.channel.bindings.map((binding) => binding.routingKey)).toEqual(['RWA_Deployed', 'RWA_Transfer']);
 
       await rwa.disconnect();
+    });
+
+    test('an exchange with allowUnrouted gets a fanout quarantine and the alternate-exchange argument', async () => {
+      const scanner = new ClientWithUnroutedExchange();
+
+      await scanner.initialize();
+
+      expect(broker.channel.assertedExchanges).toEqual([
+        { name: 'blockchain.events.unrouted', type: 'fanout', options: { durable: true } },
+        {
+          name: 'blockchain.events',
+          type: 'direct',
+          options: { durable: true, arguments: { 'alternate-exchange': 'blockchain.events.unrouted' } },
+        },
+      ]);
+      expect(broker.channel.assertedQueues).toEqual([
+        { name: 'blockchain.events.unrouted', options: { durable: true } },
+      ]);
+      expect(broker.channel.bindings).toEqual([
+        { queue: 'blockchain.events.unrouted', exchange: 'blockchain.events.unrouted', routingKey: '' },
+      ]);
+
+      await scanner.disconnect();
+    });
+
+    test('an exchange without allowUnrouted declares no quarantine and no arguments', async () => {
+      const signer = new ClientWithQueueArguments();
+
+      await signer.initialize();
+
+      expect(broker.channel.assertedExchanges).toEqual([
+        { name: 'sign.exchange', type: 'direct', options: { durable: true } },
+      ]);
+      expect(broker.channel.assertedQueues.map((queue) => queue.name)).not.toContain('sign.exchange.unrouted');
+      expect(broker.channel.bindings.every((binding) => binding.exchange === 'sign.exchange')).toBe(true);
+
+      await signer.disconnect();
     });
 
     test('an empty topology declares nothing', async () => {

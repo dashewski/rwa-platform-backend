@@ -1,5 +1,6 @@
 import { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 
+
 export class RabbitMQClient extends BaseRabbitMQClient {
   constructor(uri: string) {
     super(uri, 'blockchain-scanner');
@@ -8,7 +9,11 @@ export class RabbitMQClient extends BaseRabbitMQClient {
   getTopologyDefinition() {
     return {
       exchanges: {
-        'blockchain.events': { type: 'direct', options: { durable: true } },
+        'blockchain.events': { 
+          type: 'direct', 
+          options: { durable: true }, 
+          allowUnrouted: true 
+        },
       },
       queues: {},
     } as const;

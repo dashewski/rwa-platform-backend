@@ -30,7 +30,9 @@ const routing = (
 
 describe('ai-evaluator RabbitMQ topology', () => {
   test('declares the evaluation exchange and its own requests queue', () => {
-    expect(topology.exchanges).toEqual({ evaluation: { type: 'direct', options: { durable: true } } });
+    expect(topology.exchanges).toEqual({
+      evaluation: { type: 'direct', options: { durable: true }, allowUnrouted: false },
+    });
     expect(Object.keys(topology.queues)).toEqual(['evaluation.requests']);
     expect(topology.queues['evaluation.requests'].bindings).toEqual({
       evaluation: ['evaluatePool', 'evaluateBusiness'],

@@ -8,7 +8,11 @@ export class RabbitMQClient extends BaseRabbitMQClient {
   getTopologyDefinition() {
     return {
       exchanges: {
-        'sign.exchange': { type: 'direct', options: { durable: true } },
+        'sign.exchange': { 
+          type: 'direct', 
+          options: { durable: true }, 
+          allowUnrouted: false 
+        },
       },
       queues: {
         [`sign.requests.${this.channelName}`]: {

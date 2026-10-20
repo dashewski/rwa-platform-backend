@@ -92,7 +92,7 @@ class TestClient extends BaseRabbitMQClient {
   }
 }
 
-type Handler = (payload: any) => Promise<void>;
+type Handler = (payload: any, commitInbox: () => Promise<void>) => Promise<void>;
 
 class TestInboxDaemon extends BaseInboxConsumerDaemon<TestClient> {
   constructor(client: TestClient, consumerService: InboxConsumerService, handler: Handler) {
@@ -128,7 +128,7 @@ describe('inbox + outbox over the real stack', () => {
     raw = { connection, channel };
 
     outbox = new OutboxPublisherService(client, new OutboxPublisherMessageRepository());
-    inbox = new InboxConsumerService(new InboxConsumerMessageRepository(), 10, 20);
+    inbox = new InboxConsumerService(new InboxConsumerMessageRepository());
   });
 
   beforeEach(async () => {
@@ -224,14 +224,19 @@ describe('inbox + outbox over the real stack', () => {
 
   test('a retry inside the same delivery applies the effect exactly once', async () => {
     let calls = 0;
-    await startDaemon(async () => {
+    await startDaemon(async (_payload, commitInbox) => {
       calls += 1;
       if (calls === 1) throw new Error('first attempt fails');
+      await commitInbox();
     });
 
     await client.publish(EXCHANGE, 'task', { n: 5 }, { messageId: 'io-inbox-retry' });
 
     await waitFor(() => calls === 2, 20_000);
+    await waitFor(
+      async () => (await InboxConsumerMessageEntity.countDocuments({ messageId: 'io-inbox-retry' })) === 1,
+      20_000,
+    );
 
     expect(await InboxConsumerMessageEntity.countDocuments({ messageId: 'io-inbox-retry' })).toBe(1);
     expect((await raw.channel.checkQueue(QUEUE)).messageCount).toBe(0);
@@ -239,8 +244,9 @@ describe('inbox + outbox over the real stack', () => {
 
   test('a duplicate delivery is acked without running the handler again', async () => {
     let calls = 0;
-    await startDaemon(async () => {
+    await startDaemon(async (_payload, commitInbox) => {
       calls += 1;
+      await commitInbox();
     });
 
     await client.publish(EXCHANGE, 'task', { n: 6 }, { messageId: 'io-inbox-dup' });

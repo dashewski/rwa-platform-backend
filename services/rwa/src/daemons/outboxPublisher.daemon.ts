@@ -5,11 +5,6 @@ import type { RabbitMQClient } from '../clients/rabbitmq.client';
 export class OutboxPublisherDaemon extends BaseOutboxPublisherDaemon<RabbitMQClient> {
   constructor(publisherService: OutboxPublisherService) {
     super(publisherService, 500, {
-      'blockchain.events': {
-        isSync: false,
-        concurrency: 5,
-        maxAttempts: 10,
-      },
       evaluation: {
         isSync: false,
         concurrency: 5,

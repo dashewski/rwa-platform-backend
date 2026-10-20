@@ -17,7 +17,11 @@ describe('dao RabbitMQ topology', () => {
   test('consumes a single queue of the blockchain events exchange', () => {
     expect(Object.keys(topology.queues)).toEqual(['blockchain.events.dao']);
     expect(topology.exchanges).toEqual({
-      'blockchain.events': { type: 'direct', options: { durable: true } },
+      'blockchain.events': {
+        type: 'direct',
+        options: { durable: true },
+        allowUnrouted: true,
+      },
     });
   });
 

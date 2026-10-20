@@ -170,8 +170,9 @@ describe('scenario: signers-manager ↔ signers', () => {
 
     await waitFor(async () => (await SignatureEntity.countDocuments({ taskId })) === 3, 60_000);
 
-    const stored = await SignatureTask.findById(taskId).lean();
-    expect(stored?.completed).toBe(true);
+    const stored = await signatures.getSignatureTask(taskId);
+    expect(stored.completed).toBe(true);
+    expect(stored.signatures).toHaveLength(3);
 
     const signaturesList = await new SignatureRepository().findByTaskId(taskId);
     expect(signaturesList).toHaveLength(3);
@@ -201,16 +202,16 @@ describe('scenario: signers-manager ↔ signers', () => {
     expect(await SignatureEntity.countDocuments({ taskId })).toBe(3);
   }, 60_000);
 
-  test('a response for an already completed task is rejected and parked, not applied', async () => {
-    const outsider = Wallet.createRandom().address;
+  test('a duplicate response from a signer is rejected by the unique index and parked, not applied', async () => {
+    const duplicate = wallets[0].address;
 
     // the broker would add x-death itself; publish the count of a finished third cycle
     await signerClients[1].publish(
       EXCHANGE,
       'response',
-      { taskId, signer: outsider, hash: innerHash, signature: '0xdeadbeef' },
+      { taskId, signer: duplicate, hash: innerHash, signature: '0xdeadbeef' },
       {
-        messageId: `${taskId}:${outsider}`,
+        messageId: `${taskId}:${duplicate}:dup`,
         headers: { 'x-death': [{ queue: 'sign.responses.retry', reason: 'expired', count: 3 }] },
       } as never,
     );
@@ -219,7 +220,7 @@ describe('scenario: signers-manager ↔ signers', () => {
     await waitFor(async () => (await raw.channel.checkQueue(parked)).messageCount === 1, 60_000);
 
     expect(await SignatureEntity.countDocuments({ taskId })).toBe(3);
-    expect(await SignatureEntity.countDocuments({ taskId, signer: outsider })).toBe(0);
-    expect(await inboxModel('signers-manager').countDocuments({ messageId: `${taskId}:${outsider}` })).toBe(0);
+    expect(await SignatureEntity.countDocuments({ taskId, signer: duplicate })).toBe(1);
+    expect(await inboxModel('signers-manager').countDocuments({ messageId: `${taskId}:${duplicate}:dup` })).toBe(0);
   }, 120_000);
 });

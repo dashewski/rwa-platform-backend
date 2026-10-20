@@ -18,35 +18,6 @@ import { makeRestRequest } from "./utils/makeRestRequest";
 
 // ── Helpers ──────────────────────────────────────────
 
-async function pollRiskScore(id: string, token: string, timeoutMs = 120_000): Promise<number> {
-  const interval = 2_000;
-  for (let i = 0; i < timeoutMs / interval; i++) {
-    await new Promise((r) => setTimeout(r, interval));
-    const poll = await makeGraphQLRequest(GET_BUSINESS, { id }, token);
-    const score = poll.data?.getBusiness?.riskScore;
-    if (score != null) return score;
-  }
-  throw new Error(`riskScore did not appear within ${timeoutMs}ms for ${id}`);
-}
-
-async function pollEvaluation(parentId: string, token: string, timeoutMs = 120_000): Promise<any> {
-  const interval = 2_000;
-  for (let i = 0; i < timeoutMs / interval; i++) {
-    await new Promise((r) => setTimeout(r, interval));
-    const poll = await makeGraphQLRequest(
-      GET_EVALUATIONS,
-      { input: { filter: { parentId } } },
-      token,
-    );
-    const evals = poll.data?.getEvaluations;
-    if (evals && evals.length > 0) {
-      const completed = evals.find((e: any) => e.status !== "pending");
-      if (completed) return completed;
-    }
-  }
-  throw new Error(`Evaluation for ${parentId} did not complete within ${timeoutMs}ms`);
-}
-
 async function readDemoFile(subdir: string, fileName: string, mimeType: string): Promise<File> {
   const buf = await Bun.file(import.meta.dir + "/utils/demo_files/" + subdir + "/" + fileName).arrayBuffer();
   return new File([buf], fileName, { type: mimeType });
@@ -162,15 +133,23 @@ describe("Risk Score Evaluation", () => {
     expect(result.errors).toBeUndefined();
     expect(result.data.updateBusinessRiskScore.riskScoreEvaluationProcess).toBe(true);
 
-    const riskScore = await pollRiskScore(businessId, accessToken);
+    await new Promise((r) => setTimeout(r, 30_000));
+
+    const scoreRes = await makeGraphQLRequest(GET_BUSINESS, { id: businessId }, accessToken);
+    const riskScore = scoreRes.data.getBusiness.riskScore;
     console.log(`\n  [GOOD BUSINESS - Coffee Shop]  riskScore = ${riskScore}\n`);
 
     expect(riskScore).toBeGreaterThanOrEqual(1);
     expect(riskScore).toBeLessThanOrEqual(100);
     expect(riskScore).toBeLessThan(50);
 
-    const evaluation = await pollEvaluation(businessId, accessToken);
-    expect(evaluation.status).toBe("completed");
+    const evalsRes = await makeGraphQLRequest(
+      GET_EVALUATIONS,
+      { input: { filter: { parentId: businessId } } },
+      accessToken,
+    );
+    const evaluation = evalsRes.data.getEvaluations[0];
+    expect(evaluation.riskScore).toBe(riskScore);
     expect(evaluation.reasoning?.length).toBeGreaterThan(0);
     expect(evaluation.factors?.length).toBeGreaterThan(0);
   });
@@ -275,15 +254,23 @@ describe("Risk Score Evaluation", () => {
     expect(result.errors).toBeUndefined();
     expect(result.data.updateBusinessRiskScore.riskScoreEvaluationProcess).toBe(true);
 
-    const riskScore = await pollRiskScore(businessId, accessToken);
+    await new Promise((r) => setTimeout(r, 30_000));
+
+    const scoreRes = await makeGraphQLRequest(GET_BUSINESS, { id: businessId }, accessToken);
+    const riskScore = scoreRes.data.getBusiness.riskScore;
     console.log(`\n  [BAD BUSINESS - Crypto Pyramid]  riskScore = ${riskScore}\n`);
 
     expect(riskScore).toBeGreaterThanOrEqual(1);
     expect(riskScore).toBeLessThanOrEqual(100);
     expect(riskScore).toBeGreaterThan(50);
 
-    const evaluation = await pollEvaluation(businessId, accessToken);
-    expect(evaluation.status).toBe("completed");
+    const evalsRes = await makeGraphQLRequest(
+      GET_EVALUATIONS,
+      { input: { filter: { parentId: businessId } } },
+      accessToken,
+    );
+    const evaluation = evalsRes.data.getEvaluations[0];
+    expect(evaluation.riskScore).toBe(riskScore);
     expect(evaluation.reasoning?.length).toBeGreaterThan(0);
     expect(evaluation.factors?.length).toBeGreaterThan(0);
   });

@@ -27,10 +27,10 @@ describe('rwa RabbitMQ topology', () => {
     expect(Object.keys(topology.queues).sort()).toEqual(['blockchain.events.rwa', 'evaluation.results']);
   });
 
-  test('declares both exchanges as durable direct exchanges', () => {
+  test('declares only the evaluation exchange: blockchain.events belongs to the scanner', () => {
     expect(topology.exchanges).toEqual({
-      'blockchain.events': { type: 'direct', options: { durable: true } },
-      evaluation: { type: 'direct', options: { durable: true } },
+      evaluation: { type: 'direct', options: { durable: true }, allowUnrouted: false },
+      'blockchain.events': { type: 'direct', options: { durable: true }, allowUnrouted: true },
     });
   });
 

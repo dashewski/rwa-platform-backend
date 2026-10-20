@@ -17,7 +17,6 @@ export type FakeSignatureTaskDoc = {
   hash: string;
   requiredSignatures: number;
   expired: number;
-  completed: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -45,8 +44,6 @@ export function createFakeSignatureTaskRepository() {
       const now = Math.floor(Date.now() / 1000);
       const doc: FakeSignatureTaskDoc = {
         _id: new Types.ObjectId(),
-        // Schema default (the real model declares `default: false` for completed).
-        completed: false,
         createdAt: now,
         updatedAt: now,
         ...data,

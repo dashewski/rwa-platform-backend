@@ -7,7 +7,6 @@ export const GET_EVALUATION = `
       grandParentId
       ownerId
       ownerType
-      status
       riskScore
       reasoning
       factors {
@@ -39,7 +38,6 @@ export const GET_EVALUATIONS = `
       id
       entityType
       parentId
-      status
       riskScore
       reasoning
       factors {

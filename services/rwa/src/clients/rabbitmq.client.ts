@@ -8,8 +8,16 @@ export class RabbitMQClient extends BaseRabbitMQClient {
   getTopologyDefinition() {
     return {
       exchanges: {
-        'blockchain.events': { type: 'direct', options: { durable: true } },
-        evaluation: { type: 'direct', options: { durable: true } },
+        evaluation: {
+          type: 'direct',
+          options: { durable: true },
+          allowUnrouted: false,
+        },
+        'blockchain.events': {
+          type: 'direct',
+          options: { durable: true },
+          allowUnrouted: true,
+        },
       },
       queues: {
         'blockchain.events.rwa': {

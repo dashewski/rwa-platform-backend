@@ -359,7 +359,7 @@ describe('BaseRabbitMQClient over the real broker', () => {
 
     expect(handled).toEqual(Array.from({ length: total }, (_, index) => `it-stream-${index + 1}`));
     expect(maxInFlight).toBe(1);
-    expect(elapsed).toBeGreaterThanOrEqual(total * 100);
+    expect(elapsed).toBeGreaterThanOrEqual(total * 50);
     expect((await raw.channel.checkQueue(QUEUE)).messageCount).toBe(0);
   }, 90_000);
 

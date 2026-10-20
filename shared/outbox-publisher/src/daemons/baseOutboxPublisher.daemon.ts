@@ -9,13 +9,16 @@ export abstract class BaseOutboxPublisherDaemon<TRabbitMQClient extends BaseRabb
   constructor(
     private readonly publisherService: OutboxPublisherService,
     private readonly pollIntervalMs: number,
-    private readonly exchangesConfig: {
-      [E in keyof ReturnType<TRabbitMQClient['getTopologyDefinition']>['exchanges']]: {
-        isSync: boolean;
-        concurrency: number;
-        maxAttempts: number;
-      };
-    },
+    private readonly exchangesConfig: Partial<
+      Record<
+        keyof ReturnType<TRabbitMQClient['getTopologyDefinition']>['exchanges'],
+        {
+          isSync: boolean;
+          concurrency: number;
+          maxAttempts: number;
+        }
+      >
+    >,
   ) {}
 
   async initialize() {

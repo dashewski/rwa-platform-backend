@@ -84,7 +84,7 @@ export class SignaturesService {
       hash: task.hash,
       requiredSignatures: task.requiredSignatures,
       expired: task.expired,
-      completed: task.completed,
+      completed: false,
     };
   }
 
@@ -98,51 +98,22 @@ export class SignaturesService {
       taskId: data.taskId,
       signer: data.signer,
     });
-    // Verify task exists and not completed
+
     const task = await this.signatureTaskRepository.findById(data.taskId);
-    if (task.completed) {
-      throw new AppError({ message: 'Task already completed', statusCode: 409, code: 'CONFLICT' });
-    }
+
     if (task.expired && task.expired < Math.floor(Date.now() / 1000)) {
       throw new AppError({ message: 'Task expired', statusCode: 410, code: 'EXPIRED' });
     }
 
-    let signatureId = '';
-    let isCompleted = false;
-
     await mongoose.connection.transaction(async () => {
-      // Add signature
-      const signature = await this.signatureRepository.create({
+      await this.signatureRepository.create({
         taskId: data.taskId,
         signer: data.signer,
         signature: data.signature,
       });
 
-      signatureId = signature._id.toString();
-
-      // Check if we have enough signatures
-      const signaturesCount = await this.signatureRepository.countByTaskId(data.taskId);
-      isCompleted = signaturesCount >= task.requiredSignatures;
-
-      // Update task status if completed
-      if (isCompleted) {
-        await this.signatureTaskRepository.update(data.taskId, {
-          completed: true,
-        });
-      }
-
       await commitInbox();
     });
-
-    return {
-      signature: {
-        id: signatureId,
-        taskId: data.taskId,
-        signer: data.signer,
-        signature: data.signature,
-      },
-      isCompleted,
-    };
   }
 
   /**
@@ -159,7 +130,8 @@ export class SignaturesService {
     });
     const task = await this.signatureTaskRepository.findById(taskId);
 
-    let signatures = task.completed ? await this.signatureRepository.findByTaskId(taskId) : undefined;
+    const signatures = await this.signatureRepository.findByTaskId(taskId);
+    const completed = task.requiredSignatures <= signatures.length
 
     return {
       id: task._id.toString(),
@@ -168,7 +140,7 @@ export class SignaturesService {
       hash: task.hash,
       requiredSignatures: task.requiredSignatures,
       expired: task.expired,
-      completed: task.completed,
+      completed: completed,
       signatures: signatures?.map((sig) => ({
         signer: sig.signer,
         signature: sig.signature,

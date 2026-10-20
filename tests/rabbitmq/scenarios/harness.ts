@@ -209,6 +209,9 @@ export function recorder(): Recorder & Record<string, any> {
 
       return async (...args: any[]) => {
         calls.push({ method: String(property), args });
+
+        const commitInbox = args.find((argument) => typeof argument === 'function');
+        if (commitInbox) await commitInbox();
       };
     },
   }) as Recorder & Record<string, any>;
@@ -231,7 +234,7 @@ export function createInboxService(name: string): InboxConsumerService {
     mongoose.models[modelName] ??
     mongoose.model(modelName, InboxConsumerMessageEntity.schema, collectionName);
 
-  return new InboxConsumerService(new InboxConsumerMessageRepository(model as never), 10, 20);
+  return new InboxConsumerService(new InboxConsumerMessageRepository(model as never));
 }
 
 /** The marker model of a consumer created by createInboxService(), for assertions. */
@@ -266,6 +269,9 @@ export async function deleteScopedTopology(
   }
 
   for (const exchange of Object.keys(scoped.exchanges)) {
+    // allowUnrouted makes the base client declare <exchange>.unrouted (fanout + queue)
+    await channel.deleteQueue(`${exchange}.unrouted`).catch(() => undefined);
+    await channel.deleteExchange(`${exchange}.unrouted`).catch(() => undefined);
     await channel.deleteExchange(exchange).catch(() => undefined);
   }
 }

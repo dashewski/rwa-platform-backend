@@ -151,17 +151,6 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
     expect(signatures.create).toHaveBeenCalledTimes(0);
   });
 
-  test('addSignature: rejects a signature for a task that is already completed', async () => {
-    const task = await service.createTask({ ...TASK, requiredSignatures: 1 });
-    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }); // completes the task
-
-    await expect(
-      addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 }),
-    ).rejects.toMatchObject({ statusCode: 409, code: 'CONFLICT' });
-
-    expect(signatures.create).toHaveBeenCalledTimes(1);
-  });
-
   test('addSignature: rejects a signature for an expired task', async () => {
     // createTask itself never validates that `expired` lies in the future — a
     // retry may race with the deadline and the contract decides for real.
@@ -179,16 +168,15 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
     // with expired: 0 skips the expiry check entirely instead of being rejected.
     const task = await service.createTask({ ...TASK, expired: 0 });
 
-    const result = await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
-    expect(result.isCompleted).toBe(false);
     expect(signatures.create).toHaveBeenCalledTimes(1);
   });
 
-  test('addSignature: forwards the payload, counts signatures and leaves the task open below the threshold', async () => {
+  test('addSignature: stores the signature without touching the task document', async () => {
     const task = await service.createTask(TASK); // requires 2 signatures
 
-    const result = await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
     expect(signatures.create).toHaveBeenCalledTimes(1);
     expect(signatures.create).toHaveBeenCalledWith({
@@ -196,30 +184,22 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
       signer: SIGNER_1,
       signature: SIGNATURE_1,
     });
-    expect(signatures.countByTaskId).toHaveBeenCalledWith(task.id);
-    expect(tasks.update).toHaveBeenCalledTimes(0); // the task is only written when it flips to completed
 
-    expect(result.isCompleted).toBe(false);
-    expect(result.signature).toMatchObject({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
-    expect(typeof result.signature.id).toBe('string');
-    expect(result.signature.id).toHaveLength(24);
-    expect(result.signature).not.toHaveProperty('_id');
-    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    expect(tasks.store.get(task.id)).not.toHaveProperty('completed');
   });
 
-  test('addSignature: flips the task to completed once the threshold is reached', async () => {
+  test('getSignatureTask: reports the task as completed once the threshold is reached', async () => {
     const task = await service.createTask(TASK); // requires 2 signatures
     await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 });
 
-    const result = await addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 });
+    const result = await service.getSignatureTask(task.id);
 
-    expect(result.isCompleted).toBe(true);
-    expect(tasks.update).toHaveBeenCalledTimes(1);
-    expect(tasks.update).toHaveBeenCalledWith(task.id, { completed: true });
-    expect(tasks.store.get(task.id)?.completed).toBe(true);
+    expect(result.completed).toBe(true);
+    expect(result.signatures).toHaveLength(2);
   });
 
-  test('getSignatureTask: hides signatures while the task is still open', async () => {
+  test('getSignatureTask: an open task carries no signatures yet', async () => {
     const task = await service.createTask(TASK);
 
     const result = await service.getSignatureTask(task.id);
@@ -231,8 +211,8 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
       expired: EXPIRED_FUTURE,
       completed: false,
     });
-    expect(result.signatures).toBeUndefined();
-    expect(signatures.findByTaskId).toHaveBeenCalledTimes(0);
+    expect(result.signatures).toEqual([]);
+    expect(signatures.findByTaskId).toHaveBeenCalledTimes(1);
     expect(result).not.toHaveProperty('_id');
   });
 

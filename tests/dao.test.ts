@@ -193,7 +193,7 @@ describe("DAO Flow", () => {
             await (await massGovernance.vote(proposalId, true, `Mass support vote #${i}`)).wait();
         }
 
-        await new Promise(resolve => setTimeout(resolve, 15000));
+        await new Promise(resolve => setTimeout(resolve, 60000));
     }); // the full happy path (faucet + ~50 txs + indexing waits) needs minutes
 
     test("should get staking records", async () => {
@@ -332,7 +332,7 @@ describe("DAO Flow", () => {
         "function updateTimelockDelay(uint256 newDelay) external"
     ];
 
-    const indexWait = () => new Promise((resolve) => setTimeout(resolve, 15000));
+    const indexWait = () => new Promise((resolve) => setTimeout(resolve, 30000));
 
     async function waitForChainTime(targetTs: number, timeoutMs = 300000): Promise<void> {
         const startedAt = Date.now();
@@ -594,7 +594,7 @@ describe("DAO Flow", () => {
         }
         const gov10 = new ethers.Contract(GOVERNANCE_ADDRESS, GovernanceABI, wallet10);
         await (await gov10.vote(s6Id, false, "S6 tipping against")).wait();
-        await indexWait();
+        await indexWait(30000);
 
         const result = await makeGraphQLRequest(GET_PROPOSALS, {
             input: { filter: { proposalId: { $eq: s6Id } } }

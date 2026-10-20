@@ -94,7 +94,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
     await evaluatorClient.initialize();
     await rwaClient.initialize();
 
-    const inbox = new InboxConsumerService(new InboxConsumerMessageRepository(), 10, 20);
+    const inbox = new InboxConsumerService(new InboxConsumerMessageRepository());
     daemon = new RwaInbox(rwaClient as never, inbox, businessService as never, poolService as never);
     await daemon.initialize();
 
@@ -102,13 +102,6 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
 
     risk = new RiskEvaluationService(
       new EvaluationRepository(),
-      {
-        enqueue: async () => undefined,
-        releaseProcessing: async () => undefined,
-        claimNext: async () => null,
-        markDone: async () => undefined,
-        markAttemptFailed: async () => null,
-      } as never,
       openRouter as never,
       eden.rwaClient as never,
       eden.documentsClient as never,
@@ -151,7 +144,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
     // skipped and the only completion is the risk score itself
     openRouter.queueJsonResponse({ riskScore: 42, reasoning: 'looks fine', factors: [] });
 
-    await risk.evaluateBusiness({ businessId: BUSINESS_ID, ...OWNER });
+    await risk.evaluateBusiness({ businessId: BUSINESS_ID, ...OWNER }, async () => undefined);
 
     const evaluations = await EvaluationEntity.find({ parentId: BUSINESS_ID }).lean();
     expect(evaluations).toHaveLength(1);
@@ -226,7 +219,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
         throw new Error('cannot apply the result');
       },
     };
-    const failingInbox = new InboxConsumerService(new InboxConsumerMessageRepository(), 10, 20);
+    const failingInbox = new InboxConsumerService(new InboxConsumerMessageRepository());
     daemon = new RwaInbox(rwaClient as never, failingInbox, failingBusiness as never, poolService as never);
     await daemon.initialize();
 

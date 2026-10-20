@@ -36,7 +36,7 @@ describe('signer RabbitMQ topology', () => {
   test('declares one durable queue named after the signer, bound to sign.exchange with the task key', () => {
     expect(Object.keys(first.topology.queues)).toEqual(['sign.requests.signer-1']);
     expect(first.topology.exchanges).toEqual({
-      'sign.exchange': { type: 'direct', options: { durable: true } },
+      'sign.exchange': { type: 'direct', options: { durable: true }, allowUnrouted: false },
     });
     expect(first.topology.queues['sign.requests.signer-1'].bindings).toEqual({ 'sign.exchange': ['task'] });
   });
