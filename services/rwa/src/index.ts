@@ -12,7 +12,6 @@ const app = await withTraceAsync('rwa.init.main', async () => {
     String(process.env.OPENROUTER_MODEL),
     String(process.env.RABBITMQ_URL),
     String(process.env.SIGNERS_MANAGER_URL),
-    String(process.env.AI_EVALUATOR_URL),
     [
       {
         chainId: '97',

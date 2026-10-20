@@ -26,7 +26,7 @@ export const createServicesPlugin = (
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'loyalty.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
@@ -36,7 +36,7 @@ export const createServicesPlugin = (
       .use(repositoriesPlugin)
       .use(clientsPlugin)
       .decorate('loyaltyService', loyaltyService)
-      .decorate('inboxConsumer', inboxConsumer),
+      .decorate('inboxConsumerService', inboxConsumerService),
   );
 
   return plugin;

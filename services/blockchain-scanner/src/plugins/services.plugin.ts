@@ -12,7 +12,7 @@ export const createServicesPlugin = (
 ) => {
   const rabbitMQClient = clientsPlugin.decorator.rabbitMQClient;
 
-  const outboxPublisher = withTraceSync(
+  const outboxPublisherService = withTraceSync(
     'blockchain-scanner.init.services.outbox_publisher',
     () => new OutboxPublisherService(rabbitMQClient, repositoriesPlugin.decorator.outboxPublisherMessageRepository),
   );
@@ -23,7 +23,7 @@ export const createServicesPlugin = (
       new BlockchainScannerService(
         repositoriesPlugin.decorator.eventRepository,
         repositoriesPlugin.decorator.scannerStateRepository,
-        outboxPublisher,
+        outboxPublisherService,
         rabbitMQClient.getExchange('blockchain.events'),
         chainId,
       ),
@@ -33,7 +33,7 @@ export const createServicesPlugin = (
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
-      .decorate('outboxPublisher', outboxPublisher)
+      .decorate('outboxPublisherService', outboxPublisherService)
       .decorate('blockchainScannerService', blockchainScannerService),
   );
 

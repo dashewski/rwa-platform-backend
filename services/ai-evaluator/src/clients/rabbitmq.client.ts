@@ -10,7 +10,16 @@ export class RabbitMQClient extends BaseRabbitMQClient {
       exchanges: {
         evaluation: { type: 'direct', options: { durable: true } },
       },
-      queues: {},
+      queues: {
+        'evaluation.requests': {
+          options: { durable: true },
+          deferAfterAttempts: 3,
+          parkAfterCycles: 3,
+          bindings: {
+            evaluation: ['evaluatePool', 'evaluateBusiness'],
+          },
+        },
+      },
     } as const;
   }
 }

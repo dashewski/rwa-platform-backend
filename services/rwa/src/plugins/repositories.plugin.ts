@@ -4,6 +4,7 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { BusinessRepository } from '../repositories/business.repository';
 import { PoolRepository } from '../repositories/pool.repository';
 import { InboxConsumerMessageRepository } from '@shared/inbox-consumer';
+import { OutboxPublisherMessageRepository } from '@shared/outbox-publisher';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createRepositoriesPlugin = async (mongoUri: string) => {
@@ -14,6 +15,11 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
   const inboxConsumerMessageRepository = withTraceSync(
     'rwa.init.repositories.inbox_consumer_message',
     () => new InboxConsumerMessageRepository(),
+  );
+
+  const outboxPublisherMessageRepository = withTraceSync(
+    'rwa.init.repositories.outbox_publisher_message',
+    () => new OutboxPublisherMessageRepository(),
   );
 
   await withTraceAsync('rwa.init.repositories_plugin.mongoose', async (ctx) => {
@@ -30,6 +36,7 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
       .decorate('businessRepository', businessRepository)
       .decorate('poolRepository', poolRepository)
       .decorate('inboxConsumerMessageRepository', inboxConsumerMessageRepository)
+      .decorate('outboxPublisherMessageRepository', outboxPublisherMessageRepository)
       .onStop(async () => {
         await withTraceAsync('rwa.stop.repositories_plugin', async () => {
           logger.info('Disconnecting from MongoDB');

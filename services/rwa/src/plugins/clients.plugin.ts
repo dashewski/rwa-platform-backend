@@ -3,7 +3,6 @@ import { OpenRouterClient } from '@shared/openrouter/client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { createSignersManagerClient } from '../clients/eden.clients';
-import { AiEvaluatorClient } from '../clients/aiEvaluator.client';
 import { RedisEventsClient } from '@shared/redis-events/src/redis-events.client';
 import { PoolEventsClient } from '../clients/poolEvents.client';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
@@ -15,13 +14,10 @@ export const createClientsPlugin = async (
   openRouterBaseUrl: string,
   rabbitMqUri: string,
   signersManagerUrl: string,
-  aiEvaluatorUrl: string,
 ) => {
   const signersManagerClient = withTraceSync('rwa.init.clients.signers_manager', () =>
     createSignersManagerClient(signersManagerUrl),
   );
-
-  const aiEvaluatorClient = withTraceSync('rwa.init.clients.ai_evaluator', () => new AiEvaluatorClient(aiEvaluatorUrl));
 
   const redisEventsClient = withTraceSync(
     'rwa.init.clients.redis_events',
@@ -46,7 +42,6 @@ export const createClientsPlugin = async (
   const plugin = withTraceSync('rwa.init.clients.plugin', () =>
     new Elysia({ name: 'Clients' })
       .decorate('signersManagerClient', signersManagerClient)
-      .decorate('aiEvaluatorClient', aiEvaluatorClient)
       .decorate('redisEventsClient', redisEventsClient)
       .decorate('poolEventsClient', poolEventsClient)
       .decorate('openRouterClient', openRouterClient)

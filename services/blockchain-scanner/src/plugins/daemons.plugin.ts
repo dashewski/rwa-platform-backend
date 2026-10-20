@@ -19,7 +19,7 @@ export const createDaemonsPlugin = async (
 ) => {
   const outboxPublisherDaemon = withTraceSync(
     'blockchain-scanner.init.daemons.outbox_publisher',
-    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
+    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisherService),
   );
 
   const blockchainScanner = withTraceSync(

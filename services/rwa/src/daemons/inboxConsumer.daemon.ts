@@ -16,56 +16,56 @@ export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient>
         prefetch: 1,
         isSync: true,
         handlers: {
-          RWA_Deployed: async (event) => {
-            await this.businessService.syncAfterDeployment(event);
+          RWA_Deployed: async (event, commitInbox) => {
+            await this.businessService.syncAfterDeployment(event, commitInbox);
           },
-          RWA_PausedStateChanged: async (event) => {
-            await this.businessService.syncPausedState(event);
+          RWA_PausedStateChanged: async (event, commitInbox) => {
+            await this.businessService.syncPausedState(event, commitInbox);
           },
-          Pool_Deployed: async (event) => {
-            await this.poolService.syncPoolAfterDeployment(event);
+          Pool_Deployed: async (event, commitInbox) => {
+            await this.poolService.syncPoolAfterDeployment(event, commitInbox);
           },
-          Pool_BonusWithdrawn: async (event) => {
-            await this.poolService.syncPoolBonusWithdrawn(event);
+          Pool_BonusWithdrawn: async (event, commitInbox) => {
+            await this.poolService.syncPoolBonusWithdrawn(event, commitInbox);
           },
-          Pool_AwaitingRwaAmountUpdated: async (event) => {
-            await this.poolService.syncPoolAwaitingRwaAmount(event);
+          Pool_AwaitingRwaAmountUpdated: async (event, commitInbox) => {
+            await this.poolService.syncPoolAwaitingRwaAmount(event, commitInbox);
           },
-          Pool_FundsFullyReturned: async (event) => {
-            await this.poolService.syncPoolFundsFullyReturned(event);
+          Pool_FundsFullyReturned: async (event, commitInbox) => {
+            await this.poolService.syncPoolFundsFullyReturned(event, commitInbox);
           },
-          Pool_IncomingReturnSummary: async (event) => {
-            await this.poolService.syncPoolIncomingReturnSummary(event);
+          Pool_IncomingReturnSummary: async (event, commitInbox) => {
+            await this.poolService.syncPoolIncomingReturnSummary(event, commitInbox);
           },
-          Pool_IncomingTrancheUpdate: async (event) => {
-            await this.poolService.syncPoolIncomingTrancheUpdate(event);
+          Pool_IncomingTrancheUpdate: async (event, commitInbox) => {
+            await this.poolService.syncPoolIncomingTrancheUpdate(event, commitInbox);
           },
-          Pool_OutgoingClaimSummary: async (event) => {
-            await this.poolService.syncPoolOutgoingClaimSummary(event);
+          Pool_OutgoingClaimSummary: async (event, commitInbox) => {
+            await this.poolService.syncPoolOutgoingClaimSummary(event, commitInbox);
           },
-          Pool_OutgoingTrancheClaimed: async (event) => {
-            await this.poolService.syncPoolOutgoingTrancheClaimed(event);
+          Pool_OutgoingTrancheClaimed: async (event, commitInbox) => {
+            await this.poolService.syncPoolOutgoingTrancheClaimed(event, commitInbox);
           },
-          Pool_PausedStateChanged: async (event) => {
-            await this.poolService.syncPoolPausedState(event);
+          Pool_PausedStateChanged: async (event, commitInbox) => {
+            await this.poolService.syncPoolPausedState(event, commitInbox);
           },
-          Pool_ReservesUpdated: async (event) => {
-            await this.poolService.syncPoolReserves(event);
+          Pool_ReservesUpdated: async (event, commitInbox) => {
+            await this.poolService.syncPoolReserves(event, commitInbox);
           },
-          Pool_TargetReached: async (event) => {
-            await this.poolService.syncPoolTargetReached(event);
+          Pool_TargetReached: async (event, commitInbox) => {
+            await this.poolService.syncPoolTargetReached(event, commitInbox);
           },
         },
       },
       'evaluation.results': {
-        prefetch: 1,
-        isSync: true,
+        prefetch: 5,
+        isSync: false,
         handlers: {
-          poolResult: async (result) => {
-            await this.poolService.applyEvaluationResult(result);
+          poolResult: async (result, commitInbox) => {
+            await this.poolService.applyEvaluationResult(result, commitInbox);
           },
-          businessResult: async (result) => {
-            await this.businessService.applyEvaluationResult(result);
+          businessResult: async (result, commitInbox) => {
+            await this.businessService.applyEvaluationResult(result, commitInbox);
           },
         },
       },

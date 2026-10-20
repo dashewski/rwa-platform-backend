@@ -16,14 +16,14 @@ export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient>
         prefetch: 1,
         isSync: true,
         handlers: {
-          Pool_ReservesUpdated: async (event) => {
-            await this.chartsService.recordPriceData(event);
+          Pool_ReservesUpdated: async (event, commitInbox) => {
+            await this.chartsService.recordPriceData(event, commitInbox);
           },
-          Pool_RwaMinted: async (event) => {
-            await this.transactionsService.recordMint(event);
+          Pool_RwaMinted: async (event, commitInbox) => {
+            await this.transactionsService.recordMint(event, commitInbox);
           },
-          Pool_RwaBurned: async (event) => {
-            await this.transactionsService.recordBurn(event);
+          Pool_RwaBurned: async (event, commitInbox) => {
+            await this.transactionsService.recordBurn(event, commitInbox);
           },
         },
       },

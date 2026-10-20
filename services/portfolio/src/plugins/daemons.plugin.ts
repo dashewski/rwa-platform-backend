@@ -11,7 +11,7 @@ export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, client
     () =>
       new InboxConsumerDaemon(
         clientsPlugin.decorator.rabbitMQClient,
-        servicesPlugin.decorator.inboxConsumer,
+        servicesPlugin.decorator.inboxConsumerService,
         servicesPlugin.decorator.portfolioService,
       ),
   );

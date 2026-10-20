@@ -75,16 +75,30 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
     restoreLogs();
   });
 
+  async function waitForSettled(settledBefore: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (rabbit.state.acked.length + rabbit.state.nacked.length > settledBefore) return;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    throw new Error('the delivery did not settle (no ack / nack)');
+  }
+
   async function deliver(message: ConsumeMessage): Promise<void> {
     const handler = rabbit.state.handlers.get(RESPONSES_QUEUE);
     if (!handler) throw new Error('the daemon never subscribed to the responses queue');
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length;
+
+    // The queue is parallel (isSync=false): the consumer handler returns before
+    // the delivery is acked, so the outcome has to be awaited separately.
     await handler(message);
+    await waitForSettled(settled);
   }
 
-  test('subscribes to sign.responses with prefetch 1', async () => {
+  test('subscribes to sign.responses with prefetch 5', async () => {
     await daemon.initialize();
 
-    expect(rabbit.state.consumedOptions).toEqual([{ queue: RESPONSES_QUEUE, options: { prefetch: 1 } }]);
+    expect(rabbit.state.consumedOptions).toEqual([{ queue: RESPONSES_QUEUE, options: { prefetch: 5 } }]);
     expect(logLines.some((line) => line.includes(`subscribed to ${RESPONSES_QUEUE}`))).toBe(true);
   });
 

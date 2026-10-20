@@ -14,8 +14,8 @@ export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient>
         prefetch: 1,
         isSync: true,
         handlers: {
-          RWA_Transfer: async (event) => {
-            await this.portfolioService.processTransfer(event);
+          RWA_Transfer: async (event, commitInbox) => {
+            await this.portfolioService.processTransfer(event, commitInbox);
           },
         },
       },

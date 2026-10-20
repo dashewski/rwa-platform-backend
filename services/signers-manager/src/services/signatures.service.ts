@@ -93,7 +93,7 @@ export class SignaturesService {
   @LogDecorator({
     args: (a) => ({ taskId: a[0]?.taskId, signer: a[0]?.signer }),
   })
-  async addSignature(data: { taskId: string; signer: string; signature: string }) {
+  async addSignature(data: { taskId: string; signer: string; signature: string }, commitInbox: () => Promise<void>) {
     setSpanAttributes({
       taskId: data.taskId,
       signer: data.signer,
@@ -107,30 +107,39 @@ export class SignaturesService {
       throw new AppError({ message: 'Task expired', statusCode: 410, code: 'EXPIRED' });
     }
 
-    // Add signature
-    const signature = await this.signatureRepository.create({
-      taskId: data.taskId,
-      signer: data.signer,
-      signature: data.signature,
-    });
+    let signatureId = '';
+    let isCompleted = false;
 
-    // Check if we have enough signatures
-    const signaturesCount = await this.signatureRepository.countByTaskId(data.taskId);
-    const isCompleted = signaturesCount >= task.requiredSignatures;
-
-    // Update task status if completed
-    if (isCompleted) {
-      await this.signatureTaskRepository.update(data.taskId, {
-        completed: true,
+    await mongoose.connection.transaction(async () => {
+      // Add signature
+      const signature = await this.signatureRepository.create({
+        taskId: data.taskId,
+        signer: data.signer,
+        signature: data.signature,
       });
-    }
+
+      signatureId = signature._id.toString();
+
+      // Check if we have enough signatures
+      const signaturesCount = await this.signatureRepository.countByTaskId(data.taskId);
+      isCompleted = signaturesCount >= task.requiredSignatures;
+
+      // Update task status if completed
+      if (isCompleted) {
+        await this.signatureTaskRepository.update(data.taskId, {
+          completed: true,
+        });
+      }
+
+      await commitInbox();
+    });
 
     return {
       signature: {
-        id: signature._id.toString(),
-        taskId: signature.taskId,
-        signer: signature.signer,
-        signature: signature.signature,
+        id: signatureId,
+        taskId: data.taskId,
+        signer: data.signer,
+        signature: data.signature,
       },
       isCompleted,
     };

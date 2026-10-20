@@ -16,7 +16,7 @@ type InboxEventRouting<TRabbitMQClient extends BaseRabbitMQClient> = {
       TopologyQueues<TRabbitMQClient>[Q]['bindings'][keyof TopologyQueues<TRabbitMQClient>[Q]['bindings']] extends readonly (infer K)[]
         ? Extract<K, string>
         : never,
-      (event: any) => Promise<void>
+      (event: any, commitInbox: () => Promise<void>) => Promise<void>
     >;
   };
 };
@@ -29,6 +29,8 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
     private readonly rabbitClient: TRabbitMQClient,
     private readonly consumerService: InboxConsumerService,
     private readonly eventRouting: InboxEventRouting<TRabbitMQClient>,
+    private readonly initialDelayMs: number = 500,
+    private readonly maxDelayMs: number = 30_000,
   ) {}
 
   @TraceDecorator()
@@ -94,17 +96,69 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
   }
 
   private async deliver(queueName: string, message: ConsumeMessage): Promise<void> {
-    const outcome = await this.consumerService.handle(
-      queueName,
-      message,
-      () => this.processMessage(queueName, message),
-      this.rabbitClient.getQueueDeferAfterAttempts(queueName),
-    );
+    const messageId = message.properties?.messageId;
+    const maxAttempts = this.rabbitClient.getQueueDeferAfterAttempts(queueName);
 
-    if (outcome === 'acked') {
+    // Fast path: the marker is already stored, so an earlier delivery has
+    // applied this message. It only shortens the duplicate handling — the race
+    // between two concurrent deliveries is still settled by the unique index
+    // inside commit().
+    if (messageId && (await this.isCommitted(queueName, messageId))) {
+      metrics.counter('inbox_consumer_duplicates_total', { queue: queueName });
+      logger.debug(`Inbox consumer "${queueName}": duplicate message skipped by the inbox`);
       await this.rabbitClient.ack(message);
       return;
     }
+
+    let lastError = '';
+    let delayMs = this.initialDelayMs;
+    let attempt = 1;
+
+    for (; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.processMessage(queueName, message);
+
+        metrics.counter('inbox_consumer_processed_total', { queue: queueName });
+        await this.rabbitClient.ack(message);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+
+        // The marker is written by the handler itself, at the end of its own
+        // transaction: an error plus a stored marker means the message has
+        // already been applied by an earlier (or concurrent) delivery.
+        if (messageId && (await this.isCommitted(queueName, messageId))) {
+          metrics.counter('inbox_consumer_duplicates_total', { queue: queueName });
+          logger.error(
+            `Inbox consumer "${queueName}": delivery failed with the inbox marker already stored ` +
+              `(a duplicate delivery, or a failure after the commit)`,
+            error,
+          );
+          await this.rabbitClient.ack(message);
+          return;
+        }
+
+        metrics.counter('inbox_consumer_retries_total', { queue: queueName });
+
+        const givingUp = attempt >= maxAttempts;
+        logger.error(
+          `Inbox consumer "${queueName}": attempt ${attempt}${Number.isFinite(maxAttempts) ? `/${maxAttempts}` : ''} failed` +
+            `${givingUp ? '; handing the message to the retry queue' : `; retrying in ${delayMs}ms`}`,
+          error,
+        );
+
+        if (givingUp) break;
+
+        await new Promise((r) => setTimeout(r, delayMs));
+        delayMs = Math.min(delayMs * 2, this.maxDelayMs);
+      }
+    }
+
+    metrics.counter('inbox_consumer_deferred_total', { queue: queueName });
+    logger.error(
+      `Inbox consumer "${queueName}": attempts exhausted (${attempt}) — the message goes to the retry queue; ` +
+        `last error: ${lastError}`,
+    );
 
     const parkAfterCycles = this.rabbitClient.getQueueParkAfterCycles(queueName);
     const cycles = this.getRetryCycles(message, queueName);
@@ -122,6 +176,17 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
       await this.rabbitClient.nack(message, false);
     } catch (error) {
       logger.error(`Inbox consumer "${queueName}": failed to hand the message to the retry queue`, error);
+    }
+  }
+
+  /** A failing read is not a duplicate: the delivery keeps its retries. */
+  private async isCommitted(queueName: string, messageId: string): Promise<boolean> {
+    try {
+      return await this.consumerService.isCommitted(messageId);
+    } catch (error) {
+      logger.error(`Inbox consumer "${queueName}": failed to read the inbox marker for "${messageId}"`, error);
+
+      return false;
     }
   }
 
@@ -167,9 +232,15 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
   }
 
   private async processMessage(queueName: string, message: ConsumeMessage): Promise<void> {
+    const messageId = message.properties?.messageId;
+
+    if (!messageId) {
+      throw new Error('the message has no messageId; the inbox cannot deduplicate it');
+    }
+
     const routingKey = message.fields.routingKey;
     const routing = this.eventRouting[queueName];
-    const handlers: Record<string, (event: any) => Promise<void>> = routing.handlers;
+    const handlers: Record<string, (event: any, commitInbox: () => Promise<void>) => Promise<void>> = routing.handlers;
     const handler = handlers[routingKey];
 
     if (!handler) {
@@ -192,6 +263,17 @@ export abstract class BaseInboxConsumerDaemon<TRabbitMQClient extends BaseRabbit
       throw new Error(`Inbox consumer "${queueName}": payload is not valid JSON`);
     }
 
-    await handler(payload);
+    let committed = false;
+
+    const commitInbox = async (): Promise<void> => {
+      await this.consumerService.commit(messageId);
+      committed = true;
+    };
+
+    await handler(payload, commitInbox);
+
+    if (!committed) {
+      throw new Error('the handler returned without committing the inbox marker');
+    }
   }
 }

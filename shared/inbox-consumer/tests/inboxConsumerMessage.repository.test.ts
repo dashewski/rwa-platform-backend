@@ -1,9 +1,11 @@
 /**
  * Unit tests for InboxConsumerMessageRepository (the dedup marker table).
  *
- * The repository is deliberately thin: it only inserts the marker and reports
- * whether the insert was new. The transaction and the process-wide ALS switch
- * live in InboxConsumerService, so nothing driver-level is needed here.
+ * The repository is deliberately thin: it only inserts the marker and lets the
+ * driver error through. The duplicate decision lives in InboxConsumerService:
+ * a write error inside a transaction aborts it on the server, so it must not be
+ * swallowed here. The transaction and the process-wide ALS switch also live in
+ * the service, so nothing driver-level is needed in this file.
  */
 import './setup';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -46,7 +48,9 @@ function createFakeModel() {
 type FakeModel = ReturnType<typeof createFakeModel>;
 
 function repoWith(model: FakeModel): InboxConsumerMessageRepository {
-  return new InboxConsumerMessageRepository(model as unknown as Model<unknown>);
+  return new InboxConsumerMessageRepository(
+    model as unknown as ConstructorParameters<typeof InboxConsumerMessageRepository>[0],
+  );
 }
 
 describe('InboxConsumerMessageRepository (unit, fake model)', () => {
@@ -58,26 +62,24 @@ describe('InboxConsumerMessageRepository (unit, fake model)', () => {
     repository = repoWith(model);
   });
 
-  test('the first insert reports "created"', async () => {
+  test('the first insert writes the marker and resolves', async () => {
     const created = await repository.create(MESSAGE_ID);
 
-    expect(created).toBe(true);
+    expect(created).toBeUndefined();
     expect(model.state.createCalls).toEqual([{ messageId: MESSAGE_ID }]);
     expect(model.state.markers.has(MESSAGE_ID)).toBe(true);
   });
 
-  test('a duplicate key error (code 11000) reports "already processed" instead of throwing', async () => {
+  test('a duplicate key error (code 11000) is rethrown, not turned into a boolean', async () => {
     await repository.create(MESSAGE_ID);
 
-    const created = await repository.create(MESSAGE_ID);
+    const failure = await repository.create(MESSAGE_ID).catch((error: { code?: number }) => error);
 
-    expect(created).toBe(false);
+    expect((failure as { code?: number }).code).toBe(11000);
     expect(model.state.createCalls).toHaveLength(2);
   });
 
-  test('a duplicate key error is not recognised when the code sits deeper in a cause chain', async () => {
-    // The repository checks `error.code` directly: a wrapped error is a real
-    // failure, not a duplicate — the service treats it as a failed delivery.
+  test('a duplicate key error is rethrown even when the code sits deeper in a cause chain', async () => {
     const wrapped = new Error('write failed', {
       cause: Object.assign(new Error('E11000 duplicate key'), { code: 11000 }),
     });

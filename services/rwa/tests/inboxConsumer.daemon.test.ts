@@ -179,18 +179,32 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     );
   });
 
+  async function waitForSettled(settledBefore: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (rabbit.state.acked.length + rabbit.state.nacked.length > settledBefore) return;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    throw new Error('the delivery did not settle (no ack / nack)');
+  }
+
   async function deliver(queue: string, routingKey: string, message: ConsumeMessage): Promise<void> {
     const handler = rabbit.state.handlers.get(queue);
     if (!handler) throw new Error(`the daemon never subscribed to ${queue}`);
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length;
+
+    // `evaluation.results` is parallel (isSync=false): the consumer handler
+    // returns before the delivery is acked, so the outcome is awaited separately.
     await handler(message);
+    await waitForSettled(settled);
   }
 
-  test('subscribes to both queues, with prefetch 1', async () => {
+  test('subscribes to both queues: blockchain with prefetch 1, results with prefetch 5', async () => {
     await daemon.initialize();
 
     expect(rabbit.state.consumed).toEqual([
       { queue: BLOCKCHAIN_QUEUE, options: { prefetch: 1 } },
-      { queue: RESULTS_QUEUE, options: { prefetch: 1 } },
+      { queue: RESULTS_QUEUE, options: { prefetch: 5 } },
     ]);
   });
 

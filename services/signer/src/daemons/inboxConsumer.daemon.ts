@@ -11,11 +11,11 @@ export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient>
   ) {
     super(rabbitClient, consumerService, {
       [`sign.requests.${rabbitClient.channelName}`]: {
-        prefetch: 1,
-        isSync: true,
+        prefetch: 5,
+        isSync: false,
         handlers: {
-          task: async (request) => {
-            await this.signatureService.signHash(request);
+          task: async (request, commitInbox) => {
+            await this.signatureService.signHash(request, commitInbox);
           },
         },
       },

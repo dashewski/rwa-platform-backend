@@ -14,20 +14,20 @@ export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient>
         prefetch: 1,
         isSync: true,
         handlers: {
-          Factory_CreateRWAFeeCollected: async (event) => {
-            await this.loyaltyService.processCreateRWAFeeCollected(event);
+          Factory_CreateRWAFeeCollected: async (event, commitInbox) => {
+            await this.loyaltyService.processCreateRWAFeeCollected(event, commitInbox);
           },
-          Factory_CreatePoolFeeCollected: async (event) => {
-            await this.loyaltyService.processCreatePoolFeeCollected(event);
+          Factory_CreatePoolFeeCollected: async (event, commitInbox) => {
+            await this.loyaltyService.processCreatePoolFeeCollected(event, commitInbox);
           },
-          Pool_RwaMinted: async (event) => {
-            await this.loyaltyService.processRwaMinted(event);
+          Pool_RwaMinted: async (event, commitInbox) => {
+            await this.loyaltyService.processRwaMinted(event, commitInbox);
           },
-          Pool_RwaBurned: async (event) => {
-            await this.loyaltyService.processRwaBurned(event);
+          Pool_RwaBurned: async (event, commitInbox) => {
+            await this.loyaltyService.processRwaBurned(event, commitInbox);
           },
-          ReferralTreasury_Withdrawn: async (event) => {
-            await this.loyaltyService.processReferralTreasuryWithdrawn(event);
+          ReferralTreasury_Withdrawn: async (event, commitInbox) => {
+            await this.loyaltyService.processReferralTreasuryWithdrawn(event, commitInbox);
           },
         },
       },

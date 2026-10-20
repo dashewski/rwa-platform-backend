@@ -22,6 +22,7 @@ type CreateOutcome = 'created' | 'duplicate' | 'fail';
 function stubTransaction() {
   const state = {
     calls: 0,
+    failures: 0,
     error: null as unknown,
     beforeRun: null as null | (() => Promise<void> | void),
   };
@@ -36,7 +37,12 @@ function stubTransaction() {
     if (state.beforeRun) await state.beforeRun();
     if (state.error) throw state.error;
 
-    return await fn();
+    try {
+      return await fn();
+    } catch (error) {
+      state.failures += 1;
+      throw error;
+    }
   };
 
   return {
@@ -61,14 +67,17 @@ function createFakeRepository() {
   const repository = {
     state,
 
-    create: mock(async (messageId: string): Promise<boolean> => {
+    create: mock(async (messageId: string): Promise<void> => {
       const outcome = nextOutcome();
       state.calls.push(messageId);
 
       if (outcome === 'fail') throw state.failError;
-      if (outcome === 'duplicate') return false;
-
-      return true;
+      if (outcome === 'duplicate') {
+        throw Object.assign(
+          new Error('E11000 duplicate key error collection: inboxconsumermessages index: messageId_1'),
+          { code: 11000 },
+        );
+      }
     }),
   };
 
@@ -156,8 +165,27 @@ describe('InboxConsumerService (unit, fake repository + stubbed transaction)', (
     expect(outcome).toBe('acked');
     expect(handlerRuns).toBe(0);
     expect(transaction.state.calls).toBe(1);
+    // Дубль не глушится внутри колбэка: сервер уже прервал транзакцию, поэтому
+    // ошибка обязана выйти наружу, иначе драйвер повторит коммит мёртвой
+    // транзакции и зациклит доставку.
+    expect(transaction.state.failures).toBe(1);
     expect(names()).toEqual(['inbox_consumer_duplicates_total']);
     expect(logLines.some((line) => line.includes('duplicate message skipped'))).toBe(true);
+  });
+
+  test('a duplicate key error from the handler is not treated as a duplicate delivery', async () => {
+    const outcome = await service.handle(
+      QUEUE,
+      makeMessage('Governance_VoteCast', {}),
+      async () => {
+        throw Object.assign(new Error('E11000 duplicate key error collection: charts.prices'), { code: 11000 });
+      },
+      2,
+    );
+
+    expect(outcome).toBe('deferred');
+    expect(countOf('inbox_consumer_duplicates_total')).toBe(0);
+    expect(countOf('inbox_consumer_retries_total')).toBe(2);
   });
 
   test('the handler runs in the same transaction as the marker insert', async () => {

@@ -18,7 +18,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin) => 
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'dao.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
@@ -27,7 +27,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin) => 
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .decorate('daoService', daoService)
-      .decorate('inboxConsumer', inboxConsumer),
+      .decorate('inboxConsumerService', inboxConsumerService),
   );
 
   return plugin;

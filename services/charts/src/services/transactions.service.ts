@@ -1,6 +1,7 @@
 import { AppError } from '@shared/errors/app-errors';
 import { PoolTransactionRepository } from '../repositories/poolTransaction.repository';
 import { PoolTransactionType } from '../models/shared/enums.model';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import { ChartEventsClient } from '../clients/redis.client';
 import type { BlockchainEvent } from '@shared/blockchain';
@@ -13,7 +14,9 @@ export class TransactionsService {
   constructor(
     private readonly poolTransactionRepository: PoolTransactionRepository,
     private readonly chartEventsClient: ChartEventsClient,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   @TraceDecorator()
   @MetricsDecorator()
@@ -32,16 +35,20 @@ export class TransactionsService {
       holdAmountPaid: string;
       feePaid: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
-    return await this.recordTransaction({
-      poolAddress: event.data.emittedFrom,
-      transactionType: PoolTransactionType.MINT,
-      userAddress: event.data.minter,
-      timestamp: event.timestamp,
-      rwaAmount: event.data.rwaAmountMinted,
-      holdAmount: event.data.holdAmountPaid,
-      holdFee: event.data.feePaid,
-    });
+    return await this.recordTransaction(
+      {
+        poolAddress: event.data.emittedFrom,
+        transactionType: PoolTransactionType.MINT,
+        userAddress: event.data.minter,
+        timestamp: event.timestamp,
+        rwaAmount: event.data.rwaAmountMinted,
+        holdAmount: event.data.holdAmountPaid,
+        holdFee: event.data.feePaid,
+      },
+      commitInbox,
+    );
   }
 
   @TraceDecorator()
@@ -63,18 +70,22 @@ export class TransactionsService {
       holdFeePaid: string;
       bonusFeePaid: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
-    return await this.recordTransaction({
-      poolAddress: event.data.emittedFrom,
-      transactionType: PoolTransactionType.BURN,
-      userAddress: event.data.burner,
-      timestamp: event.timestamp,
-      rwaAmount: event.data.rwaAmountBurned,
-      holdAmount: event.data.holdAmountReceived,
-      bonusAmount: event.data.bonusAmountReceived,
-      holdFee: event.data.holdFeePaid,
-      bonusFee: event.data.bonusFeePaid,
-    });
+    return await this.recordTransaction(
+      {
+        poolAddress: event.data.emittedFrom,
+        transactionType: PoolTransactionType.BURN,
+        userAddress: event.data.burner,
+        timestamp: event.timestamp,
+        rwaAmount: event.data.rwaAmountBurned,
+        holdAmount: event.data.holdAmountReceived,
+        bonusAmount: event.data.bonusAmountReceived,
+        holdFee: event.data.holdFeePaid,
+        bonusFee: event.data.bonusFeePaid,
+      },
+      commitInbox,
+    );
   }
 
   @TraceDecorator()
@@ -86,26 +97,35 @@ export class TransactionsService {
       userAddress: a[0].userAddress,
     }),
   })
-  private async recordTransaction(data: {
-    poolAddress: string;
-    transactionType: PoolTransactionType;
-    userAddress: string;
-    timestamp: number;
-    rwaAmount: string;
-    holdAmount: string;
-    bonusAmount?: string;
-    holdFee: string;
-    bonusFee?: string;
-  }) {
+  private async recordTransaction(
+    data: {
+      poolAddress: string;
+      transactionType: PoolTransactionType;
+      userAddress: string;
+      timestamp: number;
+      rwaAmount: string;
+      holdAmount: string;
+      bonusAmount?: string;
+      holdFee: string;
+      bonusFee?: string;
+    },
+    commitInbox: () => Promise<void>,
+  ) {
     setSpanAttributes({
       poolAddress: data.poolAddress,
       transactionType: data.transactionType,
       wallet: data.userAddress,
     });
-    const transaction = await this.poolTransactionRepository.create({
-      ...data,
-      bonusAmount: data.bonusAmount || '0',
-      bonusFee: data.bonusFee || '0',
+    const transaction = await mongoose.connection.transaction(async () => {
+      const created = await this.poolTransactionRepository.create({
+        ...data,
+        bonusAmount: data.bonusAmount || '0',
+        bonusFee: data.bonusFee || '0',
+      });
+
+      await commitInbox();
+
+      return created;
     });
 
     const output = {

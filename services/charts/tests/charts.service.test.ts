@@ -6,7 +6,8 @@
  * fake (tests/fakes/*.fake.ts), so these tests need no database, no Redis, no
  * broker and no network. Run with `bun test` from services/charts.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { ChartsService, type OhlcInterval } from '../src/services/charts.service';
 import { ChartEventsClient } from '../src/clients/redis.client';
 import type { PriceDataRepository } from '../src/repositories/priceData.repository';
@@ -54,12 +55,19 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   let redis: FakeRedisEventsClient;
   let chartEvents: ChartEventsClient;
   let service: ChartsService;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
 
   beforeEach(() => {
+    // The service writes the row and the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
     priceData = createFakePriceDataRepository();
     redis = createFakeRedisEventsClient();
     chartEvents = new ChartEventsClient(redis as unknown as RedisEventsClient);
     service = new ChartsService(priceData as unknown as PriceDataRepository, chartEvents);
+    commitInbox = mock(async (): Promise<void> => undefined);
   });
 
   /** Writes a price row straight into the fake repository. */
@@ -76,7 +84,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   }
 
   test('recordPriceData: computes the price, stores it and publishes to the pool channel', async () => {
-    const result = await service.recordPriceData({ ...PRICE_DATA });
+    const result = await service.recordPriceData({ ...PRICE_DATA }, commitInbox);
 
     expect(priceData.create).toHaveBeenCalledTimes(1);
     expect(priceData.create).toHaveBeenCalledWith({
@@ -122,10 +130,13 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   });
 
   test('recordPriceData: BigInt division truncates the stored price', async () => {
-    const result = await service.recordPriceData({
-      ...PRICE_DATA,
-      data: { ...PRICE_DATA.data, realHoldReserve: '1', virtualHoldReserve: '1000', virtualRwaReserve: '3' },
-    });
+    const result = await service.recordPriceData(
+      {
+        ...PRICE_DATA,
+        data: { ...PRICE_DATA.data, realHoldReserve: '1', virtualHoldReserve: '1000', virtualRwaReserve: '3' },
+      },
+      commitInbox,
+    );
 
     expect(result.price).toBe('333'); // 1001 / 3 truncates to 333
     expect(priceData.create).toHaveBeenCalledWith(expect.objectContaining({ price: '333' }));
@@ -138,7 +149,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
 
   test('recordPriceData: a zero virtualRwaReserve is rejected before any write or publish', async () => {
     await expect(
-      service.recordPriceData({ ...PRICE_DATA, data: { ...PRICE_DATA.data, virtualRwaReserve: '0' } }),
+      service.recordPriceData({ ...PRICE_DATA, data: { ...PRICE_DATA.data, virtualRwaReserve: '0' } }, commitInbox),
     ).rejects.toMatchObject({
       statusCode: 400,
       code: 'VALIDATION_ERROR',
@@ -152,7 +163,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
   test('recordPriceData: propagates a repository failure without publishing', async () => {
     priceData.create.mockRejectedValueOnce(new Error('db unavailable'));
 
-    await expect(service.recordPriceData({ ...PRICE_DATA })).rejects.toThrow('db unavailable');
+    await expect(service.recordPriceData({ ...PRICE_DATA }, commitInbox)).rejects.toThrow('db unavailable');
 
     expect(redis.publish).toHaveBeenCalledTimes(0);
   });
@@ -162,7 +173,7 @@ describe('ChartsService (unit, fake repository + fake redis client)', () => {
     // A publish failure therefore rejects the call while the entry stays stored.
     redis.publish.mockRejectedValueOnce(new Error('redis unavailable'));
 
-    await expect(service.recordPriceData({ ...PRICE_DATA })).rejects.toThrow('redis unavailable');
+    await expect(service.recordPriceData({ ...PRICE_DATA }, commitInbox)).rejects.toThrow('redis unavailable');
 
     expect(priceData.store.size).toBe(1);
   });

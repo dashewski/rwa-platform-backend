@@ -28,6 +28,8 @@ import {
 const OTHER_QUEUE = 'blockchain.events.other';
 
 type Handler = (event: any) => Promise<void>;
+/** The routing table is assembled from bun mocks, so their inspection API stays visible. */
+type HandlerMock = ReturnType<typeof mock<Handler>>;
 type Routing = Record<string, { prefetch: number; isSync: boolean; handlers: Record<string, Handler> }>;
 
 function sleep(ms: number): Promise<void> {
@@ -86,7 +88,7 @@ function restoreTelemetry(): void {
 describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
   let rabbit: FakeRabbitClient;
   let service: FakeConsumerService;
-  let handlers: Record<string, Handler>;
+  let handlers: Record<string, HandlerMock>;
   let routing: Routing;
   let daemon: TestInboxDaemon;
 

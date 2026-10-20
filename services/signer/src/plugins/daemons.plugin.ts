@@ -12,14 +12,14 @@ export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, client
     () =>
       new InboxConsumerDaemon(
         clientsPlugin.decorator.rabbitMQClient,
-        servicesPlugin.decorator.inboxConsumer,
+        servicesPlugin.decorator.inboxConsumerService,
         servicesPlugin.decorator.signatureService,
       ),
   );
 
   const outboxPublisherDaemon = withTraceSync(
     'signer.init.daemons.outbox_publisher',
-    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
+    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisherService),
   );
 
   await withTraceAsync('signer.init.daemons.initialize', async () => {

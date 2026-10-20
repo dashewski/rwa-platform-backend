@@ -11,7 +11,7 @@ export const createServicesPlugin = (
   clientsPlugin: ClientsPlugin,
   privateKey: string,
 ) => {
-  const outboxPublisher = withTraceSync(
+  const outboxPublisherService = withTraceSync(
     'signer.init.services.outbox_publisher',
     () =>
       new OutboxPublisherService(
@@ -20,22 +20,22 @@ export const createServicesPlugin = (
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'signer.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const signatureService = withTraceSync(
     'signer.init.services.signature',
-    () => new SignatureService(outboxPublisher, privateKey),
+    () => new SignatureService(outboxPublisherService, privateKey),
   );
 
   const plugin = withTraceSync('signer.init.services.plugin', () =>
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
-      .decorate('outboxPublisher', outboxPublisher)
-      .decorate('inboxConsumer', inboxConsumer)
+      .decorate('outboxPublisherService', outboxPublisherService)
+      .decorate('inboxConsumerService', inboxConsumerService)
       .decorate('signatureService', signatureService),
   );
 
