@@ -6,7 +6,7 @@
  * no database, no broker and no network. Run with `bun test` from
  * services/signers-manager.
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import mongoose from 'mongoose';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
@@ -54,6 +54,8 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
   let tasks: FakeSignatureTaskRepository;
   let outbox: FakeOutbox;
   let service: SignaturesService;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
+  let addSignature: (data: any) => ReturnType<SignaturesService['addSignature']>;
 
   let originalTransaction: unknown;
 
@@ -73,6 +75,13 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
       tasks as unknown as SignatureTaskRepository,
       outbox as unknown as OutboxPublisherService,
     );
+    // The service writes and commits the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
+    addSignature = (data: any) => service.addSignature(data, commitInbox);
   });
 
   afterEach(() => {
@@ -136,7 +145,7 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
 
   test('addSignature: propagates NOT_FOUND for an unknown taskId and stores nothing', async () => {
     await expect(
-      service.addSignature({ taskId: 'unknown-id', signer: SIGNER_1, signature: SIGNATURE_1 }),
+      addSignature({ taskId: 'unknown-id', signer: SIGNER_1, signature: SIGNATURE_1 }),
     ).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
 
     expect(signatures.create).toHaveBeenCalledTimes(0);
@@ -144,10 +153,10 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
 
   test('addSignature: rejects a signature for a task that is already completed', async () => {
     const task = await service.createTask({ ...TASK, requiredSignatures: 1 });
-    await service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }); // completes the task
+    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }); // completes the task
 
     await expect(
-      service.addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 }),
+      addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 }),
     ).rejects.toMatchObject({ statusCode: 409, code: 'CONFLICT' });
 
     expect(signatures.create).toHaveBeenCalledTimes(1);
@@ -159,7 +168,7 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
     const task = await service.createTask({ ...TASK, expired: EXPIRED_PAST });
 
     await expect(
-      service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }),
+      addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }),
     ).rejects.toMatchObject({ statusCode: 410, code: 'EXPIRED' });
 
     expect(signatures.create).toHaveBeenCalledTimes(0);
@@ -170,7 +179,7 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
     // with expired: 0 skips the expiry check entirely instead of being rejected.
     const task = await service.createTask({ ...TASK, expired: 0 });
 
-    const result = await service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    const result = await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
     expect(result.isCompleted).toBe(false);
     expect(signatures.create).toHaveBeenCalledTimes(1);
@@ -179,7 +188,7 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
   test('addSignature: forwards the payload, counts signatures and leaves the task open below the threshold', async () => {
     const task = await service.createTask(TASK); // requires 2 signatures
 
-    const result = await service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    const result = await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
     expect(signatures.create).toHaveBeenCalledTimes(1);
     expect(signatures.create).toHaveBeenCalledWith({
@@ -200,9 +209,9 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
 
   test('addSignature: flips the task to completed once the threshold is reached', async () => {
     const task = await service.createTask(TASK); // requires 2 signatures
-    await service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
-    const result = await service.addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 });
+    const result = await addSignature({ taskId: task.id, signer: SIGNER_2, signature: SIGNATURE_2 });
 
     expect(result.isCompleted).toBe(true);
     expect(tasks.update).toHaveBeenCalledTimes(1);
@@ -229,7 +238,7 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
 
   test('getSignatureTask: returns the mapped signatures once the task is completed', async () => {
     const task = await service.createTask({ ...TASK, requiredSignatures: 1 });
-    await service.addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 });
 
     const result = await service.getSignatureTask(task.id);
 

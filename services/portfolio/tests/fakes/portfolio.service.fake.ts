@@ -10,7 +10,9 @@ import { mock } from 'bun:test';
 
 export function createFakePortfolioService() {
   return {
-    processTransfer: mock(async (_data: unknown): Promise<void> => {}),
+    processTransfer: mock(async (_data: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
     getBalances: mock(async (_params: unknown): Promise<unknown> => ({})),
     getTransactions: mock(async (_params: unknown): Promise<unknown> => []),
   };

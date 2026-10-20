@@ -261,7 +261,6 @@ export class BlockchainScannerDaemon {
 
     const fromBlock = this.lastProcessedBlock + 1;
     const toBlock = Math.min(fromBlock + this.batchSize - 1, confirmedBlock);
-    const blocksRemaining = confirmedBlock - this.lastProcessedBlock;
 
     try {
       await this.processBatch(fromBlock, toBlock);

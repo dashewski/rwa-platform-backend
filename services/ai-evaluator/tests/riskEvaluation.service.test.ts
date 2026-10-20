@@ -123,26 +123,19 @@ type SetupOptions = {
   useBase64Files?: boolean;
 };
 
-function createFakeEvaluationJobRepository() {
-  return {
-    enqueue: mock(async () => undefined),
-    releaseProcessing: mock(async () => undefined),
-    claimNext: mock(async () => null),
-    markDone: mock(async () => undefined),
-    markAttemptFailed: mock(async () => null),
-  };
-}
-
 function setup(options: SetupOptions = {}) {
+  // The evaluation row and the outbox row are written in one transaction.
+  (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+    fn: () => Promise<T>,
+  ): Promise<T> => fn();
+
   const evaluationRepository: FakeEvaluationRepository = createFakeEvaluationRepository();
   const openRouterClient = createFakeOpenRouterClient();
   const eden = createFakeEdenClients();
   const outbox = createFakeOutboxPublisher();
-  const evaluationJobRepository = createFakeEvaluationJobRepository();
 
   const service = new RiskEvaluationService(
     evaluationRepository as unknown as EvaluationRepository,
-    evaluationJobRepository as never,
     openRouterClient as unknown as OpenRouterClient,
     eden.rwaClient as unknown as RwaClient,
     eden.documentsClient as unknown as DocumentsClient,
@@ -157,7 +150,9 @@ function setup(options: SetupOptions = {}) {
     options.useBase64Files ?? false,
   );
 
-  return { service, evaluationRepository, evaluationJobRepository, openRouterClient, outbox, ...eden };
+  const commitInbox = mock(async (): Promise<void> => undefined);
+
+  return { service, evaluationRepository, openRouterClient, outbox, commitInbox, ...eden };
 }
 
 type Fakes = ReturnType<typeof setup>;
@@ -260,7 +255,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueResponse(selectionContent);
       fakes.openRouterClient.queueResponse(riskContent);
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       expect(fakes.rwaClient.getPool.post).toHaveBeenCalledTimes(1);
       expect(fakes.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
@@ -302,7 +297,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { documents: [DOCUMENT_FILE], images: [IMAGE_FILE] });
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: [], requestedImages: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       expect(fakes.rwaClient.getPools.post).toHaveBeenCalledWith({ filter: { businessId: 'business-1' } });
       expect(fakes.documentsClient.getDocuments.post).toHaveBeenCalledWith({ filter: { parentId: 'pool-1' } });
@@ -321,7 +316,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.openRouterClient.queueJsonResponse({ riskScore: 42, reasoning: 'Low risk', factors: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       // No files were returned by the modules, so only the risk (stage 2) call happens.
       expect(fakes.openRouterClient.chatCompletion).toHaveBeenCalledTimes(1);
@@ -378,7 +373,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { pool: undeployedPool, siblingPools: [] });
       fakes.openRouterClient.queueJsonResponse({ riskScore: 42, reasoning: 'Low risk', factors: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       expect(fakes.portfolioClient.getBalances.post).toHaveBeenCalledTimes(0);
       const summary = contentParts(chatRequest(fakes))[0].text as string;
@@ -390,7 +385,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.rwaClient.getPool.setDefaultResponse(edenError(500));
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch pool from rwa service',
@@ -404,7 +399,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.rwaClient.getPool.setDefaultResponse({ data: null, error: null });
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch pool from rwa service',
@@ -415,7 +410,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.rwaClient.getBusiness.setDefaultResponse(edenError(404));
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch business from rwa service',
@@ -430,7 +425,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.documentsClient.getDocuments.setDefaultResponse(edenError(500));
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch documents from documents service',
@@ -463,7 +458,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.outbox.publish.mockRejectedValueOnce(new Error('broker down'));
       fakes.evaluationRepository.updateById.mockRejectedValueOnce(new Error('mongo down'));
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch documents from documents service',
@@ -475,7 +470,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueJsonResponse({ riskScore: 42, reasoning: 'Low risk', factors: [] });
       fakes.outbox.publish.mockRejectedValueOnce(new Error('broker down'));
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toThrow('broker down');
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toThrow('broker down');
 
       // The transaction rolled back: no completed event, and there is no
       // failure event either (the outbox is the only channel).
@@ -490,7 +485,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueResponse(selectionContent);
       fakes.openRouterClient.queueJsonResponse({ riskScore: 30, reasoning: 'Mostly fine', factors: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       expect(fakes.openRouterClient.chatCompletion).toHaveBeenCalledTimes(2);
 
@@ -541,7 +536,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: [], requestedImages: [] });
       fakes.openRouterClient.queueJsonResponse({ riskScore: 12, reasoning: 'Nothing needed', factors: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       const parts = contentParts(chatRequest(fakes, 1));
       expect(parts).toHaveLength(2);
@@ -556,7 +551,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueJsonResponse({ requestedImages: ['img-1'] });
       fakes.openRouterClient.queueJsonResponse({ riskScore: 61, reasoning: 'Image only', factors: [] });
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       const selectionRequest = chatRequest(fakes, 0);
       expect(selectionRequest.messages[1]).toEqual({
@@ -576,7 +571,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { documents: [DOCUMENT_FILE] });
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: ['doc-404'], requestedImages: [] });
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 400,
         code: 'NOT_FOUND',
         message: 'LLM requested document doc-404 but it was not found',
@@ -593,7 +588,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { images: [IMAGE_FILE] });
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: [], requestedImages: ['img-404'] });
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 400,
         code: 'NOT_FOUND',
         message: 'LLM requested image img-404 but it was not found',
@@ -607,7 +602,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { images: [IMAGE_FILE, SECOND_IMAGE_FILE] });
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: [], requestedImages: ['img-1', 'img-2'] });
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 400,
         code: 'VALIDATION_ERROR',
         message: 'Too many files for OpenRouter request: 2. Maximum allowed: 1',
@@ -623,7 +618,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
         primePoolPath(fakes);
         fakes.openRouterClient.queueResponse(JSON.stringify({ riskScore, reasoning: 'Invalid score', factors: [] }));
 
-        await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+        await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
           statusCode: 502,
           code: 'AI_ERROR',
           message: `LLM returned invalid riskScore: ${riskScore}. Must be integer 1-100.`,
@@ -637,7 +632,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.openRouterClient.queueResponse('```json\n{"riskScore": 77, "reasoning": "Fenced", "factors": []}\n```');
 
-      await fakes.service.evaluatePool(POOL_PARAMS);
+      await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
 
       expect(createPayload(fakes)).toMatchObject({ riskScore: 77, reasoning: 'Fenced' });
     });
@@ -646,7 +641,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes);
       fakes.openRouterClient.queueResponse('I cannot answer that.');
 
-      await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'AI_ERROR',
         message: 'Failed to parse LLM response as JSON',
@@ -664,13 +659,13 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.openRouterClient.queueJsonResponse({ riskScore: 55, reasoning: 'With image', factors: [] });
 
       const fetchedUrls: string[] = [];
-      const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const fetchSpy = spyOn(globalThis as any, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
         fetchedUrls.push(String(input));
         return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } });
       });
 
       try {
-        await fakes.service.evaluatePool(POOL_PARAMS);
+        await fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox);
       } finally {
         fetchSpy.mockRestore();
       }
@@ -691,12 +686,12 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       primePoolPath(fakes, { images: [INTERNAL_IMAGE_FILE] });
       fakes.openRouterClient.queueJsonResponse({ requestedDocuments: [], requestedImages: ['img-local'] });
 
-      const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+      const fetchSpy = spyOn(globalThis as any, 'fetch').mockImplementation(
         async () => new Response(null, { status: 500, statusText: 'Internal Server Error' }),
       );
 
       try {
-        await expect(fakes.service.evaluatePool(POOL_PARAMS)).rejects.toMatchObject({
+        await expect(fakes.service.evaluatePool(POOL_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
           statusCode: 502,
           code: 'UPSTREAM_ERROR',
           message: 'Failed to fetch file for base64 conversion: 500 Internal Server Error',
@@ -716,7 +711,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.questionsClient.getQuestions.setDefaultResponse(edenOk([ANSWERED_QUESTION]));
       fakes.openRouterClient.queueJsonResponse({ riskScore: 64, reasoning: 'Business risk', factors: [] });
 
-      await fakes.service.evaluateBusiness(BUSINESS_PARAMS);
+      await fakes.service.evaluateBusiness(BUSINESS_PARAMS, fakes.commitInbox);
 
       // The pool fetch is exclusive to evaluatePool.
       expect(fakes.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
@@ -766,7 +761,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
       fakes.rwaClient.getPools.setDefaultResponse(edenOk<FakePool[]>([POOL]));
       fakes.questionsClient.getQuestions.setDefaultResponse(edenError(500));
 
-      await expect(fakes.service.evaluateBusiness(BUSINESS_PARAMS)).rejects.toMatchObject({
+      await expect(fakes.service.evaluateBusiness(BUSINESS_PARAMS, fakes.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
         message: 'Failed to fetch questions from questions service',
@@ -887,7 +882,7 @@ describe('RiskEvaluationService (unit, fake repository and clients)', () => {
     test('evaluatePool with an empty payload fails on the upstream fetch and writes nothing', async () => {
       const local = setup();
 
-      await expect(local.service.evaluatePool({} as never)).rejects.toMatchObject({
+      await expect(local.service.evaluatePool({} as never, local.commitInbox)).rejects.toMatchObject({
         statusCode: 502,
         code: 'UPSTREAM_ERROR',
       });

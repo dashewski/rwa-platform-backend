@@ -20,7 +20,7 @@ type RoutingEntry = { prefetch: number; isSync: boolean; handlers: Record<string
 const client = new RabbitMQClient('amqp://guest:guest@localhost:5672');
 const topology = client.getTopologyDefinition();
 const daemon = new InboxConsumerDaemon(client as never, {} as never, {} as never, {} as never);
-const routing = (daemon as unknown as { eventRouting: Record<string, RoutingEntry> }).eventRouting;
+const routing: Record<string, { prefetch: number; isSync: boolean; handlers: Record<string, unknown> }> = (daemon as unknown as { eventRouting: Record<string, RoutingEntry> }).eventRouting;
 
 describe('rwa RabbitMQ topology', () => {
   test('declares exactly the two queues it consumes', () => {
@@ -37,7 +37,8 @@ describe('rwa RabbitMQ topology', () => {
   test('every routed event is bound and nothing else is bound', () => {
     for (const queueName of Object.keys(routing)) {
       const handlers = Object.keys(routing[queueName].handlers).sort();
-      const bindings = Object.entries(topology.queues[queueName].bindings)
+      const queues = topology.queues as Record<string, { bindings: Record<string, readonly string[]> }>;
+      const bindings = Object.entries(queues[queueName].bindings)
         .flatMap(([, routingKeys]) => [...(routingKeys as readonly string[])])
         .sort();
 
@@ -49,9 +50,9 @@ describe('rwa RabbitMQ topology', () => {
     expect(Object.keys(routing).sort()).toEqual(Object.keys(topology.queues).sort());
   });
 
-  test('both queues are serialized (prefetch 1, isSync)', () => {
+  test('blockchain events stay serialized, evaluation results run in parallel', () => {
     expect(routing['blockchain.events.rwa']).toMatchObject({ prefetch: 1, isSync: true });
-    expect(routing['evaluation.results']).toMatchObject({ prefetch: 1, isSync: true });
+    expect(routing['evaluation.results']).toMatchObject({ prefetch: 5, isSync: false });
   });
 
   test('blockchain events retry forever; evaluation results retry 3 times then park', () => {

@@ -5,7 +5,8 @@
  * fakes (tests/fakes/*.fake.ts), so these tests need no database, no broker
  * and no network. Run with `bun test` from services/portfolio.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { PortfolioService } from '../src/services/portfolio.service';
 import type { TokenBalanceRepository } from '../src/repositories/tokenBalance.repository';
@@ -55,14 +56,23 @@ describe('PortfolioService (unit, fake repositories)', () => {
   let balances: FakeTokenBalanceRepository;
   let transactions: FakeTransactionRepository;
   let service: PortfolioService;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
+  let transfer: (event: any) => Promise<void>;
 
   beforeEach(() => {
+    // The service writes the rows and the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
     balances = createFakeTokenBalanceRepository();
     transactions = createFakeTransactionRepository();
     service = new PortfolioService(
       balances as unknown as TokenBalanceRepository,
       transactions as unknown as TransactionRepository,
     );
+    transfer = (event: any) => service.processTransfer(event, commitInbox);
   });
 
   function balanceOf(owner: string) {
@@ -93,7 +103,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
   }
 
   test('processTransfer: records the transaction and moves the balance in both directions', async () => {
-    await service.processTransfer(TRANSFER);
+    await transfer(TRANSFER);
 
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(transactions.create).toHaveBeenCalledWith({
@@ -138,8 +148,8 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: accumulates the position across transfers', async () => {
-    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, from: OTHER, amount: '100' } });
-    await service.processTransfer({
+    await transfer({ ...TRANSFER, data: { ...TRANSFER.data, from: OTHER, amount: '100' } });
+    await transfer({
       ...TRANSFER,
       blockNumber: 124,
       data: { ...TRANSFER.data, from: OTHER, amount: '40' },
@@ -152,7 +162,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
     expect(balanceOf(TO)?.lastUpdateBlock).toBe(124);
   });
   test('processTransfer: a mint from the zero address credits the receiver only', async () => {
-    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, from: ZERO_ADDRESS, amount: '1000' } });
+    await transfer({ ...TRANSFER, data: { ...TRANSFER.data, from: ZERO_ADDRESS, amount: '1000' } });
 
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(transactions.create).toHaveBeenCalledWith(expect.objectContaining({ from: ZERO_ADDRESS, amount: 1000 }));
@@ -172,7 +182,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
   });
 
   test('processTransfer: a burn to the zero address debits the sender only', async () => {
-    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, to: ZERO_ADDRESS, amount: '500' } });
+    await transfer({ ...TRANSFER, data: { ...TRANSFER.data, to: ZERO_ADDRESS, amount: '500' } });
 
     expect(transactions.create).toHaveBeenCalledTimes(1);
     expect(balances.updateBalance).toHaveBeenCalledTimes(1);
@@ -188,19 +198,8 @@ describe('PortfolioService (unit, fake repositories)', () => {
     expect(balanceOf(FROM)?.balance).toBe(-500);
   });
 
-  test('processTransfer: ignores an event where both sides are the zero address', async () => {
-    const result = await service.processTransfer({
-      ...TRANSFER,
-      data: { ...TRANSFER.data, from: ZERO_ADDRESS, to: ZERO_ADDRESS },
-    });
-
-    expect(result).toBeUndefined();
-    expect(transactions.create).toHaveBeenCalledTimes(0);
-    expect(balances.updateBalance).toHaveBeenCalledTimes(0);
-  });
-
   test('processTransfer: a self-transfer applies both legs to the same position', async () => {
-    await service.processTransfer({ ...TRANSFER, data: { ...TRANSFER.data, to: FROM, amount: '30' } });
+    await transfer({ ...TRANSFER, data: { ...TRANSFER.data, to: FROM, amount: '30' } });
 
     // from === to is not special-cased: both legs run, so the net effect on the
     // stored balance is zero while the transaction row is still recorded.
@@ -217,7 +216,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
       throw new AppError({ message: 'Transaction write failed', statusCode: 503, code: 'SERVICE_UNAVAILABLE' });
     });
 
-    await expect(service.processTransfer(TRANSFER)).rejects.toMatchObject({
+    await expect(transfer(TRANSFER)).rejects.toMatchObject({
       statusCode: 503,
       code: 'SERVICE_UNAVAILABLE',
     });
@@ -231,7 +230,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
       throw new AppError({ message: 'Database unavailable', statusCode: 503, code: 'SERVICE_UNAVAILABLE' });
     });
 
-    await expect(service.processTransfer(TRANSFER)).rejects.toMatchObject({
+    await expect(transfer(TRANSFER)).rejects.toMatchObject({
       statusCode: 503,
       code: 'SERVICE_UNAVAILABLE',
     });

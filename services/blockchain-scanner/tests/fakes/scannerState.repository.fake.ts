@@ -13,7 +13,7 @@ import { AppError } from '@shared/errors/app-errors';
 
 export type FakeScannerStateDoc = {
   _id: Types.ObjectId;
-  chainId: number;
+  chainId: string;
   lastScannedBlock: number;
   isActive: boolean;
   error?: string;
@@ -29,9 +29,9 @@ function matchesFilter(doc: Record<string, unknown>, filter: Record<string, unkn
 }
 
 export function createFakeScannerStateRepository() {
-  const store = new Map<number, FakeScannerStateDoc>();
+  const store = new Map<string, FakeScannerStateDoc>();
 
-  const notFound = (chainId: number) =>
+  const notFound = (chainId: string) =>
     new AppError({ message: `ScannerState ${chainId} not found`, statusCode: 404, code: 'NOT_FOUND' });
 
   const repository = {
@@ -57,7 +57,7 @@ export function createFakeScannerStateRepository() {
       return doc;
     }),
 
-    update: mock(async (chainId: number, data: { lastScannedBlock: number }): Promise<FakeScannerStateDoc> => {
+    update: mock(async (chainId: string, data: { lastScannedBlock: number }): Promise<FakeScannerStateDoc> => {
       const doc = store.get(chainId);
       if (!doc) throw notFound(chainId);
 
@@ -66,18 +66,18 @@ export function createFakeScannerStateRepository() {
       return doc;
     }),
 
-    delete: mock(async (chainId: number): Promise<number> => {
+    delete: mock(async (chainId: string): Promise<string> => {
       if (!store.has(chainId)) throw notFound(chainId);
 
       store.delete(chainId);
       return chainId;
     }),
 
-    getLastScannedBlock: mock(async (chainId: number): Promise<number> => {
+    getLastScannedBlock: mock(async (chainId: string): Promise<number> => {
       return store.get(chainId)?.lastScannedBlock ?? 0;
     }),
 
-    updateLastScannedBlock: mock(async (chainId: number, blockNumber: number): Promise<void> => {
+    updateLastScannedBlock: mock(async (chainId: string, blockNumber: number): Promise<void> => {
       // Mirrors the real method: update when the chain already has a state
       // document, create it otherwise.
       const doc = store.get(chainId);

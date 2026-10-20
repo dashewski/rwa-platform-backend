@@ -176,7 +176,10 @@ describe('signers-manager HTTP layer (component, fake repositories and outbox)',
   test('getSignatureTask: a completed task exposes its signatures without ids', async () => {
     const created = await post(app, '/createSignatureTask', { ...TASK, requiredSignatures: 1 });
     // Simulate what the responses inbox does once a signer replies.
-    await signaturesService.addSignature({ taskId: created.body.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await signaturesService.addSignature(
+      { taskId: created.body.id, signer: SIGNER_1, signature: SIGNATURE_1 },
+      async () => undefined,
+    );
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });
 

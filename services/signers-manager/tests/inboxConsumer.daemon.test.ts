@@ -111,30 +111,24 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('the queue deferAfterAttempts is passed to the consumer service', async () => {
-    rabbit.state.deferAfterAttempts = 3;
+  test('an exhausted delivery goes to the retry queue (requeue=false)', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
+    signatures.state.error = new Error('Task already completed');
 
     await deliver(makeMessage('response', RESPONSE));
 
-    expect(consumer.state.handles[0].maxAttempts).toBe(3);
-  });
-
-  test('a deferred delivery is handed to the retry queue (requeue=false)', async () => {
-    await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
-
-    await deliver(makeMessage('response', RESPONSE));
-
+    expect(consumer.state.commits).toEqual([]);
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
   });
 
   test('after parkAfterCycles retry cycles the message is parked and acked', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     rabbit.state.parkAfterCycles = 1;
     await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
+    signatures.state.error = new Error('Task already completed');
 
     await deliver(
       makeMessage('response', RESPONSE, {
@@ -155,13 +149,12 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
   });
 
   test('a service failure is left to the inbox (no ack)', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
     signatures.state.error = new Error('Task already completed');
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('response', RESPONSE));
 
-    expect(consumer.state.handlerError).toBeInstanceOf(Error);
     expect(rabbit.state.acked).toHaveLength(0);
     expect(rabbit.state.nacked).toHaveLength(1);
   });
@@ -177,8 +170,8 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
   });
 
   test('a body that is not valid JSON never reaches the service', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('response', {}, { raw: 'not-json{' }));
 

@@ -48,11 +48,8 @@ describe('signer RabbitMQ topology', () => {
     expect(first.client.getQueue('sign.requests.signer-1')).not.toBe(second.client.getQueue('sign.requests.signer-2'));
   });
 
-  test('the request queue carries a 15-minute TTL so stale tasks do not pile up', () => {
-    expect(first.topology.queues['sign.requests.signer-1'].options).toEqual({
-      durable: true,
-      arguments: { 'x-message-ttl': 900_000 },
-    });
+  test('the request queue carries no message TTL: retry and park own the lifecycle', () => {
+    expect(first.topology.queues['sign.requests.signer-1'].options).toEqual({ durable: true });
   });
 
   test('the queue retries 3 times in process, 3 retry cycles, then parks', () => {
@@ -65,7 +62,7 @@ describe('signer RabbitMQ topology', () => {
   test('the routing table matches the binding: one queue, one key, serialized', () => {
     expect(Object.keys(first.routing)).toEqual(Object.keys(first.topology.queues));
     expect(Object.keys(first.routing['sign.requests.signer-1'].handlers)).toEqual(['task']);
-    expect(first.routing['sign.requests.signer-1']).toMatchObject({ prefetch: 1, isSync: true });
+    expect(first.routing['sign.requests.signer-1']).toMatchObject({ prefetch: 5, isSync: false });
   });
 
   test('the outbox publishes responses to a registered exchange', () => {

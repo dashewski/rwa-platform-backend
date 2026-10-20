@@ -29,11 +29,8 @@ describe('signers-manager RabbitMQ topology', () => {
     expect(topology.queues['sign.responses'].bindings).toEqual({ 'sign.exchange': ['response'] });
   });
 
-  test('the responses queue carries a one-hour TTL', () => {
-    expect(topology.queues['sign.responses'].options).toEqual({
-      durable: true,
-      arguments: { 'x-message-ttl': 3_600_000 },
-    });
+  test('the responses queue carries no message TTL: retry and park own the lifecycle', () => {
+    expect(topology.queues['sign.responses'].options).toEqual({ durable: true });
   });
 
   test('the queue retries 3 times in process, 3 retry cycles, then parks', () => {
@@ -43,7 +40,7 @@ describe('signers-manager RabbitMQ topology', () => {
   test('the routing table matches the binding: one queue, one key, serialized', () => {
     expect(Object.keys(routing)).toEqual(Object.keys(topology.queues));
     expect(Object.keys(routing['sign.responses'].handlers)).toEqual(['response']);
-    expect(routing['sign.responses']).toMatchObject({ prefetch: 1, isSync: true });
+    expect(routing['sign.responses']).toMatchObject({ prefetch: 5, isSync: false });
   });
 
   test('the outbox publishes tasks to a registered exchange', () => {

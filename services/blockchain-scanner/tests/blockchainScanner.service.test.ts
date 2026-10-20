@@ -24,7 +24,7 @@ import {
 } from './fakes/scannerState.repository.fake';
 import { createFakeOutboxPublisher, EXCHANGE, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 
-const CHAIN_ID = 31337;
+const CHAIN_ID = '31337';
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
 const TX_HASH = `0x${'ab'.repeat(32)}`;
 const STALE_TX_HASH = `0x${'ff'.repeat(32)}`;

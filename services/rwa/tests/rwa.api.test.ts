@@ -8,6 +8,7 @@
  * services/rwa.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { Elysia } from 'elysia';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
@@ -19,8 +20,11 @@ import { createFakePoolRepository, type FakePoolRepository } from './fakes/pool.
 import { createFakeOpenRouterClient } from './fakes/open-router.client.fake';
 import { createFakeSignersManagerClient, DEFAULT_SIGNATURE_TASK_ID } from './fakes/signers-manager.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
-import { createFakeInboxConsumerMessageRepository } from './fakes/inbox-outbox.repositories.fake';
-import { createFakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
+import {
+  createFakeInboxConsumerMessageRepository,
+  createFakeOutboxPublisherMessageRepository,
+  type FakeOutboxPublisherMessageRepository,
+} from './fakes/inbox-outbox.repositories.fake';
 import { createFakePoolEventsClient } from './fakes/pool-events.client.fake';
 import { createFakeRedisEventsClient } from './fakes/redis-events.client.fake';
 
@@ -58,7 +62,6 @@ function createFakeClients() {
   const redisEventsClient = createFakeRedisEventsClient();
 
   return {
-    aiEvaluatorClient: createFakeAiEvaluatorClient(),
     signersManagerClient: createFakeSignersManagerClient(),
     redisEventsClient,
     poolEventsClient: createFakePoolEventsClient(redisEventsClient),
@@ -69,14 +72,19 @@ function createFakeClients() {
 
 type FakeClients = ReturnType<typeof createFakeClients>;
 
-function buildApp(businesses: FakeBusinessRepository, pools: FakePoolRepository, clients: FakeClients) {
+function buildApp(
+  businesses: FakeBusinessRepository,
+  pools: FakePoolRepository,
+  clients: FakeClients,
+  outbox: FakeOutboxPublisherMessageRepository,
+) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('businessRepository', businesses)
     .decorate('poolRepository', pools)
-    .decorate('inboxConsumerMessageRepository', createFakeInboxConsumerMessageRepository());
+    .decorate('inboxConsumerMessageRepository', createFakeInboxConsumerMessageRepository())
+    .decorate('outboxPublisherMessageRepository', outbox);
 
   const clientsPlugin = new Elysia({ name: 'Clients' })
-    .decorate('aiEvaluatorClient', clients.aiEvaluatorClient)
     .decorate('signersManagerClient', clients.signersManagerClient)
     .decorate('redisEventsClient', clients.redisEventsClient)
     .decorate('poolEventsClient', clients.poolEventsClient)
@@ -113,13 +121,20 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let pools: FakePoolRepository;
   let clients: FakeClients;
+  let outbox: FakeOutboxPublisherMessageRepository;
   let app: App;
 
   beforeEach(() => {
+    // The service writes its rows and the outbox row in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
     businesses = createFakeBusinessRepository();
     pools = createFakePoolRepository();
     clients = createFakeClients();
-    app = buildApp(businesses, pools, clients);
+    outbox = createFakeOutboxPublisherMessageRepository();
+    app = buildApp(businesses, pools, clients, outbox);
   });
 
   test('createBusiness -> getBusiness -> getBusinesses round-trip', async () => {
@@ -178,11 +193,13 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.riskScoreEvaluationProcess).toBe(true);
-    expect(clients.aiEvaluatorClient.createBusinessEvaluation.post).toHaveBeenCalledWith({
-      businessId: created.body.id,
-      ownerId: OWNER_ID,
-      ownerType: OWNER_TYPE,
-    });
+    expect(outbox.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exchange: 'evaluation',
+        routingKey: 'evaluateBusiness',
+        payload: { businessId: created.body.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
+      }),
+    );
   });
 
   test('requestBusinessApprovalSignatures: returns the task id, a second call is rejected', async () => {

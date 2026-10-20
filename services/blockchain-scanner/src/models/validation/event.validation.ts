@@ -6,7 +6,7 @@ import { paginationSchema } from './shared.validation';
  */
 export const eventSchema = t.Object({
   id: t.String(),
-  chainId: t.Number(),
+  chainId: t.String(),
   blockNumber: t.Number(),
   transactionHash: t.String(),
   logIndex: t.Number(),
@@ -27,7 +27,7 @@ export const getEventByIdResponse = eventSchema;
  * Get events
  */
 export const getEventsRequest = t.Object({
-  chainId: t.Optional(t.Number()),
+  chainId: t.Optional(t.String()),
   blockNumber: t.Optional(t.Number()),
   transactionHash: t.Optional(t.String()),
   address: t.Optional(t.String()),

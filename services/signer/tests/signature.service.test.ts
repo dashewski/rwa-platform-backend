@@ -7,6 +7,7 @@
  * queued (and its messageId, which the inbox uses for dedup).
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { ethers, Wallet } from 'ethers';
 import { SignatureService } from '../src/services/signature.service';
 import type { OutboxPublisherService } from '@shared/outbox-publisher';
@@ -35,13 +36,22 @@ function createFakeOutbox() {
 describe('SignatureService (unit, fake outbox)', () => {
   let outbox: ReturnType<typeof createFakeOutbox>;
   let service: SignatureService;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
+  let signHash: (task: any) => Promise<{ signer: string; signature: string }>;
   let address: string;
 
   const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
   beforeEach(() => {
     outbox = createFakeOutbox();
+    // The outbox row and the inbox marker are written in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
     service = new SignatureService(outbox as unknown as OutboxPublisherService, PRIVATE_KEY);
+    signHash = (task: any) => service.signHash(task, commitInbox);
     address = new Wallet(PRIVATE_KEY).address;
   });
 
@@ -52,7 +62,7 @@ describe('SignatureService (unit, fake outbox)', () => {
   test('signs the received hash and queues the response with a deterministic messageId', async () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    const result = await service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
+    const result = await signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
 
     expect(result.signer).toBe(address);
     expect(ethers.verifyMessage(ethers.getBytes(hash), result.signature)).toBe(address);
@@ -71,7 +81,7 @@ describe('SignatureService (unit, fake outbox)', () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
     const other = ethers.keccak256(ethers.toUtf8Bytes('other'));
 
-    const { signature } = await service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
+    const { signature } = await signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 });
 
     expect(ethers.verifyMessage(ethers.getBytes(other), signature)).not.toBe(address);
   });
@@ -79,12 +89,12 @@ describe('SignatureService (unit, fake outbox)', () => {
   test('an expired task is rejected before any signing and nothing is queued', async () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toThrow(
+    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toThrow(
       'Task expired',
     );
 
     expect(outbox.state.calls).toEqual([]);
-    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toBeInstanceOf(
+    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toBeInstanceOf(
       AppError,
     );
   });
@@ -93,7 +103,7 @@ describe('SignatureService (unit, fake outbox)', () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
     const expired = nowSeconds();
 
-    await service.signHash({ hash, taskId: 'task-1', expired });
+    await signHash({ hash, taskId: 'task-1', expired });
 
     expect(outbox.state.calls).toHaveLength(1);
   });
@@ -102,8 +112,8 @@ describe('SignatureService (unit, fake outbox)', () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
     const expired = nowSeconds() + 600;
 
-    await service.signHash({ hash, taskId: 'task-1', expired });
-    await service.signHash({ hash, taskId: 'task-2', expired });
+    await signHash({ hash, taskId: 'task-1', expired });
+    await signHash({ hash, taskId: 'task-2', expired });
 
     expect(outbox.state.calls.map((call) => call.messageId)).toEqual([`task-1:${address}`, `task-2:${address}`]);
   });
@@ -112,7 +122,7 @@ describe('SignatureService (unit, fake outbox)', () => {
     outbox.state.failWith = new Error('MongoServerSelectionError: server selection timed out');
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    await expect(service.signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 })).rejects.toThrow(
+    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() + 600 })).rejects.toThrow(
       'server selection timed out',
     );
   });

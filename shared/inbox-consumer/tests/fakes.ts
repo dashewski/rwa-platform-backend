@@ -139,48 +139,51 @@ export function asRabbitClient(fake: FakeRabbitClient): BaseRabbitMQClient {
 }
 
 /**
- * Stand-in for InboxConsumerService. Unlike the real service it does not run
- * attempts itself: the test decides the outcome of a delivery. When
- * `runHandler` is true the fake invokes the delivery callback exactly like the
- * real service does, which is how the JSON-parse and unknown-routing-key paths
- * are exercised.
+ * Stand-in for InboxConsumerService: it owns only the dedup marker, exactly like
+ * the real service. `commit` writes the marker (and can fail with 11000, which
+ * is how a duplicate delivery is recognised), `isCommitted` reads it.
  */
 export function createFakeConsumerService() {
   const state = {
-    nextOutcome: 'acked' as 'acked' | 'deferred',
-    outcomes: [] as Array<'acked' | 'deferred'>,
-    handles: [] as Array<{ queueName: string; message: ConsumeMessage; maxAttempts?: number }>,
-    handlerResults: [] as Array<'ok' | 'failed'>,
-    runHandler: true,
-    throwFromHandle: null as unknown,
+    markers: new Set<string>(),
+    commits: [] as string[],
+    reads: [] as string[],
+    commitError: null as unknown,
+    /** Queue of outcomes for consecutive commit() calls: 'ok' | 'duplicate' | 'fail'. */
+    commitOutcomes: [] as Array<'ok' | 'duplicate' | 'fail'>,
+    readError: null as unknown,
+    /** Marker ids that exist for isCommitted() regardless of commit() calls. */
+    preexisting: new Set<string>(),
   };
 
   const service = {
     state,
 
-    handle: mock(
-      async (
-        queueName: string,
-        message: ConsumeMessage,
-        handler: () => Promise<void>,
-        maxAttempts?: number,
-      ): Promise<'acked' | 'deferred'> => {
-        state.handles.push({ queueName, message, maxAttempts });
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      const outcome = state.commitOutcomes.length
+        ? (state.commitOutcomes.shift() as 'ok' | 'duplicate' | 'fail')
+        : 'ok';
 
-        if (state.runHandler) {
-          try {
-            await handler();
-            state.handlerResults.push('ok');
-          } catch {
-            state.handlerResults.push('failed');
-          }
-        }
+      if (state.commitError) throw state.commitError;
+      if (outcome === 'fail') throw new Error('the inbox marker could not be written');
 
-        if (state.throwFromHandle) throw state.throwFromHandle;
+      if (outcome === 'duplicate' || state.markers.has(messageId)) {
+        throw Object.assign(
+          new Error('E11000 duplicate key error collection: inboxconsumermessages index: messageId_1'),
+          { code: 11000 },
+        );
+      }
 
-        return state.outcomes.length ? (state.outcomes.shift() as 'acked' | 'deferred') : state.nextOutcome;
-      },
-    ),
+      state.markers.add(messageId);
+    }),
+
+    isCommitted: mock(async (messageId: string): Promise<boolean> => {
+      state.reads.push(messageId);
+      if (state.readError) throw state.readError;
+
+      return state.markers.has(messageId) || state.preexisting.has(messageId);
+    }),
   };
 
   return service;

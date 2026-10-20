@@ -12,7 +12,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
       },
       queues: {
         [`sign.requests.${this.channelName}`]: {
-          options: { durable: true, arguments: { 'x-message-ttl': 900_000 } },
+          options: { durable: true },
           deferAfterAttempts: 3,
           parkAfterCycles: 3,
           bindings: {

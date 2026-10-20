@@ -100,30 +100,24 @@ function createFakeRabbitClient() {
 }
 
 /**
- * Consumer service stub: runs the delivery callback exactly like the real
- * service does inside its dedup transaction and reports the outcome the test
- * asked for.
+ * Consumer service stub: owns only the dedup marker, exactly like the real
+ * service — commit writes it, isCommitted reads it.
  */
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'deferred',
-    handlerError: null as unknown,
-    deliveries: 0,
+    markers: new Set<string>(),
+    commits: [] as string[],
   };
 
   const service = {
     state,
 
-    handle: mock(async (queueName: string, _message: ConsumeMessage, handler: () => Promise<void>) => {
-      state.deliveries += 1;
-
-      try {
-        await handler();
-      } catch (error) {
-        state.handlerError = error;
-      }
-      return state.outcome;
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      state.markers.add(messageId);
     }),
+
+    isCommitted: mock(async (messageId: string): Promise<boolean> => state.markers.has(messageId)),
   };
 
   return service;
@@ -167,7 +161,7 @@ describe('portfolio InboxConsumerDaemon (unit, fakes for client / consumer servi
     // reaches PortfolioService untouched, and the mapping onto the repository
     // shape happens inside the service.
     expect(portfolioService.processTransfer).toHaveBeenCalledTimes(1);
-    expect(portfolioService.processTransfer).toHaveBeenCalledWith(event);
+    expect(portfolioService.processTransfer).toHaveBeenCalledWith(event, expect.any(Function));
   });
 
   test('the forwarded event keeps its envelope and decoded data', async () => {
@@ -203,14 +197,12 @@ describe('portfolio InboxConsumerDaemon (unit, fakes for client / consumer servi
   });
 
   test('a service failure is not swallowed: the delivery is deferred to the retry queue', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
     portfolioService.processTransfer.mockRejectedValueOnce(new Error('db is down'));
 
     await deliver('RWA_Transfer', makeMessage('RWA_Transfer', makeEvent('RWA_Transfer')));
 
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toBe('db is down');
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
@@ -219,15 +211,14 @@ describe('portfolio InboxConsumerDaemon (unit, fakes for client / consumer servi
   });
 
   test('a malformed payload fails the delivery instead of silently dropping the event', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
 
     await deliver('RWA_Transfer', makeMessage('RWA_Transfer', {}, { raw: '{"from":' }));
 
     expect(portfolioService.processTransfer).toHaveBeenCalledTimes(0);
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toContain('not valid JSON');
     expect(rabbit.state.nacked).toHaveLength(1);
+    expect(rabbit.state.acked).toHaveLength(0);
   });
 
   test('stop cancels the consumer while the connection is alive', async () => {

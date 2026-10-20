@@ -81,11 +81,15 @@ function makeEvent(name: string) {
   };
 }
 
-function makeMessage(routingKey: string, body: unknown, options: { raw?: string } = {}): ConsumeMessage {
+function makeMessage(
+  routingKey: string,
+  body: unknown,
+  options: { raw?: string; messageId?: string } = {},
+): ConsumeMessage {
   return {
     content: Buffer.from(options.raw ?? JSON.stringify(body)),
     fields: { routingKey, redelivered: false, deliveryTag: 1, exchange: 'blockchain.events', consumerTag: 'ctag' },
-    properties: { messageId: '97:0xab:7' },
+    properties: { messageId: options.messageId ?? '97:0xab:7' },
   } as unknown as ConsumeMessage;
 }
 
@@ -140,24 +144,19 @@ function createFakeRabbitClient() {
 
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'deferred',
-    handlerError: null as unknown,
-    deliveries: 0,
+    markers: new Set<string>(),
+    commits: [] as string[],
   };
 
   const service = {
     state,
 
-    handle: mock(async (queueName: string, _message: ConsumeMessage, handler: () => Promise<void>) => {
-      state.deliveries += 1;
-
-      try {
-        await handler();
-      } catch (error) {
-        state.handlerError = error;
-      }
-      return state.outcome;
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      state.markers.add(messageId);
     }),
+
+    isCommitted: mock(async (messageId: string): Promise<boolean> => state.markers.has(messageId)),
   };
 
   return service;
@@ -165,11 +164,21 @@ function createFakeConsumerService() {
 
 function createFakeLoyaltyService() {
   return {
-    processCreateRWAFeeCollected: mock(async (_event: unknown): Promise<void> => {}),
-    processCreatePoolFeeCollected: mock(async (_event: unknown): Promise<void> => {}),
-    processRwaMinted: mock(async (_event: unknown): Promise<void> => {}),
-    processRwaBurned: mock(async (_event: unknown): Promise<void> => {}),
-    processReferralTreasuryWithdrawn: mock(async (_event: unknown): Promise<void> => {}),
+    processCreateRWAFeeCollected: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processCreatePoolFeeCollected: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processRwaMinted: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processRwaBurned: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processReferralTreasuryWithdrawn: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
   };
 }
 
@@ -210,10 +219,10 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
 
     for (const [eventName, method] of ROUTING) {
       const event = makeEvent(eventName);
-      await deliver(eventName, makeMessage(eventName, event));
+      await deliver(eventName, makeMessage(eventName, event, { messageId: `31337:0xtx1:${eventName}` }));
 
       expect(loyaltyService[method]).toHaveBeenCalledTimes(1);
-      expect(loyaltyService[method]).toHaveBeenCalledWith(event);
+      expect(loyaltyService[method]).toHaveBeenCalledWith(event, expect.any(Function));
     }
 
     expect(totalCalls()).toBe(ROUTING.length);
@@ -265,8 +274,8 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
   });
 
   test('a service failure is not swallowed: the delivery is deferred to the retry queue', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
     loyaltyService.processReferralTreasuryWithdrawn.mockRejectedValueOnce(new Error('db is down'));
 
     await deliver(
@@ -274,8 +283,6 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
       makeMessage('ReferralTreasury_Withdrawn', makeEvent('ReferralTreasury_Withdrawn')),
     );
 
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toBe('db is down');
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
@@ -284,14 +291,12 @@ describe('loyalty InboxConsumerDaemon (unit, fakes for client / consumer service
   });
 
   test('a malformed payload fails the delivery instead of silently dropping the event', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
 
     await deliver('Pool_RwaBurned', makeMessage('Pool_RwaBurned', {}, { raw: 'not-json{' }));
 
     expect(loyaltyService.processRwaBurned).toHaveBeenCalledTimes(0);
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toContain('not valid JSON');
     expect(rabbit.state.nacked).toHaveLength(1);
   });
 
