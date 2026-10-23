@@ -27,6 +27,7 @@ export type FakeTransactionDoc = {
   poolAddress: string;
   chainId: string;
   transactionHash: string;
+  logIndex: number;
   blockNumber: number;
   amount: number;
   createdAt: number;
@@ -35,7 +36,16 @@ export type FakeTransactionDoc = {
 
 export type CreateTransactionInput = Pick<
   FakeTransactionDoc,
-  'from' | 'to' | 'tokenAddress' | 'tokenId' | 'poolAddress' | 'chainId' | 'transactionHash' | 'blockNumber' | 'amount'
+  | 'from'
+  | 'to'
+  | 'tokenAddress'
+  | 'tokenId'
+  | 'poolAddress'
+  | 'chainId'
+  | 'transactionHash'
+  | 'logIndex'
+  | 'blockNumber'
+  | 'amount'
 >;
 
 function matchesFilter(doc: Record<string, unknown>, filter: Record<string, unknown>): boolean {

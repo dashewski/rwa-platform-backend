@@ -6,7 +6,7 @@
  * No network, no database, no broker, no ports.
  */
 import { describe, expect, test } from 'bun:test';
-import { AppError } from '@shared/errors/app-errors';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
@@ -15,6 +15,7 @@ import { getReactions } from '../../src/graphql/modules/reactions/resolvers/quer
 import { setReaction } from '../../src/graphql/modules/reactions/resolvers/mutations/setReaction';
 import { resetReaction } from '../../src/graphql/modules/reactions/resolvers/mutations/resetReaction';
 
+const INFO = {} as GraphQLResolveInfo;
 const REACTION = {
   id: 'reaction-1',
   parentId: 'parent-1',
@@ -35,11 +36,11 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.reactionsClient.getEntityReactions.post.mockImplementation(async () => edenOk(ENTITY_REACTIONS));
 
-    const result = await getEntityReactions(
+    const result = await getEntityReactions!(
       null as never,
       { parentId: 'parent-1', parentType: 'post' } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.reactionsClient.getEntityReactions.post).toHaveBeenCalledWith({
       parentId: 'parent-1',
@@ -55,11 +56,11 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       edenOk({ reactions: {}, userReactions: [] }),
     );
 
-    const result = await getEntityReactions(
+    const result = await getEntityReactions!(
       null as never,
       { parentId: 'parent-1', parentType: 'post' } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     const [payload] = fake.clients.reactionsClient.getEntityReactions.post.mock.calls[0] as [Record<string, unknown>];
     expect(Object.keys(payload).sort()).toEqual(['parentId', 'parentType', 'userId']);
@@ -74,11 +75,11 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     );
 
     await expect(
-      getEntityReactions(
+      getEntityReactions!(
         null as never,
         { parentId: 'parent-1', parentType: 'post' } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -88,7 +89,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     fake.clients.reactionsClient.getReactions.post.mockImplementation(async () => edenOk([REACTION]));
 
     const input = { filter: { parentId: 'parent-1' }, sort: { createdAt: -1 }, limit: 20, offset: 40 };
-    const result = await getReactions(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getReactions!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.reactionsClient.getReactions.post).toHaveBeenCalledWith({
       filter: { parentId: 'parent-1' },
@@ -106,7 +107,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     fake.clients.reactionsClient.getReactions.post.mockImplementation(async () => edenOk([]));
 
     const input = { filter: { userId: 'user-1' } };
-    const result = await getReactions(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getReactions!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     const [payload] = fake.clients.reactionsClient.getReactions.post.mock.calls[0] as [Record<string, unknown>];
     expect(payload).toEqual({
@@ -126,7 +127,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     );
 
     await expect(
-      getReactions(null as never, { input: { filter: {} } } as never, fake as unknown as GraphQLContext),
+      getReactions!(null as never, { input: { filter: {} } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -135,7 +136,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      setReaction(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext),
+      setReaction!(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.reactionsClient.setReaction.post).toHaveBeenCalledTimes(0);
@@ -145,11 +146,11 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.reactionsClient.setReaction.post.mockImplementation(async () => edenOk(REACTION));
 
-    const result = await setReaction(
+    const result = await setReaction!(
       null as never,
       { input: SET_REACTION_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.reactionsClient.setReaction.post).toHaveBeenCalledWith({
       parentId: 'parent-1',
@@ -167,7 +168,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     );
 
     await expect(
-      setReaction(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext),
+      setReaction!(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -176,7 +177,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      resetReaction(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext),
+      resetReaction!(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.reactionsClient.resetReaction.post).toHaveBeenCalledTimes(0);
@@ -186,11 +187,11 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.reactionsClient.resetReaction.post.mockImplementation(async () => edenOk(REACTION));
 
-    const result = await resetReaction(
+    const result = await resetReaction!(
       null as never,
       { input: SET_REACTION_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.reactionsClient.resetReaction.post).toHaveBeenCalledWith({
       parentId: 'parent-1',
@@ -208,7 +209,7 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
     );
 
     await expect(
-      resetReaction(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext),
+      resetReaction!(null as never, { input: SET_REACTION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 });

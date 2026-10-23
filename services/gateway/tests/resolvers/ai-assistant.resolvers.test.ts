@@ -10,6 +10,7 @@
  * through services.ownership, so the ownership cases below assert that flow.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser, type FakeContext } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
@@ -23,10 +24,12 @@ import { getAssistant } from '../../src/graphql/modules/ai-assistant/resolvers/q
 import { getUserAssistants } from '../../src/graphql/modules/ai-assistant/resolvers/queries/getUserAssistants';
 import { getMessage } from '../../src/graphql/modules/ai-assistant/resolvers/queries/getMessage';
 import { getMessageHistory } from '../../src/graphql/modules/ai-assistant/resolvers/queries/getMessageHistory';
+import type { Assistant, Message } from '../../src/graphql/generated/types';
 
+const INFO = {} as GraphQLResolveInfo;
 const asContext = (fake: FakeContext) => fake as unknown as GraphQLContext;
 
-const ASSISTANT = {
+const ASSISTANT: Assistant = {
   id: 'assistant-1',
   name: 'Research bot',
   userId: fakeUser.id,
@@ -35,7 +38,7 @@ const ASSISTANT = {
 
 const FOREIGN_ASSISTANT = { ...ASSISTANT, id: 'assistant-2', userId: 'user-2' };
 
-const MESSAGE = {
+const MESSAGE: Message = {
   id: 'message-1',
   assistantId: 'assistant-1',
   text: 'Hello',
@@ -49,11 +52,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const created = { ...ASSISTANT, createdAt: 1700000000 };
       fake.clients.aiAssistantClient.createAssistant.post.mockImplementation(async () => edenOk(created));
 
-      const result = await createAssistant(
+      const result = await createAssistant!(
         null as never,
         { input: { name: 'Research bot', contextPreferences: ['investor_base'] } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.createAssistant.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.aiAssistantClient.createAssistant.post).toHaveBeenCalledWith({
@@ -71,11 +74,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
 
       // The GraphQL input declares contextPreferences as non-null; the resolver
       // default is a guard for direct calls, kept faithful in this unit test.
-      const result = await createAssistant(
+      const result = await createAssistant!(
         null as never,
         { input: { name: 'Research bot' } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.createAssistant.post).toHaveBeenCalledWith({
         name: 'Research bot',
@@ -89,11 +92,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createAssistant(
+        createAssistant!(
           null as never,
           { input: { name: 'Research bot', contextPreferences: [] } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.createAssistant.post).toHaveBeenCalledTimes(0);
@@ -108,28 +111,28 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       // Note: this resolver maps upstream failures to code UPSTREAM_ERROR,
       // unlike its sibling resolvers which use BAD_GATEWAY (kept faithful to src).
       await expect(
-        createAssistant(
+        createAssistant!(
           null as never,
           { input: { name: 'Research bot', contextPreferences: [] } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR' });
     });
   });
 
   describe('updateAssistant', () => {
-    const updated = { ...ASSISTANT, name: 'Renamed', contextPreferences: ['popular_pools'] };
+    const updated: Assistant = { ...ASSISTANT, name: 'Renamed', contextPreferences: ['popular_pools'] };
 
     test('verifies ownership, forwards the update and returns the mapped assistant', async () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(ASSISTANT));
       fake.clients.aiAssistantClient.updateAssistant.post.mockImplementation(async () => edenOk(updated));
 
-      const result = await updateAssistant(
+      const result = await updateAssistant!(
         null as never,
         { input: { id: 'assistant-1', name: 'Renamed', contextPreferences: ['popular_pools'] } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
       expect(fake.clients.aiAssistantClient.updateAssistant.post).toHaveBeenCalledWith({
@@ -144,7 +147,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        updateAssistant(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake)),
+        updateAssistant!(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledTimes(0);
@@ -156,7 +159,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
       await expect(
-        updateAssistant(null as never, { input: { id: 'assistant-2', name: 'Renamed' } } as never, asContext(fake)),
+        updateAssistant!(null as never, { input: { id: 'assistant-2', name: 'Renamed' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.updateAssistant.post).toHaveBeenCalledTimes(0);
@@ -169,7 +172,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        updateAssistant(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake)),
+        updateAssistant!(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.updateAssistant.post).toHaveBeenCalledTimes(0);
@@ -183,7 +186,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        updateAssistant(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake)),
+        updateAssistant!(null as never, { input: { id: 'assistant-1', name: 'Renamed' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -196,7 +199,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenOk({ id: 'assistant-1', deletedAt: 1700000000 }),
       );
 
-      const result = await deleteAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake));
+      const result = await deleteAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
       expect(fake.clients.aiAssistantClient.deleteAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
@@ -207,7 +210,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        deleteAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake)),
+        deleteAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.deleteAssistant.post).toHaveBeenCalledTimes(0);
@@ -218,7 +221,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
       await expect(
-        deleteAssistant(null as never, { id: 'assistant-2' } as never, asContext(fake)),
+        deleteAssistant!(null as never, { id: 'assistant-2' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.deleteAssistant.post).toHaveBeenCalledTimes(0);
@@ -232,7 +235,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        deleteAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake)),
+        deleteAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -247,11 +250,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       ];
       fake.clients.aiAssistantClient.createMessage.post.mockImplementation(async () => edenOk(created));
 
-      const result = await createMessage(
+      const result = await createMessage!(
         null as never,
         { input: { assistantId: 'assistant-1', text: 'Hello' } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
       expect(fake.clients.aiAssistantClient.createMessage.post).toHaveBeenCalledWith({
@@ -268,11 +271,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createMessage(
+        createMessage!(
           null as never,
           { input: { assistantId: 'assistant-1', text: 'Hello' } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.createMessage.post).toHaveBeenCalledTimes(0);
@@ -283,11 +286,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
       await expect(
-        createMessage(
+        createMessage!(
           null as never,
           { input: { assistantId: 'assistant-2', text: 'Hello' } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.createMessage.post).toHaveBeenCalledTimes(0);
@@ -301,11 +304,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        createMessage(
+        createMessage!(
           null as never,
           { input: { assistantId: 'assistant-1', text: 'Hello' } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -320,11 +323,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const updated = { ...MESSAGE, text: 'Updated' };
       fake.clients.aiAssistantClient.updateMessage.post.mockImplementation(async () => edenOk(updated));
 
-      const result = await updateMessage(
+      const result = await updateMessage!(
         null as never,
         { input: { id: 'message-1', text: 'Updated' } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.getMessage.post).toHaveBeenCalledWith({ id: 'message-1' });
       // The assistant id is derived from the fetched message, not from the input.
@@ -340,7 +343,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        updateMessage(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake)),
+        updateMessage!(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.getMessage.post).toHaveBeenCalledTimes(0);
@@ -354,7 +357,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        updateMessage(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake)),
+        updateMessage!(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledTimes(0);
@@ -367,7 +370,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
       await expect(
-        updateMessage(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake)),
+        updateMessage!(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.updateMessage.post).toHaveBeenCalledTimes(0);
@@ -382,7 +385,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        updateMessage(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake)),
+        updateMessage!(null as never, { input: { id: 'message-1', text: 'Updated' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -398,7 +401,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenOk({ ...MESSAGE, deletedAt: 1700000000 }),
       );
 
-      const result = await deleteMessage(null as never, { id: 'message-1' } as never, asContext(fake));
+      const result = await deleteMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiAssistantClient.getMessage.post).toHaveBeenCalledWith({ id: 'message-1' });
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: MESSAGE.assistantId });
@@ -409,7 +412,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED without calling the service', async () => {
       const fake = createFakeContext();
 
-      await expect(deleteMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(deleteMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 401,
         code: 'UNAUTHORIZED',
       });
@@ -424,7 +427,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenError(404, 'NOT_FOUND', 'no message'),
       );
 
-      await expect(deleteMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(deleteMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -438,7 +441,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getMessage.post.mockImplementation(async () => edenOk(MESSAGE));
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
-      await expect(deleteMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(deleteMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
       });
@@ -454,7 +457,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenError(500, 'INTERNAL_ERROR', 'boom'),
       );
 
-      await expect(deleteMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(deleteMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -468,7 +471,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenOk({ ...ASSISTANT, createdAt: 1700000000 }),
       );
 
-      const result = await getAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake));
+      const result = await getAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
       expect(result).toEqual(ASSISTANT);
@@ -477,7 +480,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED without calling the service', async () => {
       const fake = createFakeContext();
 
-      await expect(getAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 401,
         code: 'UNAUTHORIZED',
       });
@@ -491,7 +494,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenError(404, 'NOT_FOUND', 'no assistant'),
       );
 
-      await expect(getAssistant(null as never, { id: 'assistant-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getAssistant!(null as never, { id: 'assistant-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -501,7 +504,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
-      await expect(getAssistant(null as never, { id: 'assistant-2' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getAssistant!(null as never, { id: 'assistant-2' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
       });
@@ -518,11 +521,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenOk(assistants.map((assistant) => ({ ...assistant, createdAt: 1700000000 }))),
       );
 
-      const result = await getUserAssistants(
+      const result = await getUserAssistants!(
         null as never,
         { pagination: { limit: 10, offset: 5 } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.getUserAssistants.post).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -534,7 +537,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED without calling the service', async () => {
       const fake = createFakeContext();
 
-      await expect(getUserAssistants(null as never, {} as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getUserAssistants!(null as never, {} as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 401,
         code: 'UNAUTHORIZED',
       });
@@ -546,7 +549,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.aiAssistantClient.getUserAssistants.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getUserAssistants(null as never, {} as never, asContext(fake));
+      const result = await getUserAssistants!(null as never, {} as never, asContext(fake), INFO);
 
       expect(fake.clients.aiAssistantClient.getUserAssistants.post).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -561,7 +564,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenError(500, 'INTERNAL_ERROR', 'boom'),
       );
 
-      await expect(getUserAssistants(null as never, {} as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getUserAssistants!(null as never, {} as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -576,7 +579,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(ASSISTANT));
 
-      const result = await getMessage(null as never, { id: 'message-1' } as never, asContext(fake));
+      const result = await getMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiAssistantClient.getMessage.post).toHaveBeenCalledWith({ id: 'message-1' });
       // The assistant id is derived from the fetched message, not from the input.
@@ -587,7 +590,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED without calling the service', async () => {
       const fake = createFakeContext();
 
-      await expect(getMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 401,
         code: 'UNAUTHORIZED',
       });
@@ -601,7 +604,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
         edenError(404, 'NOT_FOUND', 'no message'),
       );
 
-      await expect(getMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -614,7 +617,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getMessage.post.mockImplementation(async () => edenOk(MESSAGE));
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
-      await expect(getMessage(null as never, { id: 'message-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getMessage!(null as never, { id: 'message-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
       });
@@ -631,11 +634,11 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       ];
       fake.clients.aiAssistantClient.getMessageHistory.post.mockImplementation(async () => edenOk(history));
 
-      const result = await getMessageHistory(
+      const result = await getMessageHistory!(
         null as never,
         { assistantId: 'assistant-1', pagination: { limit: 20, offset: 0 } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledWith({ id: 'assistant-1' });
       expect(fake.clients.aiAssistantClient.getMessageHistory.post).toHaveBeenCalledWith({
@@ -652,7 +655,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        getMessageHistory(null as never, { assistantId: 'assistant-1' } as never, asContext(fake)),
+        getMessageHistory!(null as never, { assistantId: 'assistant-1' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.aiAssistantClient.getAssistant.post).toHaveBeenCalledTimes(0);
@@ -664,7 +667,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       fake.clients.aiAssistantClient.getAssistant.post.mockImplementation(async () => edenOk(FOREIGN_ASSISTANT));
 
       await expect(
-        getMessageHistory(null as never, { assistantId: 'assistant-2' } as never, asContext(fake)),
+        getMessageHistory!(null as never, { assistantId: 'assistant-2' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.getMessageHistory.post).toHaveBeenCalledTimes(0);
@@ -677,7 +680,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        getMessageHistory(null as never, { assistantId: 'assistant-1' } as never, asContext(fake)),
+        getMessageHistory!(null as never, { assistantId: 'assistant-1' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.aiAssistantClient.getMessageHistory.post).toHaveBeenCalledTimes(0);
@@ -691,7 +694,7 @@ describe('ai-assistant resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        getMessageHistory(null as never, { assistantId: 'assistant-1' } as never, asContext(fake)),
+        getMessageHistory!(null as never, { assistantId: 'assistant-1' } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });

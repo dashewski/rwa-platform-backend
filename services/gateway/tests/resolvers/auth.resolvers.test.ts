@@ -10,6 +10,7 @@
  * an authenticated user.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import { ethers } from 'ethers';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser, type FakeContext } from '../fakes/context.fake';
@@ -19,6 +20,7 @@ import { refreshToken } from '../../src/graphql/modules/auth/resolvers/mutations
 import { revokeTokens } from '../../src/graphql/modules/auth/resolvers/mutations/revokeTokens';
 import { getUserTokens } from '../../src/graphql/modules/auth/resolvers/queries/getUserTokens';
 
+const INFO = {} as GraphQLResolveInfo;
 const asContext = (fake: FakeContext) => fake as unknown as GraphQLContext;
 
 // All-lowercase input: the resolver must forward the EIP-55 checksummed form.
@@ -38,11 +40,11 @@ describe('auth resolvers (unit, fake clients)', () => {
       };
       fake.clients.authClient.authenticate.post.mockImplementation(async () => edenOk(upstream));
 
-      const result = await authenticate(
+      const result = await authenticate!(
         null as never,
         { input: { wallet: LOWERCASE_WALLET, signature: '0xsig', timestamp: 1700000000 } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.authClient.authenticate.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.authClient.authenticate.post).toHaveBeenCalledWith({
@@ -70,11 +72,11 @@ describe('auth resolvers (unit, fake clients)', () => {
         }),
       );
 
-      const result = await authenticate(
+      const result = await authenticate!(
         null as never,
         { input: { wallet: fakeUser.wallet, signature: '0xsig', timestamp: 1700000000 } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(result.userId).toBe('user-1');
     });
@@ -86,11 +88,11 @@ describe('auth resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        authenticate(
+        authenticate!(
           null as never,
           { input: { wallet: fakeUser.wallet, signature: '0xsig', timestamp: 1700000000 } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
 
@@ -98,11 +100,11 @@ describe('auth resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        authenticate(
+        authenticate!(
           null as never,
           { input: { wallet: 'not-an-address', signature: '0xsig', timestamp: 1700000000 } } as never,
           asContext(fake),
-        ),
+        INFO),
       ).rejects.toThrow();
 
       expect(fake.clients.authClient.authenticate.post).toHaveBeenCalledTimes(0);
@@ -120,11 +122,11 @@ describe('auth resolvers (unit, fake clients)', () => {
       };
       fake.clients.authClient.refreshToken.post.mockImplementation(async () => edenOk(upstream));
 
-      const result = await refreshToken(
+      const result = await refreshToken!(
         null as never,
         { input: { refreshToken: 'refresh-token' } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.authClient.refreshToken.post).toHaveBeenCalledWith({ refreshToken: 'refresh-token' });
       expect(result).toEqual(upstream);
@@ -137,7 +139,7 @@ describe('auth resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        refreshToken(null as never, { input: { refreshToken: 'stale' } } as never, asContext(fake)),
+        refreshToken!(null as never, { input: { refreshToken: 'stale' } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -147,11 +149,11 @@ describe('auth resolvers (unit, fake clients)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.authClient.revokeTokens.post.mockImplementation(async () => edenOk({ revokedCount: 2 }));
 
-      const result = await revokeTokens(
+      const result = await revokeTokens!(
         null as never,
         { input: { tokenHashes: ['hash-1', 'hash-2'] } } as never,
         asContext(fake),
-      );
+      INFO);
 
       expect(fake.clients.authClient.revokeTokens.post).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -164,7 +166,7 @@ describe('auth resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
 
       await expect(
-        revokeTokens(null as never, { input: { tokenHashes: ['hash-1'] } } as never, asContext(fake)),
+        revokeTokens!(null as never, { input: { tokenHashes: ['hash-1'] } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.authClient.revokeTokens.post).toHaveBeenCalledTimes(0);
@@ -177,7 +179,7 @@ describe('auth resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        revokeTokens(null as never, { input: { tokenHashes: ['hash-1'] } } as never, asContext(fake)),
+        revokeTokens!(null as never, { input: { tokenHashes: ['hash-1'] } } as never, asContext(fake), INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -197,7 +199,7 @@ describe('auth resolvers (unit, fake clients)', () => {
       ];
       fake.clients.authClient.getUserTokens.post.mockImplementation(async () => edenOk(tokens));
 
-      const result = await getUserTokens(null as never, {} as never, asContext(fake));
+      const result = await getUserTokens!(null as never, {} as never, asContext(fake), INFO);
 
       expect(fake.clients.authClient.getUserTokens.post).toHaveBeenCalledWith({ userId: fakeUser.id });
       expect(result).toEqual(tokens);
@@ -206,7 +208,7 @@ describe('auth resolvers (unit, fake clients)', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED without calling the service', async () => {
       const fake = createFakeContext();
 
-      await expect(getUserTokens(null as never, {} as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getUserTokens!(null as never, {} as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 401,
         code: 'UNAUTHORIZED',
       });
@@ -220,7 +222,7 @@ describe('auth resolvers (unit, fake clients)', () => {
         edenError(500, 'INTERNAL_ERROR', 'boom'),
       );
 
-      await expect(getUserTokens(null as never, {} as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getUserTokens!(null as never, {} as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });

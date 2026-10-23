@@ -10,22 +10,24 @@
  * behaviour (kept faithful to src) rather than assuming a 401.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser, type FakeContext } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
 import { getEvaluations } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluations';
 import { getEvaluation } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluation';
+import type { Evaluation } from '../../src/graphql/generated/types';
 
+const INFO = {} as GraphQLResolveInfo;
 const asContext = (fake: FakeContext) => fake as unknown as GraphQLContext;
 
-const EVALUATION = {
+const EVALUATION: Evaluation = {
   id: 'eval-1',
   entityType: 'business',
   parentId: 'business-1',
   grandParentId: 'company-1',
   ownerId: 'owner-1',
   ownerType: 'business',
-  status: 'completed',
   riskScore: 42,
   factors: [{ name: 'team', impact: 'low', detail: 'experienced founders' }],
   evaluatedDocuments: [],
@@ -49,7 +51,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         offset: 20,
       };
 
-      const result = await getEvaluations(null as never, { input } as never, asContext(fake));
+      const result = await getEvaluations!(null as never, { input } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiEvaluatorClient.getEvaluations.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.aiEvaluatorClient.getEvaluations.post).toHaveBeenCalledWith({
@@ -65,7 +67,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.aiEvaluatorClient.getEvaluations.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getEvaluations(null as never, {} as never, asContext(fake));
+      const result = await getEvaluations!(null as never, {} as never, asContext(fake), INFO);
 
       expect(fake.clients.aiEvaluatorClient.getEvaluations.post).toHaveBeenCalledWith({
         filter: {},
@@ -80,7 +82,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.aiEvaluatorClient.getEvaluations.post.mockImplementation(async () => edenOk([]));
 
-      await getEvaluations(null as never, { input: { limit: 5 } } as never, asContext(fake));
+      await getEvaluations!(null as never, { input: { limit: 5 } } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiEvaluatorClient.getEvaluations.post).toHaveBeenCalledWith({
         filter: {},
@@ -94,7 +96,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.aiEvaluatorClient.getEvaluations.post.mockImplementation(async () => edenOk([EVALUATION]));
 
-      const result = await getEvaluations(null as never, { input: {} } as never, asContext(fake));
+      const result = await getEvaluations!(null as never, { input: {} } as never, asContext(fake), INFO);
 
       expect(result).toEqual([EVALUATION]);
     });
@@ -105,7 +107,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         edenError(500, 'INTERNAL_ERROR', 'boom'),
       );
 
-      await expect(getEvaluations(null as never, { input: {} } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getEvaluations!(null as never, { input: {} } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });
@@ -117,7 +119,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.aiEvaluatorClient.getEvaluation.post.mockImplementation(async () => edenOk(EVALUATION));
 
-      const result = await getEvaluation(null as never, { id: 'eval-1' } as never, asContext(fake));
+      const result = await getEvaluation!(null as never, { id: 'eval-1' } as never, asContext(fake), INFO);
 
       expect(fake.clients.aiEvaluatorClient.getEvaluation.post).toHaveBeenCalledWith({ id: 'eval-1' });
       expect(result).toEqual(EVALUATION);
@@ -127,7 +129,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.aiEvaluatorClient.getEvaluation.post.mockImplementation(async () => edenOk(EVALUATION));
 
-      const result = await getEvaluation(null as never, { id: 'eval-1' } as never, asContext(fake));
+      const result = await getEvaluation!(null as never, { id: 'eval-1' } as never, asContext(fake), INFO);
 
       expect(result).toEqual(EVALUATION);
     });
@@ -138,7 +140,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         edenError(404, 'NOT_FOUND', 'no evaluation'),
       );
 
-      await expect(getEvaluation(null as never, { id: 'eval-1' } as never, asContext(fake))).rejects.toMatchObject({
+      await expect(getEvaluation!(null as never, { id: 'eval-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });

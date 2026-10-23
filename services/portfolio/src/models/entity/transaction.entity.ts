@@ -37,6 +37,10 @@ const transactionSchemaDefinition = {
     required: true,
     trim: true,
   },
+  logIndex: {
+    type: Number,
+    required: true,
+  },
   blockNumber: {
     type: Number,
     required: true,

@@ -96,6 +96,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtx0001',
+      logIndex: 0,
       blockNumber: 100,
       amount: 1,
       ...overrides,
@@ -114,6 +115,7 @@ describe('PortfolioService (unit, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtransfer0001',
+      logIndex: 0,
       blockNumber: 123,
       amount: 250,
     });

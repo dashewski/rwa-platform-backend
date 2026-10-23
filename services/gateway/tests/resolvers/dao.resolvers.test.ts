@@ -9,6 +9,7 @@
  * anonymous callers as well.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
@@ -19,7 +20,42 @@ import { getTimelockTasks } from '../../src/graphql/modules/dao/resolvers/querie
 import { getTreasuryWithdraws } from '../../src/graphql/modules/dao/resolvers/queries/getTreasuryWithdraws';
 import { getVotes } from '../../src/graphql/modules/dao/resolvers/queries/getVotes';
 
-const ROW = { id: 'row-1', chainId: '56' };
+const INFO = {} as GraphQLResolveInfo;
+const ROW = {
+  id: 'row-1',
+  chainId: '56',
+  amount: '',
+  createdAt: 0,
+  isNative: false,
+  logIndex: 0,
+  recipient: '',
+  token: '',
+  transactionHash: '',
+  updatedAt: 0,
+  lastStakeTimestamp: 0,
+  staker: '',
+  unlockTimestamp: 0,
+  operation: '',
+  rewards: '',
+  blockNumber: 0,
+  governanceAddress: '',
+  proposalId: '',
+  reason: '',
+  support: false,
+  voterWallet: '',
+  weight: '',
+  cancelled: false,
+  data: '',
+  eta: 0,
+  executed: false,
+  target: '',
+  txHash: '',
+  creationTime: 0,
+  description: '',
+  endTime: 0,
+  proposer: '',
+  state: '',
+};
 
 const FILTER_INPUT = {
   filter: { chainId: '56' },
@@ -33,11 +69,11 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getProposals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getProposals(
+    const result = await getProposals!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.daoClient.getProposals.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getProposals.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -48,7 +84,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getProposals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getProposals(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getProposals!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getProposals.post).toHaveBeenCalledWith({
       filter: {},
@@ -63,7 +99,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getProposals.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
-    await expect(getProposals(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getProposals!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });
@@ -73,7 +109,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getStaking.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getStaking(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext);
+    const result = await getStaking!(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getStaking.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getStaking.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -84,7 +120,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getStaking.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getStaking(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getStaking!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getStaking.post).toHaveBeenCalledWith({
       filter: {},
@@ -99,7 +135,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getStaking.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
-    await expect(getStaking(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getStaking!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });
@@ -109,11 +145,11 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getStakingHistory.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getStakingHistory(
+    const result = await getStakingHistory!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.daoClient.getStakingHistory.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getStakingHistory.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -124,7 +160,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getStakingHistory.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getStakingHistory(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getStakingHistory!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getStakingHistory.post).toHaveBeenCalledWith({
       filter: {},
@@ -142,7 +178,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      getStakingHistory(null as never, {} as never, fake as unknown as GraphQLContext),
+      getStakingHistory!(null as never, {} as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
@@ -153,11 +189,11 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getTimelockTasks.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getTimelockTasks(
+    const result = await getTimelockTasks!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.daoClient.getTimelockTasks.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getTimelockTasks.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -168,7 +204,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getTimelockTasks.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getTimelockTasks(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getTimelockTasks!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getTimelockTasks.post).toHaveBeenCalledWith({
       filter: {},
@@ -185,7 +221,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
       edenError(500, 'INTERNAL_ERROR', 'boom'),
     );
 
-    await expect(getTimelockTasks(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject(
+    await expect(getTimelockTasks!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject(
       {
         statusCode: 502,
         code: 'BAD_GATEWAY',
@@ -198,11 +234,11 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     // The resolver calls the upstream operation named getTreasuryWithdrawals.
     fake.clients.daoClient.getTreasuryWithdrawals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getTreasuryWithdraws(
+    const result = await getTreasuryWithdraws!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.daoClient.getTreasuryWithdrawals.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getTreasuryWithdrawals.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -213,7 +249,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getTreasuryWithdrawals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getTreasuryWithdraws(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getTreasuryWithdraws!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getTreasuryWithdrawals.post).toHaveBeenCalledWith({
       filter: {},
@@ -231,7 +267,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      getTreasuryWithdraws(null as never, {} as never, fake as unknown as GraphQLContext),
+      getTreasuryWithdraws!(null as never, {} as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
@@ -242,7 +278,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getVotes.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getVotes(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext);
+    const result = await getVotes!(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getVotes.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.daoClient.getVotes.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -253,7 +289,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getVotes.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getVotes(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getVotes!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.daoClient.getVotes.post).toHaveBeenCalledWith({
       filter: {},
@@ -268,7 +304,7 @@ describe('gateway dao resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.daoClient.getVotes.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
-    await expect(getVotes(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getVotes!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });

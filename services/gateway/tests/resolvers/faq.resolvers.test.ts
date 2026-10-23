@@ -6,6 +6,7 @@
  * No network, no database, no broker, no ports.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import { AppError } from '@shared/errors/app-errors';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
@@ -21,6 +22,7 @@ import { createFaqAnswer } from '../../src/graphql/modules/faq/resolvers/mutatio
 import { updateFaqAnswer } from '../../src/graphql/modules/faq/resolvers/mutations/updateFaqAnswer';
 import { deleteFaqAnswer } from '../../src/graphql/modules/faq/resolvers/mutations/deleteFaqAnswer';
 
+const INFO = {} as GraphQLResolveInfo;
 const TOPIC = {
   id: 'topic-1',
   name: 'Getting started',
@@ -70,7 +72,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
 
-    const result = await getFaqTopic(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext);
+    const result = await getFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledWith({ id: 'topic-1' });
     expect(result).toEqual(TOPIC); // storage-only fields such as `_id` are dropped
@@ -81,7 +83,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no topic'));
 
     await expect(
-      getFaqTopic(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      getFaqTopic!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -91,7 +93,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopics.post.mockImplementation(async () => edenOk([UPSTREAM_TOPIC, UPSTREAM_TOPIC_2]));
 
     const input = { filter: { ownerId: 'owner-1' }, sort: { name: 1 }, limit: 10, offset: 5 };
-    const result = await getFaqTopics(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getFaqTopics!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getTopics.post).toHaveBeenCalledWith({
       filter: { ownerId: 'owner-1' },
@@ -106,7 +108,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getTopics.post.mockImplementation(async () => edenOk([]));
 
-    const result = await getFaqTopics(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getFaqTopics!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getTopics.post).toHaveBeenCalledWith({
       filter: {},
@@ -122,7 +124,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopics.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      getFaqTopics(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      getFaqTopics!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -131,7 +133,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenOk(UPSTREAM_ANSWER));
 
-    const result = await getFaqAnswer(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext);
+    const result = await getFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledWith({ id: 'answer-1' });
     expect(result).toEqual(ANSWER);
@@ -142,7 +144,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no answer'));
 
     await expect(
-      getFaqAnswer(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      getFaqAnswer!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -152,7 +154,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswers.post.mockImplementation(async () => edenOk([UPSTREAM_ANSWER]));
 
     const input = { filter: { topicId: 'topic-1' }, sort: { order: 1 }, limit: 20, offset: 40 };
-    const result = await getFaqAnswers(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getFaqAnswers!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getAnswers.post).toHaveBeenCalledWith({
       filter: { topicId: 'topic-1' },
@@ -167,7 +169,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getAnswers.post.mockImplementation(async () => edenOk([]));
 
-    const result = await getFaqAnswers(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getFaqAnswers!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getAnswers.post).toHaveBeenCalledWith({
       filter: {},
@@ -183,7 +185,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswers.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      getFaqAnswers(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      getFaqAnswers!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -192,7 +194,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      createFaqTopic(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqTopic!(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledTimes(0);
@@ -205,11 +207,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.services.parent.getParentInfo.mockImplementation(async () => PARENT_INFO);
     fake.clients.faqClient.createTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
 
-    const result = await createFaqTopic(
+    const result = await createFaqTopic!(
       null as never,
       { input: CREATE_TOPIC_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'parent-1', 'user-1');
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -237,7 +239,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      createFaqTopic(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqTopic!(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.createTopic.post).toHaveBeenCalledTimes(0);
@@ -249,7 +251,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.createTopic.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      createFaqTopic(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqTopic!(null as never, { input: CREATE_TOPIC_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -258,11 +260,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      updateFaqTopic(
+      updateFaqTopic!(
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledTimes(0);
@@ -277,7 +279,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     );
 
     const input = { id: 'topic-1', updateData: { name: 'Renamed' } };
-    const result = await updateFaqTopic(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await updateFaqTopic!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledWith({ id: 'topic-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -298,11 +300,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no topic'));
 
     await expect(
-      updateFaqTopic(
+      updateFaqTopic!(
         null as never,
         { input: { id: 'missing', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -317,11 +319,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      updateFaqTopic(
+      updateFaqTopic!(
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.updateTopic.post).toHaveBeenCalledTimes(0);
@@ -333,11 +335,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.updateTopic.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      updateFaqTopic(
+      updateFaqTopic!(
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -346,7 +348,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      deleteFaqTopic(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext),
+      deleteFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.deleteTopic.post).toHaveBeenCalledTimes(0);
@@ -357,7 +359,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
     fake.clients.faqClient.deleteTopic.post.mockImplementation(async () => edenOk({ id: 'topic-1' }));
 
-    const result = await deleteFaqTopic(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext);
+    const result = await deleteFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledWith({ id: 'topic-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -375,7 +377,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no topic'));
 
     await expect(
-      deleteFaqTopic(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      deleteFaqTopic!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.faqClient.deleteTopic.post).toHaveBeenCalledTimes(0);
@@ -387,7 +389,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.deleteTopic.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      deleteFaqTopic(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext),
+      deleteFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -396,7 +398,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      createFaqAnswer(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqAnswer!(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledTimes(0);
@@ -408,11 +410,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
     fake.clients.faqClient.createAnswer.post.mockImplementation(async () => edenOk(UPSTREAM_ANSWER));
 
-    const result = await createFaqAnswer(
+    const result = await createFaqAnswer!(
       null as never,
       { input: CREATE_ANSWER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -440,7 +442,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.createAnswer.post.mockImplementation(async () => edenOk({ ...UPSTREAM_ANSWER, order: 0 }));
 
     const input = { topicId: 'topic-1', question: 'What is HOLD?', answer: 'The platform token.' };
-    const result = await createFaqAnswer(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await createFaqAnswer!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.createAnswer.post).toHaveBeenCalledWith({
       topicId: 'topic-1',
@@ -461,7 +463,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no topic'));
 
     await expect(
-      createFaqAnswer(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqAnswer!(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.faqClient.createAnswer.post).toHaveBeenCalledTimes(0);
@@ -475,7 +477,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      createFaqAnswer(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqAnswer!(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.createAnswer.post).toHaveBeenCalledTimes(0);
@@ -487,7 +489,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.createAnswer.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      createFaqAnswer(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext),
+      createFaqAnswer!(null as never, { input: CREATE_ANSWER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -496,11 +498,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      updateFaqAnswer(
+      updateFaqAnswer!(
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledTimes(0);
@@ -515,7 +517,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     );
 
     const input = { id: 'answer-1', updateData: { answer: 'Updated' } };
-    const result = await updateFaqAnswer(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await updateFaqAnswer!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledWith({ id: 'answer-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -536,11 +538,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no answer'));
 
     await expect(
-      updateFaqAnswer(
+      updateFaqAnswer!(
         null as never,
         { input: { id: 'missing', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.faqClient.updateAnswer.post).toHaveBeenCalledTimes(0);
@@ -554,11 +556,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      updateFaqAnswer(
+      updateFaqAnswer!(
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.updateAnswer.post).toHaveBeenCalledTimes(0);
@@ -570,11 +572,11 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.updateAnswer.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      updateFaqAnswer(
+      updateFaqAnswer!(
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -583,7 +585,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      deleteFaqAnswer(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext),
+      deleteFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.deleteAnswer.post).toHaveBeenCalledTimes(0);
@@ -594,7 +596,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenOk(UPSTREAM_ANSWER));
     fake.clients.faqClient.deleteAnswer.post.mockImplementation(async () => edenOk({ id: 'answer-1' }));
 
-    const result = await deleteFaqAnswer(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext);
+    const result = await deleteFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledWith({ id: 'answer-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -612,7 +614,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no answer'));
 
     await expect(
-      deleteFaqAnswer(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      deleteFaqAnswer!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.faqClient.deleteAnswer.post).toHaveBeenCalledTimes(0);
@@ -624,7 +626,7 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.deleteAnswer.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      deleteFaqAnswer(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext),
+      deleteFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 });

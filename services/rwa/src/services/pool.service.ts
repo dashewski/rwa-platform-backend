@@ -1065,13 +1065,6 @@ Example response:
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
 
     const incomingTranches = [...pool.incomingTranches];
-    if (event.data.trancheIndex >= incomingTranches.length) {
-      throw new AppError({
-        message: `Invalid tranche index ${event.data.trancheIndex}`,
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
 
     const currentReturnedAmount = BigInt(incomingTranches[event.data.trancheIndex].returnedAmount);
     const appliedAmount = BigInt(event.data.amountAppliedToTranche);

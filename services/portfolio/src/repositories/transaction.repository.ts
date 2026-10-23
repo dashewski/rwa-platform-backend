@@ -18,6 +18,7 @@ export class TransactionRepository {
       | 'poolAddress'
       | 'chainId'
       | 'transactionHash'
+      | 'logIndex'
       | 'blockNumber'
       | 'amount'
     >,

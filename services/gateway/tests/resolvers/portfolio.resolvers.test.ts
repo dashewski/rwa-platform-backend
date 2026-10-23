@@ -7,12 +7,15 @@
  * default (user: null) context is what the resolvers see in production.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
 import { getBalances } from '../../src/graphql/modules/portfolio/resolvers/queries/getBalances';
 import { getTransactions } from '../../src/graphql/modules/portfolio/resolvers/queries/getTransactions';
+import type { Transaction } from '../../src/graphql/generated/types';
 
+const INFO = {} as GraphQLResolveInfo;
 const BALANCE = {
   id: 'balance-1',
   owner: '0xwallet',
@@ -26,7 +29,7 @@ const BALANCE = {
   updatedAt: 1700000001,
 };
 
-const TRANSACTION = {
+const TRANSACTION: Transaction = {
   id: 'tx-1',
   from: '0xwallet',
   to: '0xpool',
@@ -39,7 +42,8 @@ const TRANSACTION = {
   amount: 1000,
   createdAt: 1700000000,
   updatedAt: 1700000001,
-};
+
+  logIndex: 0,};
 
 const LIST_INPUT = {
   filter: { owner: '0xwallet' },
@@ -54,11 +58,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getBalances.post.mockImplementation(async () => edenOk([BALANCE]));
 
-      const result = await getBalances(
+      const result = await getBalances!(
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.portfolioClient.getBalances.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -73,11 +77,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getBalances.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getBalances(
+      const result = await getBalances!(
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(result).toEqual([]);
     });
@@ -89,7 +93,7 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        getBalances(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext),
+        getBalances!(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -99,11 +103,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getTransactions.post.mockImplementation(async () => edenOk([TRANSACTION]));
 
-      const result = await getTransactions(
+      const result = await getTransactions!(
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.portfolioClient.getTransactions.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -118,11 +122,11 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       const fake = createFakeContext();
       fake.clients.portfolioClient.getTransactions.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getTransactions(
+      const result = await getTransactions!(
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(result).toEqual([]);
     });
@@ -134,7 +138,7 @@ describe('portfolio resolvers (unit, fake clients)', () => {
       );
 
       await expect(
-        getTransactions(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext),
+        getTransactions!(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });

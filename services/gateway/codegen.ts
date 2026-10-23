@@ -18,6 +18,7 @@ const config: CodegenConfig = {
         maybeValue: 'T | undefined',
         useIndexSignature: true,
         enumsAsTypes: true,
+        makeResolverTypeCallable: true,
         // avoidOptionals: true,
       },
     },

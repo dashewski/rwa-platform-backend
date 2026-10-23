@@ -1960,6 +1960,7 @@ export type Transaction = {
   createdAt: Scalars['Int']['output'];
   from: Scalars['String']['output'];
   id: Scalars['String']['output'];
+  logIndex: Scalars['Int']['output'];
   poolAddress: Scalars['String']['output'];
   to: Scalars['String']['output'];
   tokenAddress: Scalars['String']['output'];
@@ -2182,11 +2183,7 @@ export type ResolversObject<TObject> = WithIndex<TObject>;
 
 export type ResolverTypeWrapper<T> = Promise<T> | T;
 
-
-export type ResolverWithResolve<TResult, TParent, TContext, TArgs> = {
-  resolve: ResolverFn<TResult, TParent, TContext, TArgs>;
-};
-export type Resolver<TResult, TParent = {}, TContext = {}, TArgs = {}> = ResolverFn<TResult, TParent, TContext, TArgs> | ResolverWithResolve<TResult, TParent, TContext, TArgs>;
+export type Resolver<TResult, TParent = {}, TContext = {}, TArgs = {}> = ResolverFn<TResult, TParent, TContext, TArgs>;
 
 export type ResolverFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
@@ -3376,6 +3373,7 @@ export type TransactionResolvers<ContextType = GraphQLContext, ParentType extend
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   from?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  logIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   poolAddress?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   to?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   tokenAddress?: Resolver<ResolversTypes['String'], ParentType, ContextType>;

@@ -9,6 +9,7 @@
  * UNAUTHORIZED); the four queries are unauthenticated pass-throughs.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
@@ -19,7 +20,34 @@ import { getReferrals } from '../../src/graphql/modules/loyalty/resolvers/querie
 import { getReferrerClaimHistory } from '../../src/graphql/modules/loyalty/resolvers/queries/getReferrerClaimHistory';
 import { getReferrerWithdraws } from '../../src/graphql/modules/loyalty/resolvers/queries/getReferrerWithdraws';
 
-const ROW = { id: 'row-1', userId: 'user-1' };
+const INFO = {} as GraphQLResolveInfo;
+const ROW = {
+  id: 'row-1',
+  userId: 'user-1',
+  amount: '',
+  blockNumber: 0,
+  chainId: '',
+  createdAt: 0,
+  logIndex: 0,
+  referralWallet: '',
+  referrerId: '',
+  referrerWallet: '',
+  tokenAddress: '',
+  transactionHash: '',
+  updatedAt: 0,
+  buyCommissionAmount: '',
+  buyCommissionCount: 0,
+  poolCreationCommissionAmount: '',
+  poolCreationCommissionCount: 0,
+  referralRewardAmount: '',
+  referralRewardCount: 0,
+  sellCommissionAmount: '',
+  sellCommissionCount: 0,
+  tokenCreationCommissionAmount: '',
+  tokenCreationCommissionCount: 0,
+  userWallet: '',
+  totalWithdrawnAmount: '',
+};
 
 /** Full auth-service user records; wallets are read from these. */
 const CALLER = { id: 'user-1', wallet: '0x2222222222222222222222222222222222222222' };
@@ -37,7 +65,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getFees.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getFees(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext);
+    const result = await getFees!(null as never, { input: FILTER_INPUT } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.loyaltyClient.getFees.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.loyaltyClient.getFees.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -48,7 +76,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getFees.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getFees(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getFees!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.loyaltyClient.getFees.post).toHaveBeenCalledWith({
       filter: {},
@@ -63,7 +91,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getFees.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
-    await expect(getFees(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getFees!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });
@@ -73,11 +101,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrals(
+    const result = await getReferrals!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.loyaltyClient.getReferrals.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.loyaltyClient.getReferrals.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -88,7 +116,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrals.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrals(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getReferrals!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.loyaltyClient.getReferrals.post).toHaveBeenCalledWith({
       filter: {},
@@ -105,7 +133,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
       edenError(500, 'INTERNAL_ERROR', 'boom'),
     );
 
-    await expect(getReferrals(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getReferrals!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });
@@ -115,11 +143,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrerWithdraws.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrerWithdraws(
+    const result = await getReferrerWithdraws!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.loyaltyClient.getReferrerWithdraws.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.loyaltyClient.getReferrerWithdraws.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -130,7 +158,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrerWithdraws.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrerWithdraws(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getReferrerWithdraws!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.loyaltyClient.getReferrerWithdraws.post).toHaveBeenCalledWith({
       filter: {},
@@ -148,7 +176,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      getReferrerWithdraws(null as never, {} as never, fake as unknown as GraphQLContext),
+      getReferrerWithdraws!(null as never, {} as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
@@ -159,11 +187,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrerClaimHistory.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrerClaimHistory(
+    const result = await getReferrerClaimHistory!(
       null as never,
       { input: FILTER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.loyaltyClient.getReferrerClaimHistory.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.loyaltyClient.getReferrerClaimHistory.post).toHaveBeenCalledWith(FILTER_INPUT);
@@ -174,7 +202,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
     fake.clients.loyaltyClient.getReferrerClaimHistory.post.mockImplementation(async () => edenOk([ROW]));
 
-    const result = await getReferrerClaimHistory(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getReferrerClaimHistory!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.loyaltyClient.getReferrerClaimHistory.post).toHaveBeenCalledWith({
       filter: {},
@@ -192,7 +220,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      getReferrerClaimHistory(null as never, {} as never, fake as unknown as GraphQLContext),
+      getReferrerClaimHistory!(null as never, {} as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
@@ -203,7 +231,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      registerReferral(null as never, { input: { referrerId: null } } as never, fake as unknown as GraphQLContext),
+      registerReferral!(null as never, { input: { referrerId: null } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.authClient.getUser.post).not.toHaveBeenCalled();
     expect(fake.clients.loyaltyClient.registerReferral.post).not.toHaveBeenCalled();
@@ -214,7 +242,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     fake.clients.authClient.getUser.post.mockImplementation(async () => edenOk(CALLER));
     fake.clients.loyaltyClient.registerReferral.post.mockImplementation(async () => edenOk(ROW));
 
-    const result = await registerReferral(null as never, { input: {} } as never, fake as unknown as GraphQLContext);
+    const result = await registerReferral!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO);
 
     // Caller wallet is resolved from the auth service, not taken from the context user.
     expect(fake.clients.authClient.getUser.post).toHaveBeenCalledTimes(1);
@@ -235,11 +263,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
       .mockImplementationOnce(async () => edenOk(REFERRER));
     fake.clients.loyaltyClient.registerReferral.post.mockImplementation(async () => edenOk(ROW));
 
-    const result = await registerReferral(
+    const result = await registerReferral!(
       null as never,
       { input: { referrerId: 'referrer-2' } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     // First the caller, then the referrer.
     expect(fake.clients.authClient.getUser.post).toHaveBeenCalledTimes(2);
@@ -261,11 +289,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
       .mockImplementationOnce(async () => edenError(404, 'NOT_FOUND', 'no referrer'));
     fake.clients.loyaltyClient.registerReferral.post.mockImplementation(async () => edenOk(ROW));
 
-    const result = await registerReferral(
+    const result = await registerReferral!(
       null as never,
       { input: { referrerId: 'referrer-2' } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     // Faithful to src: the referrer lookup error is ignored, not propagated.
     expect(fake.clients.loyaltyClient.registerReferral.post).toHaveBeenCalledWith({
@@ -282,7 +310,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     fake.clients.authClient.getUser.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      registerReferral(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      registerReferral!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     expect(fake.clients.loyaltyClient.registerReferral.post).not.toHaveBeenCalled();
   });
@@ -295,7 +323,7 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      registerReferral(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      registerReferral!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -303,11 +331,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      createReferrerWithdrawTask(
+      createReferrerWithdrawTask!(
         null as never,
         { input: { chainId: '56', tokenAddress: '0x4444', amount: '1000' } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.authClient.getUser.post).not.toHaveBeenCalled();
     expect(fake.clients.loyaltyClient.createReferrerWithdrawTask.post).not.toHaveBeenCalled();
@@ -318,11 +346,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     fake.clients.authClient.getUser.post.mockImplementation(async () => edenOk(CALLER));
     fake.clients.loyaltyClient.createReferrerWithdrawTask.post.mockImplementation(async () => edenOk(ROW));
 
-    const result = await createReferrerWithdrawTask(
+    const result = await createReferrerWithdrawTask!(
       null as never,
       { input: { chainId: '56', tokenAddress: '0x4444444444444444444444444444444444444444', amount: '1000' } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.authClient.getUser.post).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(fake.clients.loyaltyClient.createReferrerWithdrawTask.post).toHaveBeenCalledWith({
@@ -340,11 +368,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     fake.clients.authClient.getUser.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      createReferrerWithdrawTask(
+      createReferrerWithdrawTask!(
         null as never,
         { input: { chainId: '56', tokenAddress: '0x4444', amount: '1000' } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     expect(fake.clients.loyaltyClient.createReferrerWithdrawTask.post).not.toHaveBeenCalled();
   });
@@ -357,11 +385,11 @@ describe('gateway loyalty resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      createReferrerWithdrawTask(
+      createReferrerWithdrawTask!(
         null as never,
         { input: { chainId: '56', tokenAddress: '0x4444', amount: '1000' } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 });

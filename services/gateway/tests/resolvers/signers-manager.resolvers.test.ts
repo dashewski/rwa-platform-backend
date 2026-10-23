@@ -6,12 +6,14 @@
  * inner services): no network, no database, no broker.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import { AppError } from '@shared/errors/app-errors';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
 import { getSignatureTask } from '../../src/graphql/modules/signers-manager/resolvers/queries/getSignatureTask';
 
+const INFO = {} as GraphQLResolveInfo;
 const SIGNATURE_TASK = {
   id: 'task-1',
   ownerId: 'owner-1',
@@ -29,11 +31,11 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.signersManagerClient.getSignatureTask.post.mockImplementation(async () => edenOk(SIGNATURE_TASK));
 
-      const result = await getSignatureTask(
+      const result = await getSignatureTask!(
         null as never,
         { input: { taskId: 'task-1' } } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.signersManagerClient.getSignatureTask.post).toHaveBeenCalledWith({ taskId: 'task-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -49,7 +51,7 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        getSignatureTask(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext),
+        getSignatureTask!(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.signersManagerClient.getSignatureTask.post).toHaveBeenCalledTimes(0);
@@ -63,7 +65,7 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getSignatureTask(null as never, { input: { taskId: 'missing' } } as never, fake as unknown as GraphQLContext),
+        getSignatureTask!(null as never, { input: { taskId: 'missing' } } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -77,7 +79,7 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        getSignatureTask(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext),
+        getSignatureTask!(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       // The task was fetched before the ownership check ran.

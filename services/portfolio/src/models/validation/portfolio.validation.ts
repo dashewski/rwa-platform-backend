@@ -25,6 +25,7 @@ export const transactionSchema = t.Object({
   poolAddress: t.String(),
   chainId: t.String(),
   transactionHash: t.String(),
+  logIndex: t.Number(),
   blockNumber: t.Number(),
   amount: t.Number(),
   createdAt: t.Number(),

@@ -8,6 +8,7 @@
  * event target). No network, no database, no Redis, no broker.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { edenError, edenOk } from '../fakes/clients.fake';
 import { createFakeContext } from '../fakes/context.fake';
@@ -18,6 +19,7 @@ import { getVolumeData } from '../../src/graphql/modules/charts/resolvers/querie
 import { priceUpdates } from '../../src/graphql/modules/charts/resolvers/subscriptions/priceUpdates';
 import { transactionUpdates } from '../../src/graphql/modules/charts/resolvers/subscriptions/transactionUpdates';
 
+const INFO = {} as GraphQLResolveInfo;
 const RAW_PRICE = {
   id: 'price-1',
   poolAddress: '0xpool-1',
@@ -120,7 +122,7 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       };
       fake.clients.chartsClient.getRawPriceData.post.mockImplementation(async () => edenOk([RAW_PRICE]));
 
-      const result = await getRawPriceData(null as never, { input } as never, fake as unknown as GraphQLContext);
+      const result = await getRawPriceData!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.chartsClient.getRawPriceData.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.chartsClient.getRawPriceData.post).toHaveBeenCalledWith({
@@ -138,11 +140,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.chartsClient.getRawPriceData.post.mockImplementation(async () => edenOk([]));
 
-      await getRawPriceData(
+      await getRawPriceData!(
         null as never,
         { input: { poolAddress: '0xpool-1', startTime: 1, endTime: 2, limit: 10, offset: 0 } } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.chartsClient.getRawPriceData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -161,11 +163,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getRawPriceData(
+        getRawPriceData!(
           null as never,
           { input: { poolAddress: '0xpool-1' } } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get raw price data' });
     });
   });
@@ -175,11 +177,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.chartsClient.getOhlcPriceData.post.mockImplementation(async () => edenOk([OHLC]));
 
-      const result = await getOhlcPriceData(
+      const result = await getOhlcPriceData!(
         null as never,
         { input: { poolAddress: '0xpool-1', interval: '1h', startTime: 1, endTime: 2, limit: 24 } } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.chartsClient.getOhlcPriceData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -198,11 +200,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getOhlcPriceData(
+        getOhlcPriceData!(
           null as never,
           { input: { poolAddress: '0xpool-1', interval: '1h' } } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get OHLC price data' });
     });
   });
@@ -212,11 +214,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.chartsClient.getVolumeData.post.mockImplementation(async () => edenOk([VOLUME]));
 
-      const result = await getVolumeData(
+      const result = await getVolumeData!(
         null as never,
         { input: { poolAddress: '0xpool-1', interval: '1d', startTime: 1, endTime: 2, limit: 30 } } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.chartsClient.getVolumeData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -235,11 +237,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getVolumeData(
+        getVolumeData!(
           null as never,
           { input: { poolAddress: '0xpool-1', interval: '1d' } } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get volume data' });
     });
   });
@@ -255,7 +257,7 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       };
       fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () => edenOk([TRANSACTION]));
 
-      const result = await getPoolTransactions(null as never, { input } as never, fake as unknown as GraphQLContext);
+      const result = await getPoolTransactions!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledWith({
@@ -271,11 +273,11 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getPoolTransactions(
+      const result = await getPoolTransactions!(
         null as never,
         { input: {} } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledWith({
         filter: {},
@@ -293,7 +295,7 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getPoolTransactions(null as never, { input: { limit: 10 } } as never, fake as unknown as GraphQLContext),
+        getPoolTransactions!(null as never, { input: { limit: 10 } } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get pool transactions' });
     });
   });

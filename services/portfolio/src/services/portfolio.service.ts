@@ -129,6 +129,7 @@ export class PortfolioService {
         poolAddress: event.data.pool,
         chainId: event.chainId,
         transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
         blockNumber: event.blockNumber,
         amount: Number(event.data.amount),
       });
@@ -186,6 +187,7 @@ export class PortfolioService {
       tokenId: tx.tokenId,
       chainId: tx.chainId,
       transactionHash: tx.transactionHash,
+      logIndex: tx.logIndex,
       blockNumber: tx.blockNumber,
       amount: tx.amount,
       createdAt: tx.createdAt,

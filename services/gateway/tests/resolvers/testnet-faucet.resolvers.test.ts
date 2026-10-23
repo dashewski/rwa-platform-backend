@@ -7,6 +7,7 @@
  * no database, no broker.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
 import { edenError, edenOk } from '../fakes/clients.fake';
@@ -15,8 +16,10 @@ import { requestHold } from '../../src/graphql/modules/testnet-faucet/resolvers/
 import { requestPlatform } from '../../src/graphql/modules/testnet-faucet/resolvers/mutations/requestPlatform';
 import { getHistory } from '../../src/graphql/modules/testnet-faucet/resolvers/queries/getHistory';
 import { getUnlockTime } from '../../src/graphql/modules/testnet-faucet/resolvers/queries/getUnlockTime';
+import type { FaucetRequest } from '../../src/graphql/generated/types';
 
-const REQUEST = {
+const INFO = {} as GraphQLResolveInfo;
+const REQUEST: FaucetRequest = {
   id: 'req-1',
   userId: 'user-1',
   wallet: fakeUser.wallet,
@@ -33,7 +36,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      requestGas(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestGas!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.testnetFaucetClient.requestGas.post).not.toHaveBeenCalled();
   });
@@ -42,11 +45,11 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.requestGas.post.mockImplementation(async () => edenOk(REQUEST));
 
-    const result = await requestGas(
+    const result = await requestGas!(
       null as never,
       { input: { amount: 10 } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.testnetFaucetClient.requestGas.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.testnetFaucetClient.requestGas.post).toHaveBeenCalledWith({
@@ -64,7 +67,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      requestGas(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestGas!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -72,7 +75,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      requestHold(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestHold!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.testnetFaucetClient.requestHold.post).not.toHaveBeenCalled();
   });
@@ -81,11 +84,11 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.requestHold.post.mockImplementation(async () => edenOk(REQUEST));
 
-    const result = await requestHold(
+    const result = await requestHold!(
       null as never,
       { input: { amount: 10 } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.testnetFaucetClient.requestHold.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.testnetFaucetClient.requestHold.post).toHaveBeenCalledWith({
@@ -103,7 +106,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      requestHold(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestHold!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -111,7 +114,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      requestPlatform(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestPlatform!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.testnetFaucetClient.requestPlatform.post).not.toHaveBeenCalled();
   });
@@ -120,11 +123,11 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.requestPlatform.post.mockImplementation(async () => edenOk(REQUEST));
 
-    const result = await requestPlatform(
+    const result = await requestPlatform!(
       null as never,
       { input: { amount: 10 } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.testnetFaucetClient.requestPlatform.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.testnetFaucetClient.requestPlatform.post).toHaveBeenCalledWith({
@@ -142,14 +145,14 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      requestPlatform(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext),
+      requestPlatform!(null as never, { input: { amount: 10 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
   test('getUnlockTime: rejects an anonymous caller with 401 UNAUTHORIZED', async () => {
     const fake = createFakeContext();
 
-    await expect(getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getUnlockTime!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 401,
       code: 'UNAUTHORIZED',
     });
@@ -160,7 +163,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.getUnlockTime.post.mockImplementation(async () => edenOk(UNLOCK_TIME));
 
-    const result = await getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getUnlockTime!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.testnetFaucetClient.getUnlockTime.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.testnetFaucetClient.getUnlockTime.post).toHaveBeenCalledWith({ userId: 'user-1' });
@@ -173,7 +176,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
       edenError(500, 'INTERNAL_ERROR', 'boom'),
     );
 
-    await expect(getUnlockTime(null as never, {} as never, fake as unknown as GraphQLContext)).rejects.toMatchObject({
+    await expect(getUnlockTime!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
       statusCode: 502,
       code: 'BAD_GATEWAY',
     });
@@ -183,7 +186,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext();
 
     await expect(
-      getHistory(null as never, { pagination: { limit: 10, offset: 20 } } as never, fake as unknown as GraphQLContext),
+      getHistory!(null as never, { pagination: { limit: 10, offset: 20 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
     expect(fake.clients.testnetFaucetClient.getHistory.post).not.toHaveBeenCalled();
   });
@@ -192,11 +195,11 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.getHistory.post.mockImplementation(async () => edenOk([REQUEST]));
 
-    const result = await getHistory(
+    const result = await getHistory!(
       null as never,
       { pagination: { limit: 10, offset: 20 } } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.testnetFaucetClient.getHistory.post).toHaveBeenCalledTimes(1);
     expect(fake.clients.testnetFaucetClient.getHistory.post).toHaveBeenCalledWith({
@@ -210,7 +213,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.testnetFaucetClient.getHistory.post.mockImplementation(async () => edenOk([REQUEST]));
 
-    const result = await getHistory(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getHistory!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     // Faithful to src: the pagination object is always sent, fields undefined;
     // a `sort` field on the GraphQL PaginationInput is not forwarded.
@@ -228,7 +231,7 @@ describe('gateway testnet-faucet resolvers (unit, fake eden clients)', () => {
     );
 
     await expect(
-      getHistory(null as never, { pagination: { limit: 10, offset: 20 } } as never, fake as unknown as GraphQLContext),
+      getHistory!(null as never, { pagination: { limit: 10, offset: 20 } } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 });

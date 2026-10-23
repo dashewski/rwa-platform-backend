@@ -6,6 +6,7 @@
  * No network, no database, no broker, no ports.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import { AppError } from '@shared/errors/app-errors';
 import type { GraphQLContext } from '../../src/graphql/context/types';
 import { createFakeContext, fakeUser } from '../fakes/context.fake';
@@ -21,6 +22,7 @@ import { createPost } from '../../src/graphql/modules/blog/resolvers/mutations/c
 import { updatePost } from '../../src/graphql/modules/blog/resolvers/mutations/updatePost';
 import { deletePost } from '../../src/graphql/modules/blog/resolvers/mutations/deletePost';
 
+const INFO = {} as GraphQLResolveInfo;
 const BLOG = {
   id: 'blog-1',
   name: 'Updates',
@@ -70,7 +72,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenOk(UPSTREAM_BLOG));
 
-    const result = await getBlog(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext);
+    const result = await getBlog!(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledWith({ id: 'blog-1' });
     expect(result).toEqual(BLOG); // storage-only fields such as `_id` are dropped
@@ -81,7 +83,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no blog'));
 
     await expect(
-      getBlog(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      getBlog!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -91,7 +93,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlogs.post.mockImplementation(async () => edenOk([UPSTREAM_BLOG, UPSTREAM_BLOG_2]));
 
     const input = { filter: { ownerId: 'owner-1' }, sort: { createdAt: -1 }, limit: 10, offset: 5 };
-    const result = await getBlogs(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getBlogs!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getBlogs.post).toHaveBeenCalledWith({
       filter: { ownerId: 'owner-1' },
@@ -106,7 +108,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.blogClient.getBlogs.post.mockImplementation(async () => edenOk([]));
 
-    const result = await getBlogs(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getBlogs!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getBlogs.post).toHaveBeenCalledWith({
       filter: {},
@@ -122,7 +124,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlogs.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      getBlogs(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      getBlogs!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -131,7 +133,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.blogClient.getPost.post.mockImplementation(async () => edenOk(POST));
 
-    const result = await getPost(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext);
+    const result = await getPost!(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getPost.post).toHaveBeenCalledWith({ id: 'post-1' });
     expect(result).toEqual(POST);
@@ -142,7 +144,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPost.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no post'));
 
     await expect(
-      getPost(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      getPost!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -152,7 +154,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPosts.post.mockImplementation(async () => edenOk([POST]));
 
     const input = { filter: { blogId: 'blog-1' }, sort: { createdAt: -1 }, limit: 20, offset: 40 };
-    const result = await getPosts(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await getPosts!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getPosts.post).toHaveBeenCalledWith({
       filter: { blogId: 'blog-1' },
@@ -167,7 +169,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.blogClient.getPosts.post.mockImplementation(async () => edenOk([]));
 
-    const result = await getPosts(null as never, {} as never, fake as unknown as GraphQLContext);
+    const result = await getPosts!(null as never, {} as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getPosts.post).toHaveBeenCalledWith({
       filter: {},
@@ -183,7 +185,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPosts.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      getPosts(null as never, { input: {} } as never, fake as unknown as GraphQLContext),
+      getPosts!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -192,7 +194,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      createBlog(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext),
+      createBlog!(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledTimes(0);
@@ -205,11 +207,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.services.parent.getParentInfo.mockImplementation(async () => PARENT_INFO);
     fake.clients.blogClient.createBlog.post.mockImplementation(async () => edenOk(UPSTREAM_BLOG));
 
-    const result = await createBlog(
+    const result = await createBlog!(
       null as never,
       { input: CREATE_BLOG_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'parent-1', 'user-1');
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -237,7 +239,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      createBlog(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext),
+      createBlog!(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.createBlog.post).toHaveBeenCalledTimes(0);
@@ -249,7 +251,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.createBlog.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      createBlog(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext),
+      createBlog!(null as never, { input: CREATE_BLOG_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -258,11 +260,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      updateBlog(
+      updateBlog!(
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledTimes(0);
@@ -277,7 +279,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     );
 
     const input = { id: 'blog-1', updateData: { name: 'Renamed' } };
-    const result = await updateBlog(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await updateBlog!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledWith({ id: 'blog-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -298,11 +300,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no blog'));
 
     await expect(
-      updateBlog(
+      updateBlog!(
         null as never,
         { input: { id: 'missing', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -317,11 +319,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      updateBlog(
+      updateBlog!(
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.updateBlog.post).toHaveBeenCalledTimes(0);
@@ -333,11 +335,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.updateBlog.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      updateBlog(
+      updateBlog!(
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -346,7 +348,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      deleteBlog(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext),
+      deleteBlog!(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.deleteBlog.post).toHaveBeenCalledTimes(0);
@@ -357,7 +359,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenOk(UPSTREAM_BLOG));
     fake.clients.blogClient.deleteBlog.post.mockImplementation(async () => edenOk({ id: 'blog-1' }));
 
-    const result = await deleteBlog(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext);
+    const result = await deleteBlog!(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledWith({ id: 'blog-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -375,7 +377,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no blog'));
 
     await expect(
-      deleteBlog(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      deleteBlog!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.blogClient.deleteBlog.post).toHaveBeenCalledTimes(0);
@@ -387,7 +389,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.deleteBlog.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      deleteBlog(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext),
+      deleteBlog!(null as never, { id: 'blog-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -396,7 +398,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      createPost(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext),
+      createPost!(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledTimes(0);
@@ -408,11 +410,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenOk(UPSTREAM_BLOG));
     fake.clients.blogClient.createPost.post.mockImplementation(async () => edenOk(POST));
 
-    const result = await createPost(
+    const result = await createPost!(
       null as never,
       { input: CREATE_POST_INPUT } as never,
       fake as unknown as GraphQLContext,
-    );
+    INFO);
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledWith({ id: 'blog-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -441,7 +443,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getBlog.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no blog'));
 
     await expect(
-      createPost(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext),
+      createPost!(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.blogClient.createPost.post).toHaveBeenCalledTimes(0);
@@ -455,7 +457,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      createPost(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext),
+      createPost!(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.createPost.post).toHaveBeenCalledTimes(0);
@@ -467,7 +469,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.createPost.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      createPost(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext),
+      createPost!(null as never, { input: CREATE_POST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -476,11 +478,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      updatePost(
+      updatePost!(
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.getPost.post).toHaveBeenCalledTimes(0);
@@ -493,7 +495,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.updatePost.post.mockImplementation(async () => edenOk({ ...POST, title: 'Edited' }));
 
     const input = { id: 'post-1', updateData: { title: 'Edited' } };
-    const result = await updatePost(null as never, { input } as never, fake as unknown as GraphQLContext);
+    const result = await updatePost!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getPost.post).toHaveBeenCalledWith({ id: 'post-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -514,11 +516,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPost.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no post'));
 
     await expect(
-      updatePost(
+      updatePost!(
         null as never,
         { input: { id: 'missing', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.blogClient.updatePost.post).toHaveBeenCalledTimes(0);
@@ -532,11 +534,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     });
 
     await expect(
-      updatePost(
+      updatePost!(
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.updatePost.post).toHaveBeenCalledTimes(0);
@@ -548,11 +550,11 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.updatePost.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      updatePost(
+      updatePost!(
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      ),
+      INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -561,7 +563,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
 
     await expect(
-      deletePost(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext),
+      deletePost!(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.deletePost.post).toHaveBeenCalledTimes(0);
@@ -572,7 +574,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPost.post.mockImplementation(async () => edenOk(POST));
     fake.clients.blogClient.deletePost.post.mockImplementation(async () => edenOk({ id: 'post-1' }));
 
-    const result = await deletePost(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext);
+    const result = await deletePost!(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext, INFO);
 
     expect(fake.clients.blogClient.getPost.post).toHaveBeenCalledWith({ id: 'post-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -590,7 +592,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.getPost.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no post'));
 
     await expect(
-      deletePost(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+      deletePost!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.blogClient.deletePost.post).toHaveBeenCalledTimes(0);
@@ -602,7 +604,7 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
     fake.clients.blogClient.deletePost.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
     await expect(
-      deletePost(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext),
+      deletePost!(null as never, { id: 'post-1' } as never, fake as unknown as GraphQLContext, INFO),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 });

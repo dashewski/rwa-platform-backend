@@ -6,6 +6,7 @@
  * no database, no broker. Run with `bun test` from services/gateway.
  */
 import { describe, expect, test } from 'bun:test';
+import type { GraphQLResolveInfo } from 'graphql';
 import { GraphQLError } from 'graphql';
 import { AppError } from '@shared/errors/app-errors';
 import type { GraphQLContext } from '../../src/graphql/context/types';
@@ -33,6 +34,7 @@ import { rejectPoolApprovalSignatures } from '../../src/graphql/modules/rwa/reso
 
 import { poolDeployed } from '../../src/graphql/modules/rwa/resolvers/subscriptions/poolDeployed';
 
+const INFO = {} as GraphQLResolveInfo;
 const BUSINESS = {
   id: 'business-1',
   chainId: '8453',
@@ -40,6 +42,11 @@ const BUSINESS = {
   ownerId: 'owner-1',
   ownerType: 'company',
   tokenAddress: '0xrwa-token',
+  createdAt: 1_700_000_000,
+  updatedAt: 1_700_000_000,
+  paused: false,
+  riskScoreEvaluationProcess: false,
+  socials: [],
 };
 
 const POOL = {
@@ -48,6 +55,22 @@ const POOL = {
   ownerId: 'owner-1',
   ownerType: 'company',
   name: 'Senior tranche',
+  chainId: '8453',
+  createdAt: 1_700_000_000,
+  updatedAt: 1_700_000_000,
+  rwaAddress: '0xrwa-token',
+  paused: false,
+  allowEntryBurn: false,
+  awaitCompletionExpired: false,
+  fixedSell: false,
+  floatingOutTranchesTimestamps: false,
+  floatingTimestampOffset: 0,
+  incomingTranches: [],
+  outgoingTranches: [],
+  isFullyReturned: false,
+  isTargetReached: false,
+  lastCompletedIncomingTranche: 0,
+  riskScoreEvaluationProcess: false,
 };
 
 const LIST_INPUT = {
@@ -141,7 +164,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
 
-      const result = await getBusiness(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext);
+      const result = await getBusiness!(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(result).toEqual(BUSINESS);
@@ -154,7 +177,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getBusiness(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        getBusiness!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -164,11 +187,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.rwaClient.getBusinesses.post.mockImplementation(async () => edenOk([BUSINESS]));
 
-      const result = await getBusinesses(
+      const result = await getBusinesses!(
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusinesses.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -186,7 +209,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getBusinesses(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext),
+        getBusinesses!(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -196,7 +219,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
 
-      const result = await getPool(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext);
+      const result = await getPool!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(result).toEqual(POOL);
@@ -207,7 +230,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
 
       await expect(
-        getPool(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        getPool!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -217,7 +240,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.rwaClient.getPools.post.mockImplementation(async () => edenOk([POOL]));
 
-      const result = await getPools(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext);
+      const result = await getPools!(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.rwaClient.getPools.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -233,7 +256,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPools.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
       await expect(
-        getPools(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext),
+        getPools!(null as never, { input: LIST_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -243,7 +266,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createBusiness(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        createBusiness!(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.services.validation.validateCountry).toHaveBeenCalledTimes(0);
@@ -255,11 +278,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.rwaClient.createBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
 
-      const result = await createBusiness(
+      const result = await createBusiness!(
         null as never,
         { input: CREATE_BUSINESS_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.services.validation.validateCountry).toHaveBeenCalledWith('DE');
       expect(fake.services.validation.validateSocials).toHaveBeenCalledWith(SOCIALS);
@@ -295,7 +318,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         tags: ['minimal'],
       };
 
-      await createBusiness(null as never, { input } as never, fake as unknown as GraphQLContext);
+      await createBusiness!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
       const payload = fake.clients.rwaClient.createBusiness.post.mock.calls[0][0] as Record<string, unknown>;
       // `input.country ?? undefined` etc. keeps the keys on the payload with an undefined value.
@@ -314,7 +337,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        createBusiness(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        createBusiness!(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toThrow('Invalid country code');
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -328,7 +351,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        createBusiness(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        createBusiness!(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.rwaClient.createBusiness.post).toHaveBeenCalledTimes(0);
@@ -341,7 +364,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createBusiness(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        createBusiness!(null as never, { input: CREATE_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       // The ownership check already passed before the upstream call was attempted.
@@ -354,11 +377,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createBusinessWithAI(
+        createBusinessWithAI!(
           null as never,
           { input: CREATE_BUSINESS_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -369,11 +392,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext({ user: fakeUser });
       fake.clients.rwaClient.createBusinessWithAI.post.mockImplementation(async () => edenOk(BUSINESS));
 
-      const result = await createBusinessWithAI(
+      const result = await createBusinessWithAI!(
         null as never,
         { input: CREATE_BUSINESS_WITH_AI_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -398,11 +421,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        createBusinessWithAI(
+        createBusinessWithAI!(
           null as never,
           { input: CREATE_BUSINESS_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.rwaClient.createBusinessWithAI.post).toHaveBeenCalledTimes(0);
@@ -415,11 +438,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createBusinessWithAI(
+        createBusinessWithAI!(
           null as never,
           { input: CREATE_BUSINESS_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -429,7 +452,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        editBusiness(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        editBusiness!(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -443,11 +466,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const updatedBusiness = { ...BUSINESS, name: 'Solar Farm SPV II' };
       fake.clients.rwaClient.editBusiness.post.mockImplementation(async () => edenOk(updatedBusiness));
 
-      const result = await editBusiness(
+      const result = await editBusiness!(
         null as never,
         { input: EDIT_BUSINESS_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.services.validation.validateCountry).toHaveBeenCalledWith('PT');
       expect(fake.services.validation.validateSocials).toHaveBeenCalledWith(SOCIALS);
@@ -479,7 +502,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.editBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
       const input = { id: 'business-1', updateData: { name: 'Renamed', ownerId: 'somebody-else' } };
 
-      await editBusiness(null as never, { input } as never, fake as unknown as GraphQLContext);
+      await editBusiness!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
       const payload = fake.clients.rwaClient.editBusiness.post.mock.calls[0][0] as {
         updateData: Record<string, unknown>;
@@ -503,7 +526,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        editBusiness(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        editBusiness!(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -516,7 +539,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.editBusiness.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
       await expect(
-        editBusiness(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext),
+        editBusiness!(null as never, { input: EDIT_BUSINESS_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -526,7 +549,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        updateBusinessRiskScore(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext),
+        updateBusinessRiskScore!(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -539,11 +562,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const evaluated = { ...BUSINESS, riskScore: 42 };
       fake.clients.rwaClient.requestBusinessEvaluation.post.mockImplementation(async () => edenOk(evaluated));
 
-      const result = await updateBusinessRiskScore(
+      const result = await updateBusinessRiskScore!(
         null as never,
         { id: 'business-1' } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -563,7 +586,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        updateBusinessRiskScore(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        updateBusinessRiskScore!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.requestBusinessEvaluation.post).toHaveBeenCalledTimes(0);
@@ -577,7 +600,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        updateBusinessRiskScore(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext),
+        updateBusinessRiskScore!(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -587,11 +610,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        requestBusinessApprovalSignatures(
+        requestBusinessApprovalSignatures!(
           null as never,
           { input: REQUEST_BUSINESS_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -605,11 +628,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const response = { taskId: 'task-1' };
       fake.clients.rwaClient.requestBusinessApprovalSignatures.post.mockImplementation(async () => edenOk(response));
 
-      const result = await requestBusinessApprovalSignatures(
+      const result = await requestBusinessApprovalSignatures!(
         null as never,
         { input: REQUEST_BUSINESS_SIGNATURES_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -641,11 +664,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        requestBusinessApprovalSignatures(
+        requestBusinessApprovalSignatures!(
           null as never,
           { input: REQUEST_BUSINESS_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.requestBusinessApprovalSignatures.post).toHaveBeenCalledTimes(0);
@@ -659,11 +682,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        requestBusinessApprovalSignatures(
+        requestBusinessApprovalSignatures!(
           null as never,
           { input: REQUEST_BUSINESS_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -673,11 +696,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        rejectBusinessApprovalSignatures(
+        rejectBusinessApprovalSignatures!(
           null as never,
           { id: 'business-1' } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -692,11 +715,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         edenOk({ rejected: false }),
       );
 
-      const result = await rejectBusinessApprovalSignatures(
+      const result = await rejectBusinessApprovalSignatures!(
         null as never,
         { id: 'business-1' } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -716,7 +739,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        rejectBusinessApprovalSignatures(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        rejectBusinessApprovalSignatures!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.rejectBusinessApprovalSignatures.post).toHaveBeenCalledTimes(0);
@@ -730,11 +753,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        rejectBusinessApprovalSignatures(
+        rejectBusinessApprovalSignatures!(
           null as never,
           { id: 'business-1' } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -744,7 +767,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        createPool!(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -756,11 +779,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
       fake.clients.rwaClient.createPool.post.mockImplementation(async () => edenOk(POOL));
 
-      const result = await createPool(
+      const result = await createPool!(
         null as never,
         { input: CREATE_POOL_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -792,7 +815,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         rwaAddress: '0xnot-the-token',
       };
 
-      await createPool(null as never, { input } as never, fake as unknown as GraphQLContext);
+      await createPool!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
 
       expect(fake.clients.rwaClient.createPool.post).toHaveBeenCalledWith({
         name: 'Conflicting pool',
@@ -811,7 +834,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        createPool!(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 409, code: 'CONFLICT' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -825,7 +848,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        createPool!(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.createPool.post).toHaveBeenCalledTimes(0);
@@ -837,7 +860,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.createPool.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
       await expect(
-        createPool(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        createPool!(null as never, { input: CREATE_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -847,11 +870,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createPoolWithAI(
+        createPoolWithAI!(
           null as never,
           { input: CREATE_POOL_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
@@ -863,11 +886,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
       fake.clients.rwaClient.createPoolWithAI.post.mockImplementation(async () => edenOk(POOL));
 
-      const result = await createPoolWithAI(
+      const result = await createPoolWithAI!(
         null as never,
         { input: CREATE_POOL_WITH_AI_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -894,11 +917,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createPoolWithAI(
+        createPoolWithAI!(
           null as never,
           { input: CREATE_POOL_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 409, code: 'CONFLICT' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -912,11 +935,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createPoolWithAI(
+        createPoolWithAI!(
           null as never,
           { input: CREATE_POOL_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.createPoolWithAI.post).toHaveBeenCalledTimes(0);
@@ -930,11 +953,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        createPoolWithAI(
+        createPoolWithAI!(
           null as never,
           { input: CREATE_POOL_WITH_AI_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -944,7 +967,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        editPool(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        editPool!(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
@@ -957,11 +980,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const updatedPool = { ...POOL, name: 'Senior tranche II' };
       fake.clients.rwaClient.editPool.post.mockImplementation(async () => edenOk(updatedPool));
 
-      const result = await editPool(
+      const result = await editPool!(
         null as never,
         { input: EDIT_POOL_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -982,7 +1005,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
 
       await expect(
-        editPool(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        editPool!(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -995,7 +1018,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.editPool.post.mockImplementation(async () => edenError(500, 'INTERNAL_ERROR', 'boom'));
 
       await expect(
-        editPool(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext),
+        editPool!(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -1005,7 +1028,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        updatePoolRiskScore(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext),
+        updatePoolRiskScore!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
@@ -1018,11 +1041,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const evaluated = { ...POOL, riskScore: 7 };
       fake.clients.rwaClient.requestPoolEvaluation.post.mockImplementation(async () => edenOk(evaluated));
 
-      const result = await updatePoolRiskScore(
+      const result = await updatePoolRiskScore!(
         null as never,
         { id: 'pool-1' } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -1040,7 +1063,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
 
       await expect(
-        updatePoolRiskScore(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        updatePoolRiskScore!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.requestPoolEvaluation.post).toHaveBeenCalledTimes(0);
@@ -1054,7 +1077,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        updatePoolRiskScore(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext),
+        updatePoolRiskScore!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -1064,11 +1087,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        requestPoolApprovalSignatures(
+        requestPoolApprovalSignatures!(
           null as never,
           { input: REQUEST_POOL_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
@@ -1083,11 +1106,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         edenOk({ taskId: 'task-1', extra: 'ignored' }),
       );
 
-      const result = await requestPoolApprovalSignatures(
+      const result = await requestPoolApprovalSignatures!(
         null as never,
         { input: REQUEST_POOL_SIGNATURES_INPUT } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -1121,11 +1144,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        requestPoolApprovalSignatures(
+        requestPoolApprovalSignatures!(
           null as never,
           { input: REQUEST_POOL_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.services.ownership.getOwnerWallet).toHaveBeenCalledTimes(0);
@@ -1137,11 +1160,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
 
       await expect(
-        requestPoolApprovalSignatures(
+        requestPoolApprovalSignatures!(
           null as never,
           { input: REQUEST_POOL_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.requestPoolApprovalSignatures.post).toHaveBeenCalledTimes(0);
@@ -1155,11 +1178,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        requestPoolApprovalSignatures(
+        requestPoolApprovalSignatures!(
           null as never,
           { input: REQUEST_POOL_SIGNATURES_INPUT } as never,
           fake as unknown as GraphQLContext,
-        ),
+        INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });
@@ -1169,7 +1192,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        rejectPoolApprovalSignatures(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext),
+        rejectPoolApprovalSignatures!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
@@ -1184,11 +1207,11 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
         edenOk({ rejected: false }),
       );
 
-      const result = await rejectPoolApprovalSignatures(
+      const result = await rejectPoolApprovalSignatures!(
         null as never,
         { id: 'pool-1' } as never,
         fake as unknown as GraphQLContext,
-      );
+      INFO);
 
       expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -1206,7 +1229,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
 
       await expect(
-        rejectPoolApprovalSignatures(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext),
+        rejectPoolApprovalSignatures!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.clients.rwaClient.rejectPoolApprovalSignatures.post).toHaveBeenCalledTimes(0);
@@ -1220,7 +1243,7 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        rejectPoolApprovalSignatures(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext),
+        rejectPoolApprovalSignatures!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });

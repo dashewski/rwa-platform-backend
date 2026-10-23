@@ -8,7 +8,16 @@ import { edenError, edenOk, fakeEdenClient } from './fakes/clients.fake';
 import type { CompanyClient } from '../src/clients/eden.clients';
 import type { Redis } from 'ioredis';
 
-const COMPANY = { id: 'company-1', name: 'Acme' };
+const COMPANY = {
+  id: 'company-1',
+  name: 'Acme',
+  createdAt: 1_700_000_000,
+  updatedAt: 1_700_000_000,
+  description: 'Acme Corp',
+  ownerId: 'owner-1',
+  socials: [],
+  users: [],
+};
 
 describe('CacheService (unit, fake redis/company client)', () => {
   let redis: { get: ReturnType<typeof mock>; setex: ReturnType<typeof mock>; del: ReturnType<typeof mock> };
@@ -26,7 +35,7 @@ describe('CacheService (unit, fake redis/company client)', () => {
 
     const response = await service.getCompany({ id: 'company-1' });
 
-    expect(response).toEqual({ data: COMPANY, error: null });
+    expect(response).toEqual({ data: COMPANY, error: null } as never);
     expect(redis.get).toHaveBeenCalledWith('company:company-1');
     expect(companyClient.getCompany.post).toHaveBeenCalledTimes(0);
   });
@@ -34,7 +43,7 @@ describe('CacheService (unit, fake redis/company client)', () => {
   test('getCompany: on a cache miss fetches the company and caches it for 300 seconds', async () => {
     const response = await service.getCompany({ id: 'company-1' });
 
-    expect(response).toEqual(edenOk(COMPANY));
+    expect(response).toEqual(edenOk(COMPANY) as never);
     expect(companyClient.getCompany.post).toHaveBeenCalledWith({ id: 'company-1' });
     expect(redis.setex).toHaveBeenCalledWith('company:company-1', 300, JSON.stringify(COMPANY));
   });

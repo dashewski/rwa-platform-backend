@@ -24,6 +24,7 @@ type Transaction {
   poolAddress: String!
   chainId: String!
   transactionHash: String!
+  logIndex: Int!
   blockNumber: Int!
   amount: Int!
   createdAt: Int!
