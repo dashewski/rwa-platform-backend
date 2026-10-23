@@ -33,8 +33,8 @@ export const updateCompany: MutationResolvers['updateCompany'] = async (
   if (companyResponse.data.ownerId !== user.id) {
     throw new AppError({
       message: 'Only company owner can update company',
-      statusCode: 502,
-      code: 'UPSTREAM_ERROR',
+      statusCode: 403,
+      code: 'FORBIDDEN',
     });
   }
 
