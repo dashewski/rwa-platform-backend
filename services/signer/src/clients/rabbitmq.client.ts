@@ -5,21 +5,33 @@ export class RabbitMQClient extends BaseRabbitMQClient {
     super(uri, signerName);
   }
 
+  getSignExchange() {
+    return 'sign.exchange';
+  }
+
+  getSignRequestsQueue() {
+    return `sign.requests.${this.channelName}`;
+  }
+
   getTopologyDefinition() {
     return {
       exchanges: {
-        'sign.exchange': { type: 'direct', options: { durable: true } },
+        [this.getSignExchange()]: {
+          type: 'direct' as const,
+          options: { durable: true },
+          allowUnrouted: false,
+        },
       },
       queues: {
-        [`sign.requests.${this.channelName}`]: {
-          options: { durable: true, arguments: { 'x-message-ttl': 900_000 } },
+        [this.getSignRequestsQueue()]: {
+          options: { durable: true },
           deferAfterAttempts: 3,
           parkAfterCycles: 3,
           bindings: {
-            'sign.exchange': ['task'],
+            [this.getSignExchange()]: ['task'],
           },
         },
       },
-    } as const;
+    };
   }
 }

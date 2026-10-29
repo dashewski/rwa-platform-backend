@@ -43,16 +43,13 @@ export abstract class BaseRabbitMQClient {
     return this.channel !== null;
   }
 
-  getExchanges(): Array<keyof ReturnType<this['getTopologyDefinition']>['exchanges']> {
-    return Object.keys(this.getTopologyDefinition().exchanges);
-  }
-
   getTopologyDefinition(): {
     exchanges: Record<
       string,
       {
         type: 'direct' | 'topic' | 'fanout' | 'headers';
         options?: Options.AssertExchange;
+        allowUnrouted: boolean;
       }
     >;
     queues: Record<
@@ -66,14 +63,6 @@ export abstract class BaseRabbitMQClient {
     >;
   } {
     return { exchanges: {}, queues: {} };
-  }
-
-  getExchange(name: keyof ReturnType<this['getTopologyDefinition']>['exchanges'] & string) {
-    return name;
-  }
-
-  getQueue(name: keyof ReturnType<this['getTopologyDefinition']>['queues'] & string) {
-    return name;
   }
 
   getQueueDeferAfterAttempts(queue: string): number {
@@ -303,8 +292,19 @@ export abstract class BaseRabbitMQClient {
 
     for (const exchange of Object.keys(topology.exchanges)) {
       const definition = topology.exchanges[exchange];
+      const options: Options.AssertExchange = { ...definition.options };
 
-      await channel.assertExchange(exchange, definition.type, definition.options);
+      if (definition.allowUnrouted) {
+        const unrouted = `${exchange}.unrouted`;
+
+        await channel.assertExchange(unrouted, 'fanout', { durable: true });
+        await channel.assertQueue(unrouted, { durable: true });
+        await channel.bindQueue(unrouted, unrouted, '');
+
+        options.arguments = { ...options.arguments, 'alternate-exchange': unrouted };
+      }
+
+      await channel.assertExchange(exchange, definition.type, options);
     }
 
     for (const queue of Object.keys(topology.queues)) {

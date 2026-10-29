@@ -2,6 +2,7 @@ import { AppError } from '@shared/errors/app-errors';
 import { EventRepository } from '../repositories/event.repository';
 import { ScannerStateRepository } from '../repositories/scannerState.repository';
 import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -16,8 +17,7 @@ export class BlockchainScannerService {
   constructor(
     private readonly eventRepository: EventRepository,
     private readonly scannerStateRepository: ScannerStateRepository,
-    private readonly outboxPublisher: OutboxPublisherService,
-    private readonly exchange: string,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly chainId: string,
   ) {}
 
@@ -140,7 +140,7 @@ export class BlockchainScannerService {
         // chain-stable messageId: a re-scanned block yields the same id and the
         // consumer inbox turns the duplicate delivery into a no-op
         await this.outboxPublisher.publish(
-          this.exchange,
+          this.outboxPublisher.rabbitClient.getBlockchainEventsExchange(),
           event.name,
           event,
           `${this.chainId}:${event.transactionHash}:${event.logIndex}`,
