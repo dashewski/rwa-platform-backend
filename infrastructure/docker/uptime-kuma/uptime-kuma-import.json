@@ -83,7 +83,7 @@
         {
             "name": "Gateway",
             "type": "http",
-            "url": "http://gateway:3000/health",
+            "url": "http://graphql:3000/health",
             "method": "GET",
             "interval": 60,
             "retryInterval": 60,

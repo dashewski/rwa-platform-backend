@@ -21,6 +21,24 @@ x-configs:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL}
 
+  blockchain-scanner:
+    base: &blockchain-scanner
+      build:
+        context: ../..
+        dockerfile: services/blockchain-scanner/Dockerfile
+      restart: unless-stopped
+      environment: &blockchain-scanner-env
+        <<: [*mongo-env, *monitoring-env, *rabbit-env]
+        SERVICE_VERSION: ${BLOCKCHAIN_SCANNER_SERVICE_VERSION}
+      volumes: *monitoring-volumes
+      networks:
+        - app-network
+      depends_on:
+        mongodb:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+
 services:
   ai-assistant:
     container_name: ai-assistant
@@ -91,8 +109,14 @@ services:
       JWT_SECRET: ${APP_JWT_SECRET}
       ACCESS_TOKEN_EXPIRY: ${AUTH_ACCESS_TOKEN_EXPIRY}
       REFRESH_TOKEN_EXPIRY: ${AUTH_REFRESH_TOKEN_EXPIRY}
+      CHALLENGE_TTL_SECONDS: ${AUTH_CHALLENGE_TTL_SECONDS}
+      BASE_DOMAIN: ${BASE_DOMAIN}
       DOMAIN_NAME: ${AUTH_DOMAIN_NAME}
       DOMAIN_VERSION: ${AUTH_DOMAIN_VERSION}
+      AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME}
+      AUTH_COOKIE_MAX_AGE: ${AUTH_COOKIE_MAX_AGE}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE}
+      AUTH_COOKIE_PATH: ${AUTH_COOKIE_PATH}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -100,36 +124,24 @@ services:
       mongodb:
         condition: service_healthy
 
-  blockchain-scanner:
-    container_name: blockchain-scanner
-    restart: unless-stopped
-    build:
-      context: ../..
-      dockerfile: services/blockchain-scanner/Dockerfile
+  blockchain-scanner-97:
+    <<: *blockchain-scanner
+    container_name: blockchain-scanner-97
     environment:
-      <<: [*mongo-env, *monitoring-env, *rabbit-env]
-      SERVICE_NAME: ${BLOCKCHAIN_SCANNER_SERVICE_NAME}
-      SERVICE_VERSION: ${BLOCKCHAIN_SCANNER_SERVICE_VERSION}
-      MONGODB_DBNAME: ${BLOCKCHAIN_SCANNER_MONGODB_DBNAME}
-      OTEL_SERVICE_NAME: ${BLOCKCHAIN_SCANNER_SERVICE_NAME}
-      OTEL_RESOURCE_ATTRIBUTES: service.name=${BLOCKCHAIN_SCANNER_SERVICE_NAME},service.version=${BLOCKCHAIN_SCANNER_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
-      PORT: ${BLOCKCHAIN_SCANNER_PORT}
-      RPC_URL: ${BLOCKCHAIN_PROVIDER_URL}
-      CHAIN_ID: ${BLOCKCHAIN_CHAIN_ID}
-      EVENT_EMITTER_ADDRESS: ${EVENT_EMITTER_ADDRESS}
-      BLOCK_CONFIRMATIONS: ${BLOCKCHAIN_SCANNER_BLOCK_CONFIRMATIONS}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
-      SCAN_INTERVAL: ${BLOCKCHAIN_SCANNER_SCAN_INTERVAL}
-      BATCH_SIZE: ${BLOCKCHAIN_SCANNER_BATCH_SIZE}
-      INIT_SCAN_BLOCK_NUMBER: ${BLOCKCHAIN_SCANNER_INIT_SCAN_BLOCK_NUMBER:-0}
-    volumes: *monitoring-volumes
-    networks:
-      - app-network
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      <<: *blockchain-scanner-env
+      SERVICE_NAME: ${BLOCKCHAIN_SCANNER_SERVICE_NAME_97}
+      MONGODB_DBNAME: ${BLOCKCHAIN_SCANNER_MONGODB_DBNAME_97}
+      OTEL_SERVICE_NAME: ${BLOCKCHAIN_SCANNER_SERVICE_NAME_97}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=${BLOCKCHAIN_SCANNER_SERVICE_NAME_97},service.version=${BLOCKCHAIN_SCANNER_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
+      PORT: ${BLOCKCHAIN_SCANNER_PORT_97}
+      RPC_URL: ${BLOCKCHAIN_PROVIDER_URL_97}
+      CHAIN_ID: ${CHAIN_ID_97}
+      EVENT_EMITTER_ADDRESS: ${EVENT_EMITTER_ADDRESS_97}
+      BLOCK_CONFIRMATIONS: ${BLOCKCHAIN_SCANNER_BLOCK_CONFIRMATIONS_97}
+      BLOCK_TAG: ${BLOCKCHAIN_SCANNER_BLOCK_TAG_97}
+      SCAN_INTERVAL: ${BLOCKCHAIN_SCANNER_SCAN_INTERVAL_97}
+      BATCH_SIZE: ${BLOCKCHAIN_SCANNER_BATCH_SIZE_97}
+      INIT_SCAN_BLOCK_NUMBER: ${BLOCKCHAIN_SCANNER_INIT_SCAN_BLOCK_NUMBER_97}
 
   blog:
     container_name: blog
@@ -152,6 +164,38 @@ services:
       mongodb:
         condition: service_healthy
 
+
+  upload:
+    container_name: upload
+    restart: unless-stopped
+    build:
+      context: ../..
+      dockerfile: services/upload/Dockerfile
+    environment:
+      <<: *monitoring-env
+      SERVICE_NAME: ${UPLOAD_SERVICE_NAME}
+      SERVICE_VERSION: ${UPLOAD_SERVICE_VERSION}
+      OTEL_SERVICE_NAME: ${UPLOAD_SERVICE_NAME}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=${UPLOAD_SERVICE_NAME},service.version=${UPLOAD_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
+      PORT: ${UPLOAD_PORT}
+      JWT_SECRET: ${APP_JWT_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      FILES_SERVICE_URL: ${FILES_SERVICE_URL}
+      DOCUMENTS_SERVICE_URL: ${DOCUMENTS_SERVICE_URL}
+      GALLERY_SERVICE_URL: ${GALLERY_SERVICE_URL}
+      RWA_SERVICE_URL: ${RWA_SERVICE_URL}
+      COMPANY_SERVICE_URL: ${COMPANY_SERVICE_URL}
+      DOCUMENTS_ALLOWED_MIME_TYPES: ${DOCUMENTS_ALLOWED_MIME_TYPES}
+      GALLERY_ALLOWED_MIME_TYPES: ${GALLERY_ALLOWED_MIME_TYPES}
+      TOKEN_IMAGE_ALLOWED_MIME_TYPES: ${TOKEN_IMAGE_ALLOWED_MIME_TYPES}
+    volumes: *monitoring-volumes
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
   charts:
     container_name: charts
     restart: unless-stopped
@@ -163,11 +207,10 @@ services:
       SERVICE_NAME: ${CHARTS_SERVICE_NAME}
       SERVICE_VERSION: ${CHARTS_SERVICE_VERSION}
       MONGODB_DBNAME: ${CHARTS_MONGODB_DBNAME}
+      CHAIN_IDS: ${CHAIN_IDS}
       OTEL_SERVICE_NAME: ${CHARTS_SERVICE_NAME}
       OTEL_RESOURCE_ATTRIBUTES: service.name=${CHARTS_SERVICE_NAME},service.version=${CHARTS_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
       PORT: ${CHARTS_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
-      RABBITMQ_CHARTS_EXCHANGE: ${RABBITMQ_CHARTS_EXCHANGE}
       REDIS_URL: ${REDIS_URL}
     volumes: *monitoring-volumes
     networks:
@@ -212,10 +255,10 @@ services:
       SERVICE_NAME: ${DAO_SERVICE_NAME}
       SERVICE_VERSION: ${DAO_SERVICE_VERSION}
       MONGODB_DBNAME: ${DAO_MONGODB_DBNAME}
+      CHAIN_IDS: ${CHAIN_IDS}
       OTEL_SERVICE_NAME: ${DAO_SERVICE_NAME}
       OTEL_RESOURCE_ATTRIBUTES: service.name=${DAO_SERVICE_NAME},service.version=${DAO_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
       PORT: ${DAO_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -328,10 +371,11 @@ services:
       SERVICE_NAME: ${LOYALTY_SERVICE_NAME}
       SERVICE_VERSION: ${LOYALTY_SERVICE_VERSION}
       MONGODB_DBNAME: ${LOYALTY_MONGODB_DBNAME}
+      CHAIN_IDS: ${CHAIN_IDS}
+      TREASURIES: ${TREASURIES}
       OTEL_SERVICE_NAME: ${LOYALTY_SERVICE_NAME}
       OTEL_RESOURCE_ATTRIBUTES: service.name=${LOYALTY_SERVICE_NAME},service.version=${LOYALTY_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
       PORT: ${LOYALTY_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
       LOYALTY_REFERRAL_REWARD_PERCENTAGE: ${LOYALTY_REFERRAL_REWARD_PERCENTAGE}
       SIGNERS_MANAGER_URL: ${SIGNERS_MANAGER_SERVICE_URL}
     volumes: *monitoring-volumes
@@ -343,19 +387,19 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  gateway:
-    container_name: gateway
+  graphql:
+    container_name: graphql
     restart: unless-stopped
     build:
       context: ../..
-      dockerfile: services/gateway/Dockerfile
+      dockerfile: services/graphql/Dockerfile
     environment:
       <<: [*mongo-env, *monitoring-env]
-      SERVICE_NAME: ${GATEWAY_SERVICE_NAME}
-      SERVICE_VERSION: ${GATEWAY_SERVICE_VERSION}
-      OTEL_SERVICE_NAME: ${GATEWAY_SERVICE_NAME}
-      OTEL_RESOURCE_ATTRIBUTES: service.name=${GATEWAY_SERVICE_NAME},service.version=${GATEWAY_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
-      PORT: ${GATEWAY_PORT}
+      SERVICE_NAME: ${GRAPHQL_SERVICE_NAME}
+      SERVICE_VERSION: ${GRAPHQL_SERVICE_VERSION}
+      OTEL_SERVICE_NAME: ${GRAPHQL_SERVICE_NAME}
+      OTEL_RESOURCE_ATTRIBUTES: service.name=${GRAPHQL_SERVICE_NAME},service.version=${GRAPHQL_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
+      PORT: ${GRAPHQL_PORT}
       JWT_SECRET: ${APP_JWT_SECRET}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       BLOCKCHAIN_SCANNER_SERVICE_URL: ${BLOCKCHAIN_SCANNER_SERVICE_URL}
@@ -408,10 +452,10 @@ services:
       SERVICE_NAME: ${PORTFOLIO_SERVICE_NAME}
       SERVICE_VERSION: ${PORTFOLIO_SERVICE_VERSION}
       MONGODB_DBNAME: ${PORTFOLIO_MONGODB_DBNAME}
+      CHAIN_IDS: ${CHAIN_IDS}
       OTEL_SERVICE_NAME: ${PORTFOLIO_SERVICE_NAME}
       OTEL_RESOURCE_ATTRIBUTES: service.name=${PORTFOLIO_SERVICE_NAME},service.version=${PORTFOLIO_SERVICE_VERSION},deployment.environment=${DEPLOYMENT_ENVIRONMENT}
       PORT: ${PORTFOLIO_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -473,12 +517,12 @@ services:
       <<: [*monitoring-env, *mongo-env, *rabbit-env, *openrouter-env]
       SERVICE_NAME: ${RWA_SERVICE_NAME}
       SERVICE_VERSION: ${RWA_SERVICE_VERSION}
+      CHAIN_IDS: ${CHAIN_IDS}
+      FACTORIES: ${FACTORIES}
       MONGODB_DBNAME: ${RWA_MONGODB_DBNAME}
       PORT: ${RWA_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
       REDIS_URL: ${REDIS_URL}
       SIGNERS_MANAGER_URL: ${SIGNERS_MANAGER_SERVICE_URL}
-      AI_EVALUATOR_URL: ${AI_EVALUATOR_SERVICE_URL}
       BASE_DOMAIN: ${BASE_DOMAIN}
       PLACEHOLDER_IMAGE_PATH: ${PLACEHOLDER_IMAGE_PATH}
       FILES_URL_PATH: ${FILES_URL_PATH}
@@ -568,7 +612,6 @@ services:
       SERVICE_VERSION: ${SIGNERS_MANAGER_SERVICE_VERSION}
       MONGODB_DBNAME: ${SIGNERS_MANAGER_MONGODB_DBNAME}
       PORT: ${SIGNERS_MANAGER_PORT}
-      RABBITMQ_EXCHANGE: ${RABBITMQ_BLOCKCHAIN_EVENTS_EXCHANGE}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -590,7 +633,7 @@ services:
       SERVICE_VERSION: ${TESTNET_FAUCET_SERVICE_VERSION}
       MONGODB_DBNAME: ${TESTNET_FAUCET_MONGODB_DBNAME}
       PORT: ${TESTNET_FAUCET_PORT}
-      PROVIDER_URL: ${BLOCKCHAIN_PROVIDER_URL}
+      PROVIDER_URL: ${BLOCKCHAIN_PROVIDER_URL_97}
       WALLET_PRIVATE_KEY: ${TESTNET_FAUCET_WALLET_PRIVATE_KEY}
       GAS_TOKEN_AMOUNT: ${TESTNET_FAUCET_GAS_TOKEN_AMOUNT}
       HOLD_TOKEN_AMOUNT: ${TESTNET_FAUCET_HOLD_TOKEN_AMOUNT}
@@ -598,8 +641,8 @@ services:
       REQUEST_GAS_DELAY_MS: ${TESTNET_FAUCET_REQUEST_GAS_DELAY_MS}
       REQUEST_HOLD_DELAY_MS: ${TESTNET_FAUCET_REQUEST_HOLD_DELAY_MS}
       REQUEST_PLATFORM_DELAY_MS: ${TESTNET_FAUCET_REQUEST_PLATFORM_DELAY_MS}
-      HOLD_TOKEN_ADDRESS: ${HOLD_TOKEN_ADDRESS}
-      PLATFORM_TOKEN_ADDRESS: ${PLATFORM_TOKEN_ADDRESS}
+      HOLD_TOKEN_ADDRESS: ${HOLD_TOKEN_ADDRESS_97}
+      PLATFORM_TOKEN_ADDRESS: ${PLATFORM_TOKEN_ADDRESS_97}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -625,6 +668,7 @@ services:
       - FILES_URL_PATH=${FILES_URL_PATH}
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstreams.conf:/etc/nginx/upstreams.conf:ro
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ${NGINX_HOST_SSL_CERT_PATH}:${NGINX_SSL_CERT_PATH}:ro

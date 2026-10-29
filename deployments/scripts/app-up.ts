@@ -58,12 +58,14 @@ function memberIds(): string[] {
 }
 
 async function main(): Promise<void> {
+  const extra = process.argv.slice(2);
+
   console.log('--------------------------------------------------');
   console.log('🚀 Starting the stack');
   console.log('--------------------------------------------------');
 
   // 1. The replica set members must be running (no-op when they already are).
-  await composeUp(...MEMBER_SERVICES);
+  await composeUp(...MEMBER_SERVICES, ...extra);
 
   // 2. Detect the network of the running `mongodb` member (works for any compose project name).
   const memberId = capture(['docker', 'compose', 'ps', '-q', 'mongodb'], composeDir);
@@ -106,7 +108,7 @@ async function main(): Promise<void> {
   }
 
   // 5. The rest of the stack.
-  await composeUp();
+  await composeUp(...extra);
 
   console.log('--------------------------------------------------');
   console.log('✅ Stack is up');
