@@ -5,8 +5,8 @@
  * fakes (tests/fakes/*.fake.ts), so these tests need no database, no broker
  * and no network. Run with `bun test` from services/dao.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
-import { Types } from 'mongoose';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose, { Types } from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { DaoService } from '../src/services/dao.service';
 import type { ProposalRepository } from '../src/repositories/proposal.repository';
@@ -136,7 +136,9 @@ describe('DaoService (unit, fake repositories)', () => {
   let stakingHistory: FakeStakingHistoryRepository;
   let timelockTasks: FakeTimelockTaskRepository;
   let treasuryWithdrawals: FakeTreasuryWithdrawRepository;
-  let service: DaoService;
+  // The proxy appends the commit closure, so the call sites keep one argument.
+  let service: any;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
 
   beforeEach(() => {
     proposals = createFakeProposalRepository();
@@ -145,7 +147,14 @@ describe('DaoService (unit, fake repositories)', () => {
     stakingHistory = createFakeStakingHistoryRepository();
     timelockTasks = createFakeTimelockTaskRepository();
     treasuryWithdrawals = createFakeTreasuryWithdrawRepository();
-    service = new DaoService(
+    commitInbox = mock(async (): Promise<void> => undefined);
+
+    // The service writes its rows and the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    const raw = new DaoService(
       proposals as unknown as ProposalRepository,
       staking as unknown as StakingRepository,
       stakingHistory as unknown as StakingHistoryRepository,
@@ -153,6 +162,17 @@ describe('DaoService (unit, fake repositories)', () => {
       treasuryWithdrawals as unknown as TreasuryWithdrawRepository,
       votes as unknown as VoteRepository,
     );
+
+    // Every handler now takes the commit closure: the proxy appends it, so the
+    // call sites below stay focused on their own arguments.
+    service = new Proxy(raw, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+
+        return (...args: unknown[]) => value.apply(target, [...args, commitInbox]);
+      },
+    }) as DaoService;
   });
 
   test('processProposalCreated: forwards the payload and stores a pending proposal', async () => {

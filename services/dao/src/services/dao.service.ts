@@ -4,6 +4,7 @@ import { StakingHistoryRepository } from '../repositories/stakingHistory.reposit
 import { TimelockTaskRepository } from '../repositories/timelockTask.repository';
 import { TreasuryWithdrawRepository } from '../repositories/treasuryWithdraw.repository';
 import { VoteRepository } from '../repositories/vote.repository';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import type { IProposalEntity } from '../models/entity/proposal.entity';
 import type { IVoteEntity } from '../models/entity/vote.entity';
@@ -32,7 +33,9 @@ export class DaoService {
     private readonly timelockTaskRepository: TimelockTaskRepository,
     private readonly treasuryWithdrawRepository: TreasuryWithdrawRepository,
     private readonly voteRepository: VoteRepository,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   /**
    * Process Governance_ProposalCreated event
@@ -59,6 +62,7 @@ export class DaoService {
       creationTime: string;
       endTime: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.proposer,
@@ -66,17 +70,20 @@ export class DaoService {
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.proposalRepository.create({
-      proposalId: event.data.proposalId,
-      proposer: event.data.proposer,
-      target: event.data.target,
-      data: event.data.data,
-      description: event.data.description,
-      creationTime: Number(event.data.creationTime),
-      endTime: Number(event.data.endTime),
-      chainId: String(event.chainId),
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
+    await mongoose.connection.transaction(async () => {
+      await this.proposalRepository.create({
+        proposalId: event.data.proposalId,
+        proposer: event.data.proposer,
+        target: event.data.target,
+        data: event.data.data,
+        description: event.data.description,
+        creationTime: Number(event.data.creationTime),
+        endTime: Number(event.data.endTime),
+        chainId: String(event.chainId),
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+      });
+      await commitInbox();
     });
   }
 
@@ -100,6 +107,7 @@ export class DaoService {
       proposalId: string;
       executor: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.executor,
@@ -107,8 +115,11 @@ export class DaoService {
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.proposalRepository.updateState(event.data.proposalId, 'executed', {
-      executor: event.data.executor,
+    await mongoose.connection.transaction(async () => {
+      await this.proposalRepository.updateState(event.data.proposalId, 'executed', {
+        executor: event.data.executor,
+      });
+      await commitInbox();
     });
   }
 
@@ -132,6 +143,7 @@ export class DaoService {
       proposalId: string;
       canceller: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.canceller,
@@ -139,8 +151,11 @@ export class DaoService {
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.proposalRepository.updateState(event.data.proposalId, 'canceled', {
-      canceller: event.data.canceller,
+    await mongoose.connection.transaction(async () => {
+      await this.proposalRepository.updateState(event.data.proposalId, 'canceled', {
+        canceller: event.data.canceller,
+      });
+      await commitInbox();
     });
   }
 
@@ -167,6 +182,7 @@ export class DaoService {
       weight: string;
       reason: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       voter: event.data.voter,
@@ -174,17 +190,20 @@ export class DaoService {
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.voteRepository.create({
-      proposalId: event.data.proposalId,
-      chainId: String(event.chainId),
-      governanceAddress: event.data.emittedFrom,
-      voterWallet: event.data.voter,
-      support: event.data.support,
-      weight: event.data.weight,
-      reason: event.data.reason,
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
-      blockNumber: event.blockNumber,
+    await mongoose.connection.transaction(async () => {
+      await this.voteRepository.create({
+        proposalId: event.data.proposalId,
+        chainId: String(event.chainId),
+        governanceAddress: event.data.emittedFrom,
+        voterWallet: event.data.voter,
+        support: event.data.support,
+        weight: event.data.weight,
+        reason: event.data.reason,
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        blockNumber: event.blockNumber,
+      });
+      await commitInbox();
     });
   }
 
@@ -209,32 +228,36 @@ export class DaoService {
       amount: string;
       newVotingPower: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.staker,
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    // The event carries the full post-event stake (= on-chain stakedAmount,
-    // rewards reinvested), so mirror the amount as-is instead of accumulating
-    // deltas; events arrive strictly in chain order.
-    await this.stakingRepository.setAmount(
-      event.data.staker,
-      String(event.chainId),
-      event.data.newVotingPower,
-      event.timestamp,
-    );
+    await mongoose.connection.transaction(async () => {
+      // The event carries the full post-event stake (= on-chain stakedAmount,
+      // rewards reinvested), so mirror the amount as-is instead of accumulating
+      // deltas; events arrive strictly in chain order.
+      await this.stakingRepository.setAmount(
+        event.data.staker,
+        String(event.chainId),
+        event.data.newVotingPower,
+        event.timestamp,
+      );
 
-    // Record staking history
-    await this.stakingHistoryRepository.create({
-      staker: event.data.staker,
-      amount: event.data.amount,
-      rewards: '0',
-      operation: 'staked',
-      chainId: String(event.chainId),
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
-      blockNumber: event.blockNumber,
+      // Record staking history
+      await this.stakingHistoryRepository.create({
+        staker: event.data.staker,
+        amount: event.data.amount,
+        rewards: '0',
+        operation: 'staked',
+        chainId: String(event.chainId),
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        blockNumber: event.blockNumber,
+      });
+      await commitInbox();
     });
   }
 
@@ -260,33 +283,37 @@ export class DaoService {
       rewardsReceived: string;
       newVotingPower: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.staker,
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    // Mirror the absolute stake amount from the event. A partial unstake
-    // reinvests the remainder and resets the contract stakingTimestamp, so
-    // lastStakeTimestamp moves with it; a full exit leaves it untouched.
-    const newVotingPower = String(event.data.newVotingPower);
-    await this.stakingRepository.setAmount(
-      event.data.staker,
-      String(event.chainId),
-      newVotingPower,
-      BigInt(newVotingPower) === 0n ? undefined : event.timestamp,
-    );
+    await mongoose.connection.transaction(async () => {
+      // Mirror the absolute stake amount from the event. A partial unstake
+      // reinvests the remainder and resets the contract stakingTimestamp, so
+      // lastStakeTimestamp moves with it; a full exit leaves it untouched.
+      const newVotingPower = String(event.data.newVotingPower);
+      await this.stakingRepository.setAmount(
+        event.data.staker,
+        String(event.chainId),
+        newVotingPower,
+        BigInt(newVotingPower) === 0n ? undefined : event.timestamp,
+      );
 
-    // Record staking history
-    await this.stakingHistoryRepository.create({
-      staker: event.data.staker,
-      amount: event.data.amount,
-      rewards: event.data.rewardsReceived,
-      operation: 'unstaked',
-      chainId: String(event.chainId),
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
-      blockNumber: event.blockNumber,
+      // Record staking history
+      await this.stakingHistoryRepository.create({
+        staker: event.data.staker,
+        amount: event.data.amount,
+        rewards: event.data.rewardsReceived,
+        operation: 'unstaked',
+        chainId: String(event.chainId),
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        blockNumber: event.blockNumber,
+      });
+      await commitInbox();
     });
   }
 
@@ -310,19 +337,23 @@ export class DaoService {
       user: string;
       unlockTimestamp: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.user,
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    // Governance locks the voter's stake until the proposal end; the event
-    // carries the resulting votingLockTimestamp (the max of all prior locks).
-    await this.stakingRepository.setUnlockTimestamp(
-      event.data.user,
-      String(event.chainId),
-      Number(event.data.unlockTimestamp),
-    );
+    await mongoose.connection.transaction(async () => {
+      // Governance locks the voter's stake until the proposal end; the event
+      // carries the resulting votingLockTimestamp (the max of all prior locks).
+      await this.stakingRepository.setUnlockTimestamp(
+        event.data.user,
+        String(event.chainId),
+        Number(event.data.unlockTimestamp),
+      );
+      await commitInbox();
+    });
   }
 
   /**
@@ -347,20 +378,24 @@ export class DaoService {
       data: string;
       eta: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.timelockTaskRepository.create({
-      txHash: event.data.txHash,
-      target: event.data.target,
-      data: event.data.data,
-      eta: Number(event.data.eta),
-      chainId: String(event.chainId),
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
-      blockNumber: event.blockNumber,
+    await mongoose.connection.transaction(async () => {
+      await this.timelockTaskRepository.create({
+        txHash: event.data.txHash,
+        target: event.data.target,
+        data: event.data.data,
+        eta: Number(event.data.eta),
+        chainId: String(event.chainId),
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        blockNumber: event.blockNumber,
+      });
+      await commitInbox();
     });
   }
 
@@ -386,12 +421,16 @@ export class DaoService {
       data: string;
       eta: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.timelockTaskRepository.updateExecuted(String(event.chainId), event.data.txHash, true);
+    await mongoose.connection.transaction(async () => {
+      await this.timelockTaskRepository.updateExecuted(String(event.chainId), event.data.txHash, true);
+      await commitInbox();
+    });
   }
 
   /**
@@ -416,14 +455,18 @@ export class DaoService {
       data: string;
       eta: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    // Mirror the chain: the timelock deletes the transaction from
-    // queuedTransactions, so the task must stop counting as pending.
-    await this.timelockTaskRepository.updateCancelled(String(event.chainId), event.data.txHash);
+    await mongoose.connection.transaction(async () => {
+      // Mirror the chain: the timelock deletes the transaction from
+      // queuedTransactions, so the task must stop counting as pending.
+      await this.timelockTaskRepository.updateCancelled(String(event.chainId), event.data.txHash);
+      await commitInbox();
+    });
   }
 
   /**
@@ -447,19 +490,23 @@ export class DaoService {
       token: string;
       amount: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.to,
       chainId: String(event.chainId),
       transactionHash: event.transactionHash,
     });
-    await this.treasuryWithdrawRepository.create({
-      recipient: event.data.to,
-      token: event.data.token,
-      amount: event.data.amount,
-      chainId: String(event.chainId),
-      transactionHash: event.transactionHash,
-      logIndex: event.logIndex,
+    await mongoose.connection.transaction(async () => {
+      await this.treasuryWithdrawRepository.create({
+        recipient: event.data.to,
+        token: event.data.token,
+        amount: event.data.amount,
+        chainId: String(event.chainId),
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+      });
+      await commitInbox();
     });
   }
 

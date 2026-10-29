@@ -1,85 +1,72 @@
 /**
- * In-memory fake of RabbitMQClient for unit tests.
- *
- * Mirrors the public API of shared/rabbitmq/src/rabbitmq.client.ts without
- * touching amqp-connection-manager: every method is a bun:test mock, consumed
- * handlers are captured per queue, sent/acked/nacked messages are recorded for
- * assertions, and `callLog` preserves invocation order.
+ * Stand-in for the signers-manager RabbitMQClient: records consumer
+ * registrations, ack / nack / park calls.
  */
 import { mock } from 'bun:test';
 import type { ConsumeMessage } from 'amqplib';
+import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 
-export function createFakeRabbitMQClient() {
-  const callLog: string[] = [];
-  const consumedHandlers = new Map<string, (message: ConsumeMessage | null) => Promise<void>>();
-  const sent: Array<{ queue: string; content: any; options?: unknown }> = [];
-  const acked: ConsumeMessage[] = [];
-  const nacked: Array<{ message: ConsumeMessage; requeue: boolean }> = [];
+export const RESPONSES_QUEUE = 'sign.responses';
+
+export function createFakeRabbitClient() {
+  const state = {
+    connected: true,
+    consumerTags: [] as string[],
+    acked: [] as ConsumeMessage[],
+    nacked: [] as Array<{ message: ConsumeMessage; requeue: boolean }>,
+    parked: [] as Array<{ queue: string; payload: unknown }>,
+    handlers: new Map<string, (message: ConsumeMessage | null) => Promise<void>>(),
+    consumedOptions: [] as Array<{ queue: string; options: unknown }>,
+    deferAfterAttempts: 3,
+    parkAfterCycles: 3,
+  };
+
+  let sequence = 0;
 
   const client = {
-    callLog,
-    consumedHandlers,
-    sent,
-    acked,
-    nacked,
+    state,
+    channelName: 'signers-manager',
 
-    connect: mock(async (): Promise<void> => {
-      callLog.push('connect');
-    }),
-
-    disconnect: mock(async (): Promise<void> => {
-      callLog.push('disconnect');
-    }),
-
-    setupQueue: mock(async (_queue: string, _options?: unknown): Promise<void> => {
-      callLog.push('setupQueue');
-    }),
-
-    setupExchange: mock(async (_exchange: string, _type: string, _options?: unknown): Promise<void> => {
-      callLog.push('setupExchange');
-    }),
-
-    bindQueue: mock(async (_queue: string, _exchange: string, _pattern: string): Promise<void> => {
-      callLog.push('bindQueue');
-    }),
-
-    publish: mock(
-      async (_exchange: string, _routingKey: string, _content: unknown, _options?: unknown): Promise<void> => {
-        callLog.push('publish');
-      },
-    ),
-
-    sendToQueue: mock(async (queue: string, content: any, options?: unknown): Promise<void> => {
-      callLog.push('sendToQueue');
-      sent.push({ queue, content, options });
-    }),
+    getSignResponsesQueue: () => RESPONSES_QUEUE,
 
     consume: mock(
       async (
         queue: string,
         handler: (message: ConsumeMessage | null) => Promise<void>,
-        _options?: { noAck?: boolean; prefetch?: number },
-      ): Promise<void> => {
-        callLog.push('consume');
-        consumedHandlers.set(queue, handler);
+        options?: { prefetch?: number },
+      ): Promise<string> => {
+        state.consumedOptions.push({ queue, options });
+        const consumerTag = `ctag-${(sequence += 1)}`;
+        state.consumerTags.push(consumerTag);
+        state.handlers.set(queue, handler);
+        return consumerTag;
       },
     ),
 
+    cancelConsumer: mock(async (consumerTag: string): Promise<void> => {
+      state.consumerTags = state.consumerTags.filter((tag) => tag !== consumerTag);
+    }),
+
     ack: mock(async (message: ConsumeMessage): Promise<void> => {
-      callLog.push('ack');
-      acked.push(message);
+      state.acked.push(message);
     }),
 
-    nack: mock(async (message: ConsumeMessage, requeue: boolean = true): Promise<void> => {
-      callLog.push('nack');
-      nacked.push({ message, requeue });
+    nack: mock(async (message: ConsumeMessage, requeue = true): Promise<void> => {
+      state.nacked.push({ message, requeue });
     }),
 
-    /** Handler registered for a queue through consume() (undefined until then). */
-    getConsumedHandler: (queue: string) => consumedHandlers.get(queue),
+    park: mock(async (queue: string, payload: unknown): Promise<void> => {
+      state.parked.push({ queue, payload });
+    }),
+
+    getQueueDeferAfterAttempts: mock((): number => state.deferAfterAttempts),
+    getQueueParkAfterCycles: mock((): number => state.parkAfterCycles),
+    isConnected: mock((): boolean => state.connected),
   };
 
   return client;
 }
 
-export type FakeRabbitMQClient = ReturnType<typeof createFakeRabbitMQClient>;
+export type FakeRabbitClient = ReturnType<typeof createFakeRabbitClient>;
+
+export const asRabbitClient = (fake: FakeRabbitClient): BaseRabbitMQClient => fake as unknown as BaseRabbitMQClient;

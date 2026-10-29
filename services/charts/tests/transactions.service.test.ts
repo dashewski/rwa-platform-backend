@@ -6,7 +6,8 @@
  * in-memory fake (tests/fakes/*.fake.ts), so these tests need no database, no
  * Redis, no broker and no network. Run with `bun test` from services/charts.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { TransactionsService } from '../src/services/transactions.service';
 import { ChartEventsClient } from '../src/clients/redis.client';
 import { PoolTransactionType } from '../src/models/shared/enums.model';
@@ -80,12 +81,19 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   let redis: FakeRedisEventsClient;
   let chartEvents: ChartEventsClient;
   let service: TransactionsService;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
 
   beforeEach(() => {
+    // The service writes the row and the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
     poolTransactions = createFakePoolTransactionRepository();
     redis = createFakeRedisEventsClient();
     chartEvents = new ChartEventsClient(redis as unknown as RedisEventsClient);
     service = new TransactionsService(poolTransactions as unknown as PoolTransactionRepository, chartEvents);
+    commitInbox = mock(async (): Promise<void> => undefined);
   });
 
   /** Writes a transaction row straight into the fake repository. */
@@ -103,7 +111,7 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   }
 
   test('recordMint: defaults both bonus fields to "0" and publishes the update', async () => {
-    const result = await service.recordMint({ ...MINT_EVENT });
+    const result = await service.recordMint({ ...MINT_EVENT }, commitInbox);
 
     expect(poolTransactions.create).toHaveBeenCalledTimes(1);
     expect(poolTransactions.create).toHaveBeenCalledWith({
@@ -155,7 +163,7 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   });
 
   test('recordMint: explicit bonus amounts are preserved and forwarded', async () => {
-    const result = await service.recordBurn({ ...BURN_EVENT });
+    const result = await service.recordBurn({ ...BURN_EVENT }, commitInbox);
 
     expect(poolTransactions.create).toHaveBeenCalledWith(
       expect.objectContaining({ bonusAmount: '100', bonusFee: '3' }),
@@ -170,10 +178,13 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   });
 
   test('recordMint: an empty-string bonus amount is coerced to "0" (|| fallback, not ??)', async () => {
-    const result = await service.recordBurn({
-      ...BURN_EVENT,
-      data: { ...BURN_EVENT.data, bonusAmountReceived: '', bonusFeePaid: '' },
-    });
+    const result = await service.recordBurn(
+      {
+        ...BURN_EVENT,
+        data: { ...BURN_EVENT.data, bonusAmountReceived: '', bonusFeePaid: '' },
+      },
+      commitInbox,
+    );
 
     expect(poolTransactions.create).toHaveBeenCalledWith(expect.objectContaining({ bonusAmount: '0', bonusFee: '0' }));
     expect(result.bonusAmount).toBe('0');
@@ -183,7 +194,7 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
   test('recordMint: propagates a repository failure without publishing', async () => {
     poolTransactions.create.mockRejectedValueOnce(new Error('db unavailable'));
 
-    await expect(service.recordMint({ ...MINT_EVENT })).rejects.toThrow('db unavailable');
+    await expect(service.recordMint({ ...MINT_EVENT }, commitInbox)).rejects.toThrow('db unavailable');
 
     expect(redis.publish).toHaveBeenCalledTimes(0);
   });
@@ -193,7 +204,7 @@ describe('TransactionsService (unit, fake repository + fake redis client)', () =
     // A publish failure therefore rejects the call while the row stays stored.
     redis.publish.mockRejectedValueOnce(new Error('redis unavailable'));
 
-    await expect(service.recordMint({ ...MINT_EVENT })).rejects.toThrow('redis unavailable');
+    await expect(service.recordMint({ ...MINT_EVENT }, commitInbox)).rejects.toThrow('redis unavailable');
 
     expect(poolTransactions.store.size).toBe(1);
   });

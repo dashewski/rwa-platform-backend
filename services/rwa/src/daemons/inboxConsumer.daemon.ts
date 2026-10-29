@@ -4,71 +4,76 @@ import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { BusinessService } from '../services/business.service';
 import type { PoolService } from '../services/pool.service';
 
-export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
+export class InboxConsumerDaemon extends BaseInboxConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
     consumerService: InboxConsumerService,
-    private readonly businessService: BusinessService,
-    private readonly poolService: PoolService,
+    businessService: BusinessService,
+    poolService: PoolService,
   ) {
     super(rabbitClient, consumerService, {
-      'blockchain.events.rwa': {
-        prefetch: 1,
-        isSync: true,
+      [rabbitClient.getEvaluationResultsQueue()]: {
+        prefetch: 5,
+        isSync: false,
         handlers: {
-          RWA_Deployed: async (event) => {
-            await this.businessService.syncAfterDeployment(event);
+          poolResult: async (result, commitInbox) => {
+            await poolService.applyEvaluationResult(result, commitInbox);
           },
-          RWA_PausedStateChanged: async (event) => {
-            await this.businessService.syncPausedState(event);
-          },
-          Pool_Deployed: async (event) => {
-            await this.poolService.syncPoolAfterDeployment(event);
-          },
-          Pool_BonusWithdrawn: async (event) => {
-            await this.poolService.syncPoolBonusWithdrawn(event);
-          },
-          Pool_AwaitingRwaAmountUpdated: async (event) => {
-            await this.poolService.syncPoolAwaitingRwaAmount(event);
-          },
-          Pool_FundsFullyReturned: async (event) => {
-            await this.poolService.syncPoolFundsFullyReturned(event);
-          },
-          Pool_IncomingReturnSummary: async (event) => {
-            await this.poolService.syncPoolIncomingReturnSummary(event);
-          },
-          Pool_IncomingTrancheUpdate: async (event) => {
-            await this.poolService.syncPoolIncomingTrancheUpdate(event);
-          },
-          Pool_OutgoingClaimSummary: async (event) => {
-            await this.poolService.syncPoolOutgoingClaimSummary(event);
-          },
-          Pool_OutgoingTrancheClaimed: async (event) => {
-            await this.poolService.syncPoolOutgoingTrancheClaimed(event);
-          },
-          Pool_PausedStateChanged: async (event) => {
-            await this.poolService.syncPoolPausedState(event);
-          },
-          Pool_ReservesUpdated: async (event) => {
-            await this.poolService.syncPoolReserves(event);
-          },
-          Pool_TargetReached: async (event) => {
-            await this.poolService.syncPoolTargetReached(event);
+          businessResult: async (result, commitInbox) => {
+            await businessService.applyEvaluationResult(result, commitInbox);
           },
         },
       },
-      'evaluation.results': {
-        prefetch: 1,
-        isSync: true,
-        handlers: {
-          poolResult: async (result) => {
-            await this.poolService.applyEvaluationResult(result);
+      ...Object.fromEntries(
+        rabbitClient.getBlockchainEventsQueues().map((queue) => [
+          queue,
+          {
+            prefetch: 1,
+            isSync: true,
+            handlers: {
+              RWA_Deployed: async (event, commitInbox) => {
+                await businessService.syncAfterDeployment(event, commitInbox);
+              },
+              RWA_PausedStateChanged: async (event, commitInbox) => {
+                await businessService.syncPausedState(event, commitInbox);
+              },
+              Pool_Deployed: async (event, commitInbox) => {
+                await poolService.syncPoolAfterDeployment(event, commitInbox);
+              },
+              Pool_BonusWithdrawn: async (event, commitInbox) => {
+                await poolService.syncPoolBonusWithdrawn(event, commitInbox);
+              },
+              Pool_AwaitingRwaAmountUpdated: async (event, commitInbox) => {
+                await poolService.syncPoolAwaitingRwaAmount(event, commitInbox);
+              },
+              Pool_FundsFullyReturned: async (event, commitInbox) => {
+                await poolService.syncPoolFundsFullyReturned(event, commitInbox);
+              },
+              Pool_IncomingReturnSummary: async (event, commitInbox) => {
+                await poolService.syncPoolIncomingReturnSummary(event, commitInbox);
+              },
+              Pool_IncomingTrancheUpdate: async (event, commitInbox) => {
+                await poolService.syncPoolIncomingTrancheUpdate(event, commitInbox);
+              },
+              Pool_OutgoingClaimSummary: async (event, commitInbox) => {
+                await poolService.syncPoolOutgoingClaimSummary(event, commitInbox);
+              },
+              Pool_OutgoingTrancheClaimed: async (event, commitInbox) => {
+                await poolService.syncPoolOutgoingTrancheClaimed(event, commitInbox);
+              },
+              Pool_PausedStateChanged: async (event, commitInbox) => {
+                await poolService.syncPoolPausedState(event, commitInbox);
+              },
+              Pool_ReservesUpdated: async (event, commitInbox) => {
+                await poolService.syncPoolReserves(event, commitInbox);
+              },
+              Pool_TargetReached: async (event, commitInbox) => {
+                await poolService.syncPoolTargetReached(event, commitInbox);
+              },
+            },
           },
-          businessResult: async (result) => {
-            await this.businessService.applyEvaluationResult(result);
-          },
-        },
-      },
+        ]),
+      ),
     });
   }
 }

@@ -2,6 +2,7 @@ import { TokenBalanceRepository } from '../repositories/tokenBalance.repository'
 import { TransactionRepository } from '../repositories/transaction.repository';
 import type { ITokenBalanceEntity } from '../models/entity/tokenBalance.entity';
 import type { ITransactionEntity } from '../models/entity/transaction.entity';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
@@ -15,7 +16,9 @@ export class PortfolioService {
   constructor(
     private readonly tokenBalanceRepository: TokenBalanceRepository,
     private readonly transactionRepository: TransactionRepository,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   /**
    * Gets token balances list with filters, pagination and sorting
@@ -107,6 +110,7 @@ export class PortfolioService {
       amount: string;
       pool: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       chainId: event.chainId,
@@ -115,47 +119,47 @@ export class PortfolioService {
       poolAddress: event.data.pool,
     });
 
-    // Skip if both addresses are zero (shouldn't happen)
-    if (event.data.from === ZERO_ADDRESS && event.data.to === ZERO_ADDRESS) {
-      return;
-    }
+    await mongoose.connection.transaction(async () => {
+      // Record transaction
+      await this.transactionRepository.create({
+        from: event.data.from,
+        to: event.data.to,
+        tokenAddress: event.data.emittedFrom,
+        tokenId: event.data.tokenId,
+        poolAddress: event.data.pool,
+        chainId: event.chainId,
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        blockNumber: event.blockNumber,
+        amount: Number(event.data.amount),
+      });
 
-    // Record transaction
-    await this.transactionRepository.create({
-      from: event.data.from,
-      to: event.data.to,
-      tokenAddress: event.data.emittedFrom,
-      tokenId: event.data.tokenId,
-      poolAddress: event.data.pool,
-      chainId: event.chainId,
-      transactionHash: event.transactionHash,
-      blockNumber: event.blockNumber,
-      amount: Number(event.data.amount),
+      if (event.data.from !== ZERO_ADDRESS) {
+        await this.tokenBalanceRepository.updateBalance(
+          event.data.from,
+          event.data.emittedFrom,
+          event.data.tokenId,
+          event.data.pool,
+          event.chainId,
+          -Number(event.data.amount),
+          event.blockNumber,
+        );
+      }
+
+      if (event.data.to !== ZERO_ADDRESS) {
+        await this.tokenBalanceRepository.updateBalance(
+          event.data.to,
+          event.data.emittedFrom,
+          event.data.tokenId,
+          event.data.pool,
+          event.chainId,
+          Number(event.data.amount),
+          event.blockNumber,
+        );
+      }
+
+      await commitInbox();
     });
-
-    if (event.data.from !== ZERO_ADDRESS) {
-      await this.tokenBalanceRepository.updateBalance(
-        event.data.from,
-        event.data.emittedFrom,
-        event.data.tokenId,
-        event.data.pool,
-        event.chainId,
-        -Number(event.data.amount),
-        event.blockNumber,
-      );
-    }
-
-    if (event.data.to !== ZERO_ADDRESS) {
-      await this.tokenBalanceRepository.updateBalance(
-        event.data.to,
-        event.data.emittedFrom,
-        event.data.tokenId,
-        event.data.pool,
-        event.chainId,
-        Number(event.data.amount),
-        event.blockNumber,
-      );
-    }
   }
 
   private mapBalance(balance: ITokenBalanceEntity) {
@@ -183,6 +187,7 @@ export class PortfolioService {
       tokenId: tx.tokenId,
       chainId: tx.chainId,
       transactionHash: tx.transactionHash,
+      logIndex: tx.logIndex,
       blockNumber: tx.blockNumber,
       amount: tx.amount,
       createdAt: tx.createdAt,

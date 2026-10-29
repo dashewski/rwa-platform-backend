@@ -16,10 +16,15 @@ export const createDaemonsPlugin = async (
   batchSize: number,
   chainId: string,
   initScanBlockNumber: number,
+  blockTag: string,
 ) => {
   const outboxPublisherDaemon = withTraceSync(
     'blockchain-scanner.init.daemons.outbox_publisher',
-    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisher),
+    () =>
+      new OutboxPublisherDaemon(
+        servicesPlugin.decorator.outboxPublisherService,
+        clientsPlugin.decorator.rabbitMQClient,
+      ),
   );
 
   const blockchainScanner = withTraceSync(
@@ -34,6 +39,7 @@ export const createDaemonsPlugin = async (
         chainId,
         initScanBlockNumber,
         servicesPlugin.decorator.blockchainScannerService,
+        blockTag,
       ),
   );
 

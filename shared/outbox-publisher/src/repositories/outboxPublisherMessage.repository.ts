@@ -43,7 +43,6 @@ export class OutboxPublisherMessageRepository {
         $set: {
           status: 'sent',
           sentAt: nowSeconds(),
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         },
       },
     );

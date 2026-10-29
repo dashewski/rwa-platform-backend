@@ -9,7 +9,13 @@ import { createControllersPlugin } from './plugins/controllers.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(mongoUri: string, redisUrl: string, serviceName: string, rabbitMqUri: string) {
+export async function createApp(
+  mongoUri: string,
+  redisUrl: string,
+  serviceName: string,
+  rabbitMqUri: string,
+  chainIds: string[],
+) {
   const repositoriesPlugin = await withTraceAsync(
     'charts.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),
@@ -17,7 +23,7 @@ export async function createApp(mongoUri: string, redisUrl: string, serviceName:
 
   const clientsPlugin = await withTraceAsync(
     'charts.init.clients_plugin',
-    async () => await createClientsPlugin(redisUrl, serviceName, rabbitMqUri),
+    async () => await createClientsPlugin(redisUrl, serviceName, rabbitMqUri, chainIds),
   );
 
   const servicesPlugin = withTraceSync('charts.init.services_plugin', () =>

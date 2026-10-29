@@ -12,7 +12,7 @@ export const createServicesPlugin = (
   openRouterModel: string,
   maxFilesPerRequest: number,
 ) => {
-  const outboxPublisher = withTraceSync(
+  const outboxPublisherService = withTraceSync(
     'ai-evaluator.init.services.outbox_publisher',
     () =>
       new OutboxPublisherService(
@@ -21,7 +21,7 @@ export const createServicesPlugin = (
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'ai-evaluator.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
@@ -31,7 +31,6 @@ export const createServicesPlugin = (
     () =>
       new RiskEvaluationService(
         repositoriesPlugin.decorator.evaluationRepository,
-        repositoriesPlugin.decorator.evaluationJobRepository,
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.rwaClient,
         clientsPlugin.decorator.documentsClient,
@@ -39,8 +38,7 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.reactionsClient,
         clientsPlugin.decorator.questionsClient,
         clientsPlugin.decorator.portfolioClient,
-        outboxPublisher,
-        clientsPlugin.decorator.rabbitMQClient.getExchange('evaluation'),
+        outboxPublisherService,
         openRouterModel,
         maxFilesPerRequest,
       ),
@@ -50,8 +48,8 @@ export const createServicesPlugin = (
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
-      .decorate('outboxPublisher', outboxPublisher)
-      .decorate('inboxConsumer', inboxConsumer)
+      .decorate('outboxPublisherService', outboxPublisherService)
+      .decorate('inboxConsumerService', inboxConsumerService)
       .decorate('riskEvaluationService', riskEvaluationService),
   );
 

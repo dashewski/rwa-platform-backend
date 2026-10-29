@@ -60,19 +60,3 @@ export const getEvaluationsRequest = t.Object({
   offset: t.Optional(t.Number()),
 });
 export const getEvaluationsResponse = t.Array(evaluationSchema);
-
-export const createPoolEvaluationRequest = t.Object({
-  poolId: t.String({ minLength: 1 }),
-  ownerId: t.String({ minLength: 1 }),
-  ownerType: t.String({ minLength: 1 }),
-});
-
-export const createBusinessEvaluationRequest = t.Object({
-  businessId: t.String({ minLength: 1 }),
-  ownerId: t.String({ minLength: 1 }),
-  ownerType: t.String({ minLength: 1 }),
-});
-
-export const createEvaluationResponse = t.Object({
-  jobId: t.String(),
-});

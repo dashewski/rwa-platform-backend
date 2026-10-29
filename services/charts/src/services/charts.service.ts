@@ -1,5 +1,6 @@
 import { PriceDataRepository } from '../repositories/priceData.repository';
 import type { IPriceDataEntity } from '../models/entity/priceData.entity';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { ChartEventsClient } from '../clients/redis.client';
@@ -15,7 +16,9 @@ export class ChartsService {
   constructor(
     private readonly priceDataRepository: PriceDataRepository,
     private readonly chartEventsClient: ChartEventsClient,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   private mapPriceDataToOutput(doc: IPriceDataEntity): Omit<IPriceDataEntity, '_id'> & { id: string } {
     return {
@@ -48,6 +51,7 @@ export class ChartsService {
       virtualHoldReserve: string;
       virtualRwaReserve: string;
     }>,
+    commitInbox: () => Promise<void>,
   ): Promise<Omit<IPriceDataEntity, '_id'> & { id: string }> {
     const data = {
       poolAddress: event.data.emittedFrom,
@@ -88,7 +92,13 @@ export class ChartsService {
       price: priceString,
     };
 
-    const createdDoc = await this.priceDataRepository.create(newPriceEntry);
+    const createdDoc = await mongoose.connection.transaction(async () => {
+      const doc = await this.priceDataRepository.create(newPriceEntry);
+
+      await commitInbox();
+
+      return doc;
+    });
     const output = this.mapPriceDataToOutput(createdDoc);
 
     await this.chartEventsClient.publishPriceUpdate({

@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BaseOutboxPublisherDaemon } from '../src/daemons/baseOutboxPublisher.daemon';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import type { OutboxPublisherService } from '../src/services/outboxPublisher.service';
-import { EXCHANGE } from './fakes';
+import { EXCHANGE } from './fakes/rabbitmq.client.fake';
 
 const OTHER_EXCHANGE = 'other.events';
 const INTERVAL_MS = 10;

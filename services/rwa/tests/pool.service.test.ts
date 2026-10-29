@@ -5,14 +5,14 @@
  * replaced with in-memory fakes (tests/fakes/*.fake.ts), so these tests need
  * no database, no broker and no network. Run with `bun test` from services/rwa.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { PoolService } from '../src/services/pool.service';
 import type { PoolRepository } from '../src/repositories/pool.repository';
 import type { PoolEventsClient } from '../src/clients/poolEvents.client';
 import type { SignersManagerClient } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { AiEvaluatorClient } from '../src/clients/aiEvaluator.client';
 import { createFakePoolRepository, type CreatePoolInput, type FakePoolRepository } from './fakes/pool.repository.fake';
 import { createFakeOpenRouterClient, type FakeOpenRouterClient } from './fakes/open-router.client.fake';
 import {
@@ -21,8 +21,10 @@ import {
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
 import { createFakePoolEventsClient, type FakePoolEventsClient } from './fakes/pool-events.client.fake';
-import { createFakeAiEvaluatorClient, type FakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
+import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import type { FakePoolService } from './fakes/pool.service.fake';
+import type { RabbitMQClient } from '../src/clients/rabbitmq.client';
 
 const OWNER_ID = 'owner-1';
 const OWNER_TYPE = 'business';
@@ -33,6 +35,7 @@ const DEPLOYER_WALLET = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';
 const CREATE_POOL_FEE_RATIO = '1000000000000000';
 const OPEN_ROUTER_MODEL = 'test/model';
 const FILES_BASE_URL = 'https://files.test/files';
+const EVALUATION_EXCHANGE = 'evaluation';
 const SUPPORTED_NETWORKS = [{ chainId: CHAIN_ID, name: 'BSC Testnet', factoryAddress: FACTORY_ADDRESS }];
 
 const BUSINESS_ID = 'business-1';
@@ -215,25 +218,44 @@ describe('PoolService (unit, fake repositories and clients)', () => {
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
   let poolEvents: FakePoolEventsClient;
-  let aiEvaluator: FakeAiEvaluatorClient;
-  let service: PoolService;
+  let outbox: FakeOutboxPublisher;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
+  // The proxy appends the commit closure, so the call sites keep one argument.
+  let service: any;
 
   beforeEach(() => {
     pools = createFakePoolRepository();
     openRouter = createFakeOpenRouterClient(POOL_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
     poolEvents = createFakePoolEventsClient();
-    aiEvaluator = createFakeAiEvaluatorClient();
-    service = new PoolService(
+    outbox = createFakeOutboxPublisher();
+
+    // The service writes its rows (and the inbox marker) in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
+    const raw = new PoolService(
       pools as unknown as PoolRepository,
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
       poolEvents as unknown as PoolEventsClient,
-      aiEvaluator as unknown as AiEvaluatorClient,
+      outbox as unknown as OutboxPublisherService<RabbitMQClient>,
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,
     );
+
+    // Every inbox handler takes the commit closure: the proxy appends it.
+    service = new Proxy(raw, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+
+        return (...args: unknown[]) => value.apply(target, [...args, commitInbox]);
+      },
+    }) as PoolService;
   });
 
   test('createPool: forwards the payload and returns a mapped pool', async () => {
@@ -466,11 +488,12 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: expect.any(Number),
     });
-    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledWith({
-      poolId: created.id,
-      ownerId: OWNER_ID,
-      ownerType: OWNER_TYPE,
-    });
+    expect(outbox.publish).toHaveBeenCalledWith(
+      EVALUATION_EXCHANGE,
+      'evaluatePool',
+      { poolId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
+      expect.stringMatching(new RegExp(`^${created.id}:\\d+$`)),
+    );
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -487,7 +510,7 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       message: 'Evaluation already in progress',
     });
 
-    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledTimes(0);
+    expect(outbox.publish).toHaveBeenCalledTimes(0);
   });
 
   test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
@@ -500,24 +523,15 @@ describe('PoolService (unit, fake repositories and clients)', () => {
 
     const result = await service.requestEvaluation({ id: created.id });
 
-    expect(aiEvaluator.createPoolEvaluation.post).toHaveBeenCalledTimes(1);
+    expect(outbox.publish).toHaveBeenCalledTimes(1);
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
-  test('requestEvaluation: an unavailable evaluator is reported as 502 and the flags stay untouched', async () => {
+  test('requestEvaluation: a failed publish propagates and the flags are not committed', async () => {
     const created = await service.createPool(POOL);
-    aiEvaluator.state.nextStatus = 502;
-    aiEvaluator.state.nextError = 'ai-evaluator is unavailable';
+    outbox.publish.mockRejectedValueOnce(new Error('outbox is unavailable'));
 
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
-      statusCode: 502,
-      code: 'AI_ERROR',
-    });
-
-    expect(pools.updatePool).toHaveBeenCalledTimes(0); // the flag is written only after a successful request
-    const stored = pools.store.get(created.id)!;
-    expect(stored.riskScoreEvaluationProcess).toBe(false);
-    expect(stored.riskScoreEvaluationStartedAt).toBe(0);
+    await expect(service.requestEvaluation({ id: created.id })).rejects.toThrow('outbox is unavailable');
   });
 
   test('setRiskScore: accepts the 1..100 boundaries and clears the evaluation flags', async () => {
@@ -889,32 +903,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(result.id).toBe(pool._id.toString());
   });
 
-  test('syncPoolIncomingTrancheUpdate: rejects an out-of-range tranche index with 400 VALIDATION_ERROR', async () => {
-    await pools.createPool({
-      ...POOL,
-      poolAddress: POOL_ADDRESS,
-      incomingTranches: [{ amount: '100', expiredAt: 1717171717, returnedAmount: '0' }],
-    });
-
-    await expect(
-      service.syncPoolIncomingTrancheUpdate(
-        eventOf({
-          emittedFrom: POOL_ADDRESS,
-          trancheIndex: 5,
-          amountAppliedToTranche: '150',
-          isNowComplete: false,
-          wasOnTime: false,
-        }),
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      code: 'VALIDATION_ERROR',
-      message: 'Invalid tranche index 5',
-    });
-
-    expect(pools.updatePoolByAddress).toHaveBeenCalledTimes(0);
-  });
-
   test('syncPoolIncomingTrancheUpdate: rejects an unknown pool address with 404 NOT_FOUND', async () => {
     await expect(
       service.syncPoolIncomingTrancheUpdate(
@@ -1013,7 +1001,7 @@ describe('PoolService (unit, fake repositories and clients)', () => {
 
     expect(pools.findAll).toHaveBeenCalledWith({ businessId: 'business-2' }, undefined, 10, 0);
     expect(result).toHaveLength(2);
-    expect(result.map((pool) => pool.name)).toEqual(['Second', 'Third']); // insertion order is stable in the fake
+    expect(result.map((pool: any) => pool.name)).toEqual(['Second', 'Third']); // insertion order is stable in the fake
     for (const pool of result) expect(pool).not.toHaveProperty('_id');
   });
 

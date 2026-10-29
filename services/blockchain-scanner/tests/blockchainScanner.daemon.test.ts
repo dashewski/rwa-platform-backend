@@ -17,12 +17,13 @@ import { BlockchainScannerService } from '../src/services/blockchainScanner.serv
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
 import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { RabbitMQClient } from '../src/clients/rabbitmq.client';
 import { createFakeEventRepository, type FakeEventRepository } from './fakes/event.repository.fake';
 import {
   createFakeScannerStateRepository,
   type FakeScannerStateRepository,
 } from './fakes/scannerState.repository.fake';
-import { createFakeOutboxPublisher, EXCHANGE, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
+import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 import {
   createFakeEthersProvider,
   createFakeEventEmitterContract,
@@ -144,8 +145,7 @@ function buildHarness(initScanBlockNumber: number = 0) {
   const service = new BlockchainScannerService(
     events as unknown as EventRepository,
     scannerState as unknown as ScannerStateRepository,
-    publisher as unknown as OutboxPublisherService,
-    EXCHANGE,
+    publisher as unknown as OutboxPublisherService<RabbitMQClient>,
     CHAIN_ID,
   );
 
@@ -158,6 +158,7 @@ function buildHarness(initScanBlockNumber: number = 0) {
     CHAIN_ID,
     initScanBlockNumber,
     service,
+    'finalized',
   );
 
   // The daemon builds its ethers objects internally; swap them for the fakes
@@ -347,7 +348,7 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
 
     await internals.scan();
 
-    expect(provider.getBlockNumber).toHaveBeenCalledTimes(1);
+    expect(provider.getBlock).toHaveBeenCalledTimes(1);
     expect(contract.queryFilter).toHaveBeenCalledTimes(0);
     expect(scannerState.updateLastScannedBlock).toHaveBeenCalledTimes(0);
     expect(internals.lastProcessedBlock).toBe(1400);
@@ -458,9 +459,9 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
     expect(internals.lastProcessedBlock).toBe(1049);
   });
 
-  test('scan: a failing getBlockNumber is swallowed and the cycle is retried later', async () => {
+  test('scan: a failing getBlock is swallowed and the cycle is retried later', async () => {
     internals.lastProcessedBlock = 999;
-    provider.state.getBlockNumberError = new Error('connect ECONNREFUSED 127.0.0.1:1');
+    provider.state.getBlockError = new Error('connect ECONNREFUSED 127.0.0.1:1');
 
     await expect(internals.scan()).resolves.toBeUndefined();
 
@@ -568,6 +569,6 @@ describe('BlockchainScannerDaemon (unit, fake provider/contract + fake repositor
     await daemon.stop();
 
     expect(internals.isRunning).toBe(false);
-    expect(provider.getBlockNumber).toHaveBeenCalledTimes(0);
+    expect(provider.getBlock).toHaveBeenCalledTimes(0);
   });
 });

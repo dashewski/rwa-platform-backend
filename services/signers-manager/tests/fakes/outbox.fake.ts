@@ -11,6 +11,7 @@ export function createFakeOutbox() {
   };
 
   const outbox = {
+    rabbitClient: { getSignExchange: () => 'sign.exchange' },
     state,
 
     publish: mock(async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {

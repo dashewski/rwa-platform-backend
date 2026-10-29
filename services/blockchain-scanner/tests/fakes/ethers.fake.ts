@@ -14,9 +14,10 @@ import { mock } from 'bun:test';
 export function createFakeEthersProvider() {
   const state = {
     chainId: 0n, // getNetwork() result; the daemon compares it with its configured chain id
-    blockNumber: 0, // getBlockNumber() result
+    blockNumber: 0, // getBlock()/getBlockNumber() result
     getNetworkError: null as Error | null,
     getBlockNumberError: null as Error | null,
+    getBlockError: null as Error | null,
   };
 
   const provider = {
@@ -30,6 +31,11 @@ export function createFakeEthersProvider() {
     getBlockNumber: mock(async (): Promise<number> => {
       if (state.getBlockNumberError) throw state.getBlockNumberError;
       return state.blockNumber;
+    }),
+
+    getBlock: mock(async (): Promise<{ number: number }> => {
+      if (state.getBlockError) throw state.getBlockError;
+      return { number: state.blockNumber };
     }),
   };
 

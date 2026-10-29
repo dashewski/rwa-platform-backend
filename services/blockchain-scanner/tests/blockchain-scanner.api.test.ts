@@ -22,7 +22,7 @@ import {
 } from './fakes/scannerState.repository.fake';
 import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 
-const CHAIN_ID = 31337;
+const CHAIN_ID = '31337';
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
 
 function seedEvent(
@@ -57,7 +57,7 @@ function buildApp(
     .decorate('outboxPublisherMessageRepository', {});
 
   const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', {
-    getExchange: (name: string) => name,
+    getBlockchainEventsExchange: () => `blockchain.${CHAIN_ID}.events`,
     getTopologyDefinition: () => ({ exchanges: {}, queues: {} }),
   });
 
@@ -209,7 +209,8 @@ describe('blockchain-scanner HTTP layer (component, fake repositories + fake pub
   });
 
   test('getEvents: an invalid payload never reaches the repository', async () => {
-    const response = await post(app, '/getEvents', { chainId: 'not-a-number' });
+    // chainId is a string in the API: a numeric value must be rejected.
+    const response = await post(app, '/getEvents', { chainId: 31337 });
 
     expect(response.status).not.toBe(200);
     expect(events.findAll).toHaveBeenCalledTimes(0);

@@ -5,17 +5,12 @@ export class InboxConsumerMessageRepository {
   constructor(private readonly model = InboxConsumerMessageEntity) {}
 
   @TraceDecorator()
-  async create(messageId: string): Promise<boolean> {
-    try {
-      await this.model.create({ messageId });
+  async create(messageId: string): Promise<void> {
+    await this.model.create({ messageId });
+  }
 
-      return true;
-    } catch (error) {
-      if ((error as { code?: number }).code === 11000) {
-        return false;
-      }
-
-      throw error;
-    }
+  @TraceDecorator()
+  async exists(messageId: string): Promise<boolean> {
+    return await this.model.exists({ messageId }) !== null;
   }
 }

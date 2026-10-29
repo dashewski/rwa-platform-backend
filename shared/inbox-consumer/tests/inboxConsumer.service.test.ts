@@ -1,318 +1,96 @@
 /**
- * Unit tests for InboxConsumerService — attempts, dedup outcome and the
- * transaction boundary.
+ * Unit tests for InboxConsumerService — the dedup marker API only.
  *
- * The transaction lives here (not in the repository), so the mongoose
- * connection is stubbed to run the callback inline and to record how often it
- * was opened. The repository itself is a fake: its own file pins the marker
- * behaviour.
+ * The service no longer runs the handler and no longer opens a transaction:
+ * the caller commits the marker inside its own transaction, and the daemon
+ * decides ack / retry from the marker. What is pinned down here: commit()
+ * delegates to the repository and lets the driver error through, isCommitted()
+ * reports what the repository found.
  */
 import './setup';
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import mongoose from 'mongoose';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { InboxConsumerService } from '../src/services/inboxConsumer.service';
-import { metrics } from '@shared/monitoring/src/metrics';
-import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import type { InboxConsumerMessageRepository } from '../src/repositories/inboxConsumerMessage.repository';
-import { makeMessage, QUEUE } from './fakes';
 
-type CreateOutcome = 'created' | 'duplicate' | 'fail';
-
-/** Runs the callback inline and records every transaction the service opens. */
-function stubTransaction() {
-  const state = {
-    calls: 0,
-    error: null as unknown,
-    beforeRun: null as null | (() => Promise<void> | void),
-  };
-
-  const original = (mongoose.connection as unknown as { transaction: unknown }).transaction;
-
-  (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
-    fn: () => Promise<T>,
-  ): Promise<T> => {
-    state.calls += 1;
-
-    if (state.beforeRun) await state.beforeRun();
-    if (state.error) throw state.error;
-
-    return await fn();
-  };
-
-  return {
-    state,
-    restore: () => {
-      (mongoose.connection as unknown as { transaction: unknown }).transaction = original;
-    },
-  };
-}
+const MESSAGE_ID = '31337:0xabc:3';
 
 function createFakeRepository() {
   const state = {
-    outcomes: [] as CreateOutcome[],
-    calls: [] as string[],
-    failError: new Error('inbox repository is unavailable') as unknown,
-    handlerRuns: 0,
+    markers: new Set<string>(),
+    created: [] as string[],
+    read: [] as string[],
+    createError: null as unknown,
+    existsError: null as unknown,
   };
-
-  const nextOutcome = (): CreateOutcome =>
-    state.outcomes.length ? (state.outcomes.shift() as CreateOutcome) : 'created';
 
   const repository = {
     state,
 
-    create: mock(async (messageId: string): Promise<boolean> => {
-      const outcome = nextOutcome();
-      state.calls.push(messageId);
+    create: mock(async (messageId: string): Promise<void> => {
+      state.created.push(messageId);
+      if (state.createError) throw state.createError;
+      if (state.markers.has(messageId)) {
+        throw Object.assign(
+          new Error('E11000 duplicate key error collection: inboxconsumermessages index: messageId_1'),
+          { code: 11000 },
+        );
+      }
 
-      if (outcome === 'fail') throw state.failError;
-      if (outcome === 'duplicate') return false;
+      state.markers.add(messageId);
+    }),
 
-      return true;
+    exists: mock(async (messageId: string): Promise<boolean> => {
+      state.read.push(messageId);
+      if (state.existsError) throw state.existsError;
+
+      return state.markers.has(messageId);
     }),
   };
 
   return repository;
 }
 
-type FakeRepository = ReturnType<typeof createFakeRepository>;
-
-let counters: Array<{ name: string; labels?: Record<string, string> }> = [];
-let logLines: string[] = [];
-const original = {
-  counter: metrics.counter,
-  info: logger.info,
-  error: logger.error,
-  debug: logger.debug,
-};
-
-function captureTelemetry(): void {
-  counters = [];
-  logLines = [];
-
-  metrics.counter = ((name: string, labels?: Record<string, string>) => {
-    counters.push({ name, labels });
-  }) as typeof metrics.counter;
-  logger.info = ((...args: unknown[]) => {
-    logLines.push(args.map(String).join(' '));
-  }) as typeof logger.info;
-  logger.error = ((...args: unknown[]) => {
-    logLines.push(args.map(String).join(' '));
-  }) as typeof logger.error;
-  logger.debug = ((...args: unknown[]) => {
-    logLines.push(args.map(String).join(' '));
-  }) as typeof logger.debug;
-}
-
-function restoreTelemetry(): void {
-  metrics.counter = original.counter;
-  logger.info = original.info;
-  logger.error = original.error;
-  logger.debug = original.debug;
-}
-
-const names = (): string[] => counters.map((entry) => entry.name);
-const countOf = (name: string): number => names().filter((entry) => entry === name).length;
-
-describe('InboxConsumerService (unit, fake repository + stubbed transaction)', () => {
-  let repository: FakeRepository;
+describe('InboxConsumerService (unit, fake repository)', () => {
+  let repository: ReturnType<typeof createFakeRepository>;
   let service: InboxConsumerService;
-  let transaction: ReturnType<typeof stubTransaction>;
-  let handlerRuns: number;
-
-  const handler = async (): Promise<void> => {
-    handlerRuns += 1;
-  };
 
   beforeEach(() => {
-    transaction = stubTransaction();
     repository = createFakeRepository();
-    service = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 5, 20);
-    handlerRuns = 0;
-    captureTelemetry();
+    service = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository);
   });
 
-  afterEach(() => {
-    restoreTelemetry();
-    transaction.restore();
+  test('commit writes the marker through the repository', async () => {
+    await service.commit(MESSAGE_ID);
+
+    expect(repository.state.created).toEqual([MESSAGE_ID]);
+    expect(repository.state.markers.has(MESSAGE_ID)).toBe(true);
   });
 
-  test('a successful delivery is acked inside one transaction and counted as processed', async () => {
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
+  test('a duplicate marker (11000) is thrown to the caller, not swallowed', async () => {
+    await service.commit(MESSAGE_ID);
 
-    expect(outcome).toBe('acked');
-    expect(handlerRuns).toBe(1);
-    expect(repository.state.calls).toEqual(['31337:0xabc:3']);
-    expect(transaction.state.calls).toBe(1);
-    expect(names()).toEqual(['inbox_consumer_processed_total']);
-    expect(counters[0].labels).toEqual({ queue: QUEUE });
+    const failure = await service.commit(MESSAGE_ID).catch((error: { code?: number }) => error);
+
+    expect((failure as { code?: number }).code).toBe(11000);
   });
 
-  test('a duplicate marker acks the delivery without running the handler', async () => {
-    repository.state.outcomes = ['duplicate'];
+  test('isCommitted reports an existing marker', async () => {
+    await service.commit(MESSAGE_ID);
 
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(outcome).toBe('acked');
-    expect(handlerRuns).toBe(0);
-    expect(transaction.state.calls).toBe(1);
-    expect(names()).toEqual(['inbox_consumer_duplicates_total']);
-    expect(logLines.some((line) => line.includes('duplicate message skipped'))).toBe(true);
+    await expect(service.isCommitted(MESSAGE_ID)).resolves.toBe(true);
+    await expect(service.isCommitted('unknown')).resolves.toBe(false);
+    expect(repository.state.read).toEqual([MESSAGE_ID, 'unknown']);
   });
 
-  test('the handler runs in the same transaction as the marker insert', async () => {
-    const order: string[] = [];
-    const create = repository.create.getMockImplementation()!;
-    repository.create.mockImplementation(async (messageId: string) => {
-      order.push('marker');
-      return create(messageId);
-    });
+  test('a read failure is thrown to the caller (the daemon decides to retry)', async () => {
+    repository.state.existsError = new Error('MongoServerSelectionError: server selection timed out');
 
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), async () => {
-      order.push('handler');
-    });
-
-    expect(order).toEqual(['marker', 'handler']);
-    expect(transaction.state.calls).toBe(1);
+    await expect(service.isCommitted(MESSAGE_ID)).rejects.toThrow('server selection timed out');
   });
 
-  test('a delivery without messageId is retried and then deferred (the inbox cannot deduplicate it)', async () => {
-    const message = makeMessage('Governance_VoteCast', {}, { messageId: null });
+  test('a write failure that is not a duplicate key is thrown to the caller', async () => {
+    repository.state.createError = new Error('MongoServerSelectionError: server selection timed out');
 
-    const outcome = await service.handle(QUEUE, message, handler, 3);
-
-    expect(outcome).toBe('deferred');
-    expect(handlerRuns).toBe(0);
-    expect(repository.state.calls).toEqual([]);
-    expect(transaction.state.calls).toBe(0);
-    expect(countOf('inbox_consumer_retries_total')).toBe(3);
-    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
-    expect(logLines.some((line) => line.includes('the message has no messageId'))).toBe(true);
-  });
-
-  test('a failure followed by a success acks the delivery and logs the retry', async () => {
-    repository.state.outcomes = ['fail', 'created'];
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(outcome).toBe('acked');
-    expect(handlerRuns).toBe(1);
-    expect(repository.state.calls).toHaveLength(2);
-    expect(countOf('inbox_consumer_retries_total')).toBe(1);
-    expect(countOf('inbox_consumer_processed_total')).toBe(1);
-    expect(logLines.some((line) => line.includes('attempt 1/3 failed; retrying in 5ms'))).toBe(true);
-  });
-
-  test('a handler failure aborts the transaction and the delivery is retried', async () => {
-    await expect(
-      service.handle(
-        QUEUE,
-        makeMessage('Governance_VoteCast', {}),
-        async () => {
-          throw new Error('db write failed inside the handler');
-        },
-        3,
-      ),
-    ).resolves.toBe('deferred');
-
-    expect(transaction.state.calls).toBe(3);
-    expect(countOf('inbox_consumer_retries_total')).toBe(3);
-    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
-    expect(logLines.some((line) => line.includes('db write failed inside the handler'))).toBe(true);
-  });
-
-  test('after the last attempt the delivery is deferred to the retry queue', async () => {
-    repository.state.outcomes = ['fail', 'fail', 'fail'];
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(outcome).toBe('deferred');
-    expect(repository.state.calls).toHaveLength(3);
-    expect(countOf('inbox_consumer_retries_total')).toBe(3);
-    expect(countOf('inbox_consumer_deferred_total')).toBe(1);
-    expect(logLines.some((line) => line.includes('attempts exhausted (3)'))).toBe(true);
-  });
-
-  test('maxAttempts comes from the queue config, not the constructor', async () => {
-    repository.state.outcomes = ['fail', 'fail'];
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 2);
-
-    expect(outcome).toBe('deferred');
-    expect(repository.state.calls).toHaveLength(2);
-    expect(countOf('inbox_consumer_retries_total')).toBe(2);
-  });
-
-  test('a single allowed attempt defers immediately, without waiting', async () => {
-    repository.state.outcomes = ['fail'];
-    const startedAt = Date.now();
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 1);
-
-    expect(outcome).toBe('deferred');
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(repository.state.calls).toHaveLength(1);
-  });
-
-  test('the backoff grows between attempts and is capped', async () => {
-    const slow = new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository, 5, 10);
-    repository.state.outcomes = ['fail', 'fail', 'fail', 'fail'];
-    const startedAt = Date.now();
-
-    const outcome = await slow.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 4);
-
-    // Delays: 5 + 10 + 10 = 25ms (5ms doubling into the 10ms cap).
-    expect(outcome).toBe('deferred');
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(25);
-    expect(repository.state.calls).toHaveLength(4);
-  });
-
-  test('a non-Error failure is still reported readably', async () => {
-    repository.state.failError = 'plain string failure';
-    repository.state.outcomes = ['fail', 'fail', 'fail'];
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(outcome).toBe('deferred');
-    expect(logLines.some((line) => line.includes('plain string failure'))).toBe(true);
-  });
-
-  test('each delivery counts only its own retries', async () => {
-    repository.state.outcomes = ['fail', 'created'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-    const afterFirst = countOf('inbox_consumer_retries_total');
-
-    repository.state.outcomes = ['created'];
-    await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(afterFirst).toBe(1);
-    expect(countOf('inbox_consumer_retries_total')).toBe(1);
-  });
-
-  test('the constructor switches mongoose to transactionAsyncLocalStorage (process-wide)', () => {
-    const sets: unknown[][] = [];
-    const originalSet = mongoose.set;
-    (mongoose as unknown as { set: unknown }).set = (...args: unknown[]) => {
-      sets.push(args);
-      return mongoose;
-    };
-
-    try {
-      new InboxConsumerService(repository as unknown as InboxConsumerMessageRepository);
-    } finally {
-      (mongoose as unknown as { set: unknown }).set = originalSet;
-    }
-
-    expect(sets).toContainEqual(['transactionAsyncLocalStorage', true]);
-  });
-
-  test('a transaction-level failure is retried and finally deferred', async () => {
-    transaction.state.error = new Error('Transaction numbers are only allowed on a replica set member or mongos');
-
-    const outcome = await service.handle(QUEUE, makeMessage('Governance_VoteCast', {}), handler, 3);
-
-    expect(outcome).toBe('deferred');
-    expect(transaction.state.calls).toBe(3);
-    expect(repository.state.calls).toEqual([]);
+    await expect(service.commit(MESSAGE_ID)).rejects.toThrow('server selection timed out');
   });
 });

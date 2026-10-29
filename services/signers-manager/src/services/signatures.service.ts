@@ -8,12 +8,13 @@ import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { AppError } from '@shared/errors/app-errors';
 import { ethers } from 'ethers';
 import mongoose from 'mongoose';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 export class SignaturesService {
   constructor(
     private readonly signatureRepository: SignatureRepository,
     private readonly signatureTaskRepository: SignatureTaskRepository,
-    private readonly outboxPublisher: OutboxPublisherService,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
   ) {
     mongoose.set('transactionAsyncLocalStorage', true);
   }
@@ -64,7 +65,7 @@ export class SignaturesService {
 
       // Send signature request to signers
       await this.outboxPublisher.publish(
-        'sign.exchange',
+        this.outboxPublisher.rabbitClient.getSignExchange(),
         'task',
         {
           hash: finalHash,
@@ -84,7 +85,7 @@ export class SignaturesService {
       hash: task.hash,
       requiredSignatures: task.requiredSignatures,
       expired: task.expired,
-      completed: task.completed,
+      completed: false,
     };
   }
 
@@ -93,47 +94,27 @@ export class SignaturesService {
   @LogDecorator({
     args: (a) => ({ taskId: a[0]?.taskId, signer: a[0]?.signer }),
   })
-  async addSignature(data: { taskId: string; signer: string; signature: string }) {
+  async addSignature(data: { taskId: string; signer: string; signature: string }, commitInbox: () => Promise<void>) {
     setSpanAttributes({
       taskId: data.taskId,
       signer: data.signer,
     });
-    // Verify task exists and not completed
+
     const task = await this.signatureTaskRepository.findById(data.taskId);
-    if (task.completed) {
-      throw new AppError({ message: 'Task already completed', statusCode: 409, code: 'CONFLICT' });
-    }
+
     if (task.expired && task.expired < Math.floor(Date.now() / 1000)) {
       throw new AppError({ message: 'Task expired', statusCode: 410, code: 'EXPIRED' });
     }
 
-    // Add signature
-    const signature = await this.signatureRepository.create({
-      taskId: data.taskId,
-      signer: data.signer,
-      signature: data.signature,
-    });
-
-    // Check if we have enough signatures
-    const signaturesCount = await this.signatureRepository.countByTaskId(data.taskId);
-    const isCompleted = signaturesCount >= task.requiredSignatures;
-
-    // Update task status if completed
-    if (isCompleted) {
-      await this.signatureTaskRepository.update(data.taskId, {
-        completed: true,
+    await mongoose.connection.transaction(async () => {
+      await this.signatureRepository.create({
+        taskId: data.taskId,
+        signer: data.signer,
+        signature: data.signature,
       });
-    }
 
-    return {
-      signature: {
-        id: signature._id.toString(),
-        taskId: signature.taskId,
-        signer: signature.signer,
-        signature: signature.signature,
-      },
-      isCompleted,
-    };
+      await commitInbox();
+    });
   }
 
   /**
@@ -150,7 +131,8 @@ export class SignaturesService {
     });
     const task = await this.signatureTaskRepository.findById(taskId);
 
-    let signatures = task.completed ? await this.signatureRepository.findByTaskId(taskId) : undefined;
+    const signatures = await this.signatureRepository.findByTaskId(taskId);
+    const completed = task.requiredSignatures <= signatures.length
 
     return {
       id: task._id.toString(),
@@ -159,7 +141,7 @@ export class SignaturesService {
       hash: task.hash,
       requiredSignatures: task.requiredSignatures,
       expired: task.expired,
-      completed: task.completed,
+      completed: completed,
       signatures: signatures?.map((sig) => ({
         signer: sig.signer,
         signature: sig.signature,

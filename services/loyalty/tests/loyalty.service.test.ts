@@ -6,7 +6,8 @@
  * with a fake envelope, so these tests need no database, no broker and no
  * network. Run with `bun test` from services/loyalty.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
 import type { BlockchainEvent } from '@shared/blockchain';
@@ -224,7 +225,9 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   let claims: FakeReferrerClaimHistoryRepository;
   let commissions: FakeCommissionHistoryRepository;
   let signers: FakeSignersManagerClient;
-  let service: LoyaltyService;
+  // The proxy appends the commit closure, so the call sites keep one argument.
+  let service: any;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
 
   beforeEach(() => {
     fees = createFakeFeesRepository();
@@ -234,7 +237,14 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
     commissions = createFakeCommissionHistoryRepository();
     signers = createFakeSignersManagerClient();
 
-    service = new LoyaltyService(
+    // The service writes its rows and the inbox marker in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
+
+    const raw = new LoyaltyService(
       fees as unknown as FeesRepository,
       referrals as unknown as ReferralRepository,
       withdraws as unknown as ReferrerWithdrawRepository,
@@ -244,6 +254,15 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
       signers as unknown as SignersManagerClient,
       SUPPORTED_NETWORKS,
     );
+    // Every handler now takes the commit closure: the proxy appends it.
+    service = new Proxy(raw, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+
+        return (...args: unknown[]) => value.apply(target, [...args, commitInbox]);
+      },
+    }) as LoyaltyService;
   });
 
   /** Seeds the referral row of a user that was invited by REFERRER_WALLET. */
@@ -356,14 +375,17 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   });
 
   describe('processCreateRWAFeeCollected', () => {
-    test('ignores a sender without a referral', async () => {
-      const result = await service.processCreateRWAFeeCollected(buildTokenFeeEvent());
+    test('throws NOT_FOUND for a sender without a referral', async () => {
+      await expect(service.processCreateRWAFeeCollected(buildTokenFeeEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
-      expect(result).toBeUndefined();
       expect(referrals.findByUserWallet).toHaveBeenCalledWith(LOWER_CASED_WALLET);
       expect(fees.addTokenCreationCommission).toHaveBeenCalledTimes(0);
       expect(commissions.create).toHaveBeenCalledTimes(0);
       expect(claims.create).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
     test('records the token-creation commission for a referred user without a referrer', async () => {
@@ -499,11 +521,15 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   });
 
   describe('processCreatePoolFeeCollected', () => {
-    test('ignores a sender without a referral', async () => {
-      await service.processCreatePoolFeeCollected(buildPoolFeeEvent());
+    test('throws NOT_FOUND for a sender without a referral', async () => {
+      await expect(service.processCreatePoolFeeCollected(buildPoolFeeEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
       expect(fees.addPoolCreationCommission).toHaveBeenCalledTimes(0);
       expect(commissions.create).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
     test('records the pool-creation commission and pays the referrer', async () => {
@@ -535,11 +561,15 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   });
 
   describe('processRwaMinted', () => {
-    test('ignores a minter without a referral', async () => {
-      await service.processRwaMinted(buildRwaMintedEvent());
+    test('throws NOT_FOUND for a minter without a referral', async () => {
+      await expect(service.processRwaMinted(buildRwaMintedEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
       expect(fees.addBuyCommission).toHaveBeenCalledTimes(0);
       expect(commissions.create).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
     test('records the buy commission with the paid fee and lowercased minter', async () => {
@@ -583,11 +613,15 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   });
 
   describe('processRwaBurned', () => {
-    test('ignores a burner without a referral', async () => {
-      await service.processRwaBurned(buildRwaBurnedEvent());
+    test('throws NOT_FOUND for a burner without a referral', async () => {
+      await expect(service.processRwaBurned(buildRwaBurnedEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
       expect(fees.addSellCommission).toHaveBeenCalledTimes(0);
       expect(commissions.create).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
     test('records the sell commission as the sum of hold and bonus fees', async () => {
@@ -627,19 +661,27 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
   });
 
   describe('processReferralTreasuryWithdrawn', () => {
-    test('ignores an unknown referrer wallet', async () => {
-      await service.processReferralTreasuryWithdrawn(buildTreasuryWithdrawnEvent());
+    test('throws NOT_FOUND for an unknown referrer wallet', async () => {
+      await expect(service.processReferralTreasuryWithdrawn(buildTreasuryWithdrawnEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
       expect(referrals.findByReferrerWallet).toHaveBeenCalledWith(LOWER_CASED_WALLET);
       expect(withdraws.addWithdrawnAmount).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
-    test('ignores a referral row without referrerId', async () => {
+    test('throws NOT_FOUND for a referral row without referrerId', async () => {
       referrals.seed({ userWallet: REFERRED_USER_WALLET, userId: 'user-2', referrerWallet: LOWER_CASED_WALLET });
 
-      await service.processReferralTreasuryWithdrawn(buildTreasuryWithdrawnEvent());
+      await expect(service.processReferralTreasuryWithdrawn(buildTreasuryWithdrawnEvent())).rejects.toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
 
       expect(withdraws.addWithdrawnAmount).toHaveBeenCalledTimes(0);
+      expect(commitInbox).toHaveBeenCalledTimes(0);
     });
 
     test('adds the withdrawn amount to the referrer record', async () => {
@@ -746,7 +788,7 @@ describe('LoyaltyService (unit, fake repositories and clients)', () => {
       const nowSeconds = Math.floor(Date.now() / 1000);
       seedWithdrawRecord({ totalWithdrawnAmount: '0', taskCooldown: nowSeconds + 3600 });
 
-      const error = await service.createReferrerWithdrawTask(withdrawTaskParams).catch((rejection) => rejection);
+      const error = await service.createReferrerWithdrawTask(withdrawTaskParams).catch((rejection: any) => rejection);
 
       expect(error.statusCode).toBe(403);
       expect(error.code).toBe('NOT_ALLOWED');

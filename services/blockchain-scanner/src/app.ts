@@ -19,6 +19,7 @@ export async function createApp(
   batchSize: number,
   chainId: string,
   initScanBlockNumber: number,
+  blockTag: string,
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'blockchain-scanner.init.repositories_plugin',
@@ -27,7 +28,7 @@ export async function createApp(
 
   const clientsPlugin = await withTraceAsync(
     'blockchain-scanner.init.clients_plugin',
-    async () => await createClientsPlugin(rabbitMqUri),
+    async () => await createClientsPlugin(rabbitMqUri, chainId),
   );
 
   const servicesPlugin = withTraceSync('blockchain-scanner.init.services_plugin', () =>
@@ -51,6 +52,7 @@ export async function createApp(
         batchSize,
         chainId,
         initScanBlockNumber,
+        blockTag,
       ),
   );
 

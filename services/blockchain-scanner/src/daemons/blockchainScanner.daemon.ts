@@ -24,6 +24,7 @@ export class BlockchainScannerDaemon {
     private chainId: string,
     private initScanBlockNumber: number,
     private scannerService: BlockchainScannerService,
+    private blockTag: string,
   ) {
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
     this.eventEmitterContract = new ethers.Contract(contractAddress, EventEmitterABI.abi, this.provider);
@@ -85,14 +86,18 @@ export class BlockchainScannerDaemon {
   }
 
   /**
-   * Get latest block number
+   * Get target block number for the configured block tag
    */
-  private async getLatestBlockNumber(): Promise<number> {
+  private async getTargetBlockNumber(): Promise<number> {
     try {
-      return await this.provider.getBlockNumber();
+      const targetBlock = await this.provider.getBlock(this.blockTag);
+      if (!targetBlock) {
+        throw new Error(`Block "${this.blockTag}" is not available`);
+      }
+      return targetBlock.number;
     } catch (error) {
       throw new AppError({
-        message: 'Failed to get latest block number',
+        message: 'Failed to get target block number',
         statusCode: 502,
         code: 'BLOCKCHAIN_ERROR',
         cause: error,
@@ -249,10 +254,19 @@ export class BlockchainScannerDaemon {
   private async scan(): Promise<void> {
     let currentBlock: number;
     try {
-      currentBlock = await this.getLatestBlockNumber();
+      currentBlock = await this.getTargetBlockNumber();
     } catch (error) {
+      const cause = error instanceof AppError && error.cause !== undefined ? error.cause : error;
+      const causeMessage = cause instanceof Error ? cause.message : String(cause);
+
+      logger.error('Failed to get target block number — scan paused', error, {
+        cause: causeMessage,
+        lastProcessedBlock: this.lastProcessedBlock,
+        chainId: this.chainId,
+      });
       return;
     }
+
     const confirmedBlock = currentBlock - this.blockConfirmations;
 
     if (this.lastProcessedBlock >= confirmedBlock) {
@@ -261,7 +275,6 @@ export class BlockchainScannerDaemon {
 
     const fromBlock = this.lastProcessedBlock + 1;
     const toBlock = Math.min(fromBlock + this.batchSize - 1, confirmedBlock);
-    const blocksRemaining = confirmedBlock - this.lastProcessedBlock;
 
     try {
       await this.processBatch(fromBlock, toBlock);

@@ -1,9 +1,6 @@
 /**
- * Shared test doubles for the outbox-publisher package.
- *
- * Everything here is in-memory: no database, no broker, no network. The fakes
- * mirror the exact surface the package uses, so swapping them in is a plain
- * `as unknown as X` cast at the construction site.
+ * Minimal stand-in for BaseRabbitMQClient: records publishes and lets a test
+ * make the next publish (or every publish) fail with a given error.
  */
 import { mock } from 'bun:test';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
@@ -17,10 +14,6 @@ export type PublishedMessage = {
   options: { messageId?: string } | undefined;
 };
 
-/**
- * Minimal stand-in for BaseRabbitMQClient: records publishes and lets a test
- * make the next publish (or every publish) fail with a given error.
- */
 export function createFakeRabbitClient() {
   const published: PublishedMessage[] = [];
   const state = {

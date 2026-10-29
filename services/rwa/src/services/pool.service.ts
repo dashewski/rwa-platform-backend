@@ -1,10 +1,11 @@
 import type { BlockchainEvent } from '@shared/blockchain';
-import type { AiEvaluatorClient } from '../clients/aiEvaluator.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { AppError } from '@shared/errors/app-errors';
 import { PoolRepository } from '../repositories/pool.repository';
 import { OpenRouterClient } from '@shared/openrouter/client';
 import type { SignersManagerClient } from '../clients/eden.clients';
 import { ethers } from 'ethers';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import { PoolEventsClient } from '../clients/poolEvents.client';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
@@ -12,6 +13,7 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { buildFileUrl } from '@shared/files/src/index';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 // An evaluation stuck "in progress" longer than this (seconds) is considered
 // stale - its request or result was lost on the way - and may be requested again.
@@ -23,15 +25,16 @@ export class PoolService {
     private readonly openRouterClient: OpenRouterClient,
     private readonly signersManagerClient: SignersManagerClient,
     private readonly poolEventsClient: PoolEventsClient,
-    private readonly aiEvaluatorClient: AiEvaluatorClient,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly supportedNetworks: {
       chainId: string;
-      name: string;
       factoryAddress: string;
     }[],
     private readonly openRouterModel: string,
     private readonly filesBaseUrl: string,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   private async generatePoolFields(description: string) {
     const systemMessage = `You are a DeFi pool configuration expert. Analyze the following pool description and generate optimal pool parameters.
@@ -259,23 +262,18 @@ Example response:
       });
     }
 
-    const response = await this.aiEvaluatorClient.createPoolEvaluation.post({
-      poolId: id,
-      ownerId: pool.ownerId,
-      ownerType: pool.ownerType,
-    });
-
-    if (response.error) {
-      throw new AppError({
-        message: `ai-evaluator is unavailable (${response.status})`,
-        statusCode: 502,
-        code: 'AI_ERROR',
+    await mongoose.connection.transaction(async () => {
+      await this.poolRepository.updatePool(id, {
+        riskScoreEvaluationProcess: true,
+        riskScoreEvaluationStartedAt: now,
       });
-    }
 
-    await this.poolRepository.updatePool(id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: now,
+      await this.outboxPublisher.publish(
+        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
+        'evaluatePool',
+        { poolId: id, ownerId: pool.ownerId, ownerType: pool.ownerType },
+        `${id}:${now}`,
+      );
     });
 
     const updated = await this.poolRepository.findById(id);
@@ -319,13 +317,22 @@ Example response:
       entityId: a[0].entityId,
     }),
   })
-  async applyEvaluationResult(result: {
-    evaluationId: string;
-    entityType: 'pool';
-    entityId: string;
-    riskScore: number;
-  }) {
-    return this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
+  async applyEvaluationResult(
+    result: {
+      evaluationId: string;
+      entityType: 'pool';
+      entityId: string;
+      riskScore: number;
+    },
+    commitInbox: () => Promise<void>,
+  ) {
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
+
+      await commitInbox();
+
+      return updated;
+    });
   }
 
   private generatePoolMessageHash(
@@ -867,6 +874,7 @@ Example response:
       incomingTranches: string[];
       incomingTrancheExpired: number[];
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       entityId: event.data.entityId,
@@ -876,7 +884,6 @@ Example response:
       tokenId: event.data.tokenId,
       ownerWallet: event.data.owner,
     });
-    const pool = await this.poolRepository.findById(event.data.entityId);
 
     const updateData: any = {
       poolAddress: event.data.emittedFrom,
@@ -910,7 +917,13 @@ Example response:
       })),
     };
 
-    const updated = await this.poolRepository.updatePool(event.data.entityId, updateData);
+    const updated = await mongoose.connection.transaction(async () => {
+      const saved = await this.poolRepository.updatePool(event.data.entityId, updateData);
+
+      await commitInbox();
+
+      return saved;
+    });
     const poolDto = this.mapPool(updated);
 
     await this.poolEventsClient.publishPoolDeployed(poolDto);
@@ -928,12 +941,18 @@ Example response:
       emittedFrom: string;
       awaitingRwaAmount: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      awaitingRwaAmount: event.data.awaitingRwaAmount,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        awaitingRwaAmount: event.data.awaitingRwaAmount,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -946,13 +965,19 @@ Example response:
       emittedFrom: string;
       timestamp: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      isFullyReturned: true,
-      fullReturnTimestamp: Number(event.data.timestamp),
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        isFullyReturned: true,
+        fullReturnTimestamp: Number(event.data.timestamp),
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -970,13 +995,19 @@ Example response:
       currentAwaitingBonusAmount: string;
       currentRewardedRwaAmount: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      awaitingBonusAmount: event.data.currentAwaitingBonusAmount,
-      rewardedRwaAmount: event.data.currentRewardedRwaAmount,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        awaitingBonusAmount: event.data.currentAwaitingBonusAmount,
+        rewardedRwaAmount: event.data.currentRewardedRwaAmount,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -994,14 +1025,20 @@ Example response:
       currentAwaitingBonusAmount: string;
       currentLastCompletedIncomingTranche: number;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      totalReturnedAmount: event.data.currentTotalReturnedAmount,
-      awaitingBonusAmount: event.data.currentAwaitingBonusAmount,
-      lastCompletedIncomingTranche: event.data.currentLastCompletedIncomingTranche,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        totalReturnedAmount: event.data.currentTotalReturnedAmount,
+        awaitingBonusAmount: event.data.currentAwaitingBonusAmount,
+        lastCompletedIncomingTranche: event.data.currentLastCompletedIncomingTranche,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1021,28 +1058,27 @@ Example response:
       isNowComplete: boolean;
       wasOnTime: boolean;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
 
     const incomingTranches = [...pool.incomingTranches];
-    if (event.data.trancheIndex >= incomingTranches.length) {
-      throw new AppError({
-        message: `Invalid tranche index ${event.data.trancheIndex}`,
-        statusCode: 400,
-        code: 'VALIDATION_ERROR',
-      });
-    }
 
     const currentReturnedAmount = BigInt(incomingTranches[event.data.trancheIndex].returnedAmount);
     const appliedAmount = BigInt(event.data.amountAppliedToTranche);
 
     incomingTranches[event.data.trancheIndex].returnedAmount = (currentReturnedAmount + appliedAmount).toString();
 
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      incomingTranches,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        incomingTranches,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1059,13 +1095,19 @@ Example response:
       currentTotalClaimedAmount: string;
       currentOutgoingTranchesBalance: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      totalClaimedAmount: event.data.currentTotalClaimedAmount,
-      outgoingTranchesBalance: event.data.currentOutgoingTranchesBalance,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        totalClaimedAmount: event.data.currentTotalClaimedAmount,
+        outgoingTranchesBalance: event.data.currentOutgoingTranchesBalance,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1083,6 +1125,7 @@ Example response:
       trancheIndex: number;
       amountClaimed: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
     const pool = await this.poolRepository.findByAddress(event.data.emittedFrom);
@@ -1105,10 +1148,15 @@ Example response:
 
     outgoingTranches[event.data.trancheIndex].executedAmount = event.data.amountClaimed;
 
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      outgoingTranches,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        outgoingTranches,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1121,12 +1169,18 @@ Example response:
       emittedFrom: string;
       isPaused: boolean;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      paused: event.data.isPaused,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        paused: event.data.isPaused,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1144,14 +1198,20 @@ Example response:
       virtualHoldReserve: string;
       virtualRwaReserve: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      realHoldReserve: event.data.realHoldReserve,
-      virtualHoldReserve: event.data.virtualHoldReserve,
-      virtualRwaReserve: event.data.virtualRwaReserve,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        realHoldReserve: event.data.realHoldReserve,
+        virtualHoldReserve: event.data.virtualHoldReserve,
+        virtualRwaReserve: event.data.virtualRwaReserve,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()
@@ -1165,14 +1225,20 @@ Example response:
       outgoingTranchesBalance: string;
       floatingTimestampOffset: number;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'pool', poolAddress: event.data.emittedFrom });
-    const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
-      isTargetReached: true,
-      outgoingTranchesBalance: event.data.outgoingTranchesBalance,
-      floatingTimestampOffset: event.data.floatingTimestampOffset,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.poolRepository.updatePoolByAddress(event.data.emittedFrom, {
+        isTargetReached: true,
+        outgoingTranchesBalance: event.data.outgoingTranchesBalance,
+        floatingTimestampOffset: event.data.floatingTimestampOffset,
+      });
+
+      await commitInbox();
+
+      return this.mapPool(updated);
     });
-    return this.mapPool(updated);
   }
 
   @TraceDecorator()

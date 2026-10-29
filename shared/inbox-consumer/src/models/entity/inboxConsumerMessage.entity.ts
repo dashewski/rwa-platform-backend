@@ -15,8 +15,9 @@ const inboxConsumerMessageSchemaDefinition = {
     type: Number,
     default: () => Math.floor(Date.now() / 1000),
   },
-  expiresAt: {
+  ttlDate: {
     type: Date,
+    required: true,
     default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   },
 } as const;
@@ -26,7 +27,7 @@ export const inboxConsumerMessageSchema = new Schema(inboxConsumerMessageSchemaD
 });
 
 inboxConsumerMessageSchema.index({ messageId: 1 }, { unique: true });
-inboxConsumerMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+inboxConsumerMessageSchema.index({ ttlDate: 1 }, { expireAfterSeconds: 0 });
 
 type InferredInboxConsumerMessage = InferRawDocType<typeof inboxConsumerMessageSchemaDefinition>;
 

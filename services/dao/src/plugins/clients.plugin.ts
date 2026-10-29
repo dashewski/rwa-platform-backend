@@ -3,8 +3,8 @@ import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createClientsPlugin = async (rabbitMqUri: string) => {
-  const rabbitMQClient = withTraceSync('dao.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
+export const createClientsPlugin = async (rabbitMqUri: string, chainIds: string[]) => {
+  const rabbitMQClient = withTraceSync('dao.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri, chainIds));
 
   await withTraceAsync('dao.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');

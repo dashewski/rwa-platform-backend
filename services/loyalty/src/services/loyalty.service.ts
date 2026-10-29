@@ -21,7 +21,6 @@ import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 
 interface NetworkConfig {
   chainId: string;
-  name: string;
   referralTreasuryAddress: string;
 }
 
@@ -35,7 +34,9 @@ export class LoyaltyService {
     private readonly referralRewardPercentage: number,
     private readonly signersManagerClient: SignersManagerClient,
     private readonly supportedNetworks: NetworkConfig[],
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   private isChainIdSupported(chainId: string): boolean {
     return this.supportedNetworks.some((network) => network.chainId === chainId);
@@ -70,6 +71,7 @@ export class LoyaltyService {
       amount: string;
       token: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.sender,
@@ -81,41 +83,48 @@ export class LoyaltyService {
 
     const userReferral = await this.referralRepository.findByUserWallet(sender);
     if (!userReferral) {
-      return;
+      throw new AppError({
+        message: `Referral not found for wallet ${sender}`,
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     }
 
-    await this.feesRepository.addTokenCreationCommission(
-      sender,
-      userReferral.userId,
-      String(event.chainId),
-      token,
-      amount,
-    );
+    await mongoose.connection.transaction(async () => {
+      await this.feesRepository.addTokenCreationCommission(
+        sender,
+        userReferral.userId,
+        String(event.chainId),
+        token,
+        amount,
+      );
 
-    // Record commission history
-    await this.commissionHistoryRepository.create({
-      userWallet: sender,
-      userId: userReferral.userId,
-      chainId: String(event.chainId),
-      tokenAddress: token,
-      amount: amount,
-      actionType: 'token_creation_commission',
-      transactionHash: event.transactionHash,
-      relatedUserWallet: undefined,
-      relatedUserId: undefined,
+      // Record commission history
+      await this.commissionHistoryRepository.create({
+        userWallet: sender,
+        userId: userReferral.userId,
+        chainId: String(event.chainId),
+        tokenAddress: token,
+        amount: amount,
+        actionType: 'token_creation_commission',
+        transactionHash: event.transactionHash,
+        relatedUserWallet: undefined,
+        relatedUserId: undefined,
+      });
+
+      // Process referral reward if user has referrer
+      await this.processReferralReward(
+        sender,
+        userReferral.userId,
+        String(event.chainId),
+        token,
+        amount,
+        event.transactionHash,
+        event.logIndex,
+        event.blockNumber,
+      );
+      await commitInbox();
     });
-
-    // Process referral reward if user has referrer
-    await this.processReferralReward(
-      sender,
-      userReferral.userId,
-      String(event.chainId),
-      token,
-      amount,
-      event.transactionHash,
-      event.logIndex,
-      event.blockNumber,
-    );
   }
 
   /**
@@ -135,6 +144,7 @@ export class LoyaltyService {
       amount: string;
       token: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.sender,
@@ -146,41 +156,48 @@ export class LoyaltyService {
 
     const userReferral = await this.referralRepository.findByUserWallet(sender);
     if (!userReferral) {
-      return;
+      throw new AppError({
+        message: `Referral not found for wallet ${sender}`,
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     }
 
-    await this.feesRepository.addPoolCreationCommission(
-      sender,
-      userReferral.userId,
-      String(event.chainId),
-      token,
-      amount,
-    );
+    await mongoose.connection.transaction(async () => {
+      await this.feesRepository.addPoolCreationCommission(
+        sender,
+        userReferral.userId,
+        String(event.chainId),
+        token,
+        amount,
+      );
 
-    // Record commission history
-    await this.commissionHistoryRepository.create({
-      userWallet: sender,
-      userId: userReferral.userId,
-      chainId: String(event.chainId),
-      tokenAddress: token,
-      amount: amount,
-      actionType: 'pool_creation_commission',
-      transactionHash: event.transactionHash,
-      relatedUserWallet: undefined,
-      relatedUserId: undefined,
+      // Record commission history
+      await this.commissionHistoryRepository.create({
+        userWallet: sender,
+        userId: userReferral.userId,
+        chainId: String(event.chainId),
+        tokenAddress: token,
+        amount: amount,
+        actionType: 'pool_creation_commission',
+        transactionHash: event.transactionHash,
+        relatedUserWallet: undefined,
+        relatedUserId: undefined,
+      });
+
+      // Process referral reward if user has referrer
+      await this.processReferralReward(
+        sender,
+        userReferral.userId,
+        String(event.chainId),
+        token,
+        amount,
+        event.transactionHash,
+        event.logIndex,
+        event.blockNumber,
+      );
+      await commitInbox();
     });
-
-    // Process referral reward if user has referrer
-    await this.processReferralReward(
-      sender,
-      userReferral.userId,
-      String(event.chainId),
-      token,
-      amount,
-      event.transactionHash,
-      event.logIndex,
-      event.blockNumber,
-    );
   }
 
   /**
@@ -207,6 +224,7 @@ export class LoyaltyService {
       poolId: string;
       holdToken: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.minter,
@@ -218,35 +236,48 @@ export class LoyaltyService {
 
     const userReferral = await this.referralRepository.findByUserWallet(minter);
     if (!userReferral) {
-      return;
+      throw new AppError({
+        message: `Referral not found for wallet ${minter}`,
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     }
 
-    await this.feesRepository.addBuyCommission(minter, userReferral.userId, String(event.chainId), holdToken, feePaid);
+    await mongoose.connection.transaction(async () => {
+      await this.feesRepository.addBuyCommission(
+        minter,
+        userReferral.userId,
+        String(event.chainId),
+        holdToken,
+        feePaid,
+      );
 
-    // Record commission history
-    await this.commissionHistoryRepository.create({
-      userWallet: minter,
-      userId: userReferral.userId,
-      chainId: String(event.chainId),
-      tokenAddress: holdToken,
-      amount: feePaid,
-      actionType: 'buy_commission',
-      transactionHash: event.transactionHash,
-      relatedUserWallet: undefined,
-      relatedUserId: undefined,
+      // Record commission history
+      await this.commissionHistoryRepository.create({
+        userWallet: minter,
+        userId: userReferral.userId,
+        chainId: String(event.chainId),
+        tokenAddress: holdToken,
+        amount: feePaid,
+        actionType: 'buy_commission',
+        transactionHash: event.transactionHash,
+        relatedUserWallet: undefined,
+        relatedUserId: undefined,
+      });
+
+      // Process referral reward if user has referrer
+      await this.processReferralReward(
+        minter,
+        userReferral.userId,
+        String(event.chainId),
+        holdToken,
+        feePaid,
+        event.transactionHash,
+        event.logIndex,
+        event.blockNumber,
+      );
+      await commitInbox();
     });
-
-    // Process referral reward if user has referrer
-    await this.processReferralReward(
-      minter,
-      userReferral.userId,
-      String(event.chainId),
-      holdToken,
-      feePaid,
-      event.transactionHash,
-      event.logIndex,
-      event.blockNumber,
-    );
   }
 
   /**
@@ -275,6 +306,7 @@ export class LoyaltyService {
       poolId: string;
       holdToken: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.burner,
@@ -286,7 +318,11 @@ export class LoyaltyService {
 
     const userReferral = await this.referralRepository.findByUserWallet(burner);
     if (!userReferral) {
-      return;
+      throw new AppError({
+        message: `Referral not found for wallet ${burner}`,
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     }
 
     // Total fee is hold fee + bonus fee using BigInt for precision
@@ -294,38 +330,41 @@ export class LoyaltyService {
     const bonusFee = BigInt(bonusFeePaid);
     const totalFee = (holdFee + bonusFee).toString();
 
-    await this.feesRepository.addSellCommission(
-      burner,
-      userReferral.userId,
-      String(event.chainId),
-      holdToken,
-      totalFee,
-    );
+    await mongoose.connection.transaction(async () => {
+      await this.feesRepository.addSellCommission(
+        burner,
+        userReferral.userId,
+        String(event.chainId),
+        holdToken,
+        totalFee,
+      );
 
-    // Record commission history
-    await this.commissionHistoryRepository.create({
-      userWallet: burner,
-      userId: userReferral.userId,
-      chainId: String(event.chainId),
-      tokenAddress: holdToken,
-      amount: totalFee,
-      actionType: 'sell_commission',
-      transactionHash: event.transactionHash,
-      relatedUserWallet: undefined,
-      relatedUserId: undefined,
+      // Record commission history
+      await this.commissionHistoryRepository.create({
+        userWallet: burner,
+        userId: userReferral.userId,
+        chainId: String(event.chainId),
+        tokenAddress: holdToken,
+        amount: totalFee,
+        actionType: 'sell_commission',
+        transactionHash: event.transactionHash,
+        relatedUserWallet: undefined,
+        relatedUserId: undefined,
+      });
+
+      // Process referral reward if user has referrer
+      await this.processReferralReward(
+        burner,
+        userReferral.userId,
+        String(event.chainId),
+        holdToken,
+        totalFee,
+        event.transactionHash,
+        event.logIndex,
+        event.blockNumber,
+      );
+      await commitInbox();
     });
-
-    // Process referral reward if user has referrer
-    await this.processReferralReward(
-      burner,
-      userReferral.userId,
-      String(event.chainId),
-      holdToken,
-      totalFee,
-      event.transactionHash,
-      event.logIndex,
-      event.blockNumber,
-    );
   }
 
   /**
@@ -345,6 +384,7 @@ export class LoyaltyService {
       token: string;
       amount: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       wallet: event.data.user,
@@ -355,17 +395,26 @@ export class LoyaltyService {
     const referrerUser = await this.referralRepository.findByReferrerWallet(referrerWallet);
 
     if (!referrerUser || !referrerUser.referrerId) {
-      return;
+      throw new AppError({
+        message: `Referrer not found for wallet ${referrerWallet}`,
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
     }
 
-    // Add withdrawn amount to referrer's withdraw record
-    await this.referrerWithdrawRepository.addWithdrawnAmount(
-      referrerWallet,
-      referrerUser.referrerId,
-      String(event.chainId),
-      token,
-      amount,
-    );
+    const { referrerId } = referrerUser;
+
+    await mongoose.connection.transaction(async () => {
+      // Add withdrawn amount to referrer's withdraw record
+      await this.referrerWithdrawRepository.addWithdrawnAmount(
+        referrerWallet,
+        referrerId,
+        String(event.chainId),
+        token,
+        amount,
+      );
+      await commitInbox();
+    });
   }
 
   /**

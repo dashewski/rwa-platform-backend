@@ -2,7 +2,7 @@
  * Unit tests for the rwa InboxConsumerDaemon — routing only.
  *
  * The daemon extends the shared BaseInboxConsumerDaemon and declares two
- * queues: `blockchain.events.rwa` (13 chain events onto BusinessService /
+ * queues: `blockchain.97.events.rwa` (13 chain events onto BusinessService /
  * PoolService) and `evaluation.results` (the result the ai-evaluator service
  * sends back). The RabbitMQ client, the consumer service and both services are
  * fakes: no database, no broker, no network.
@@ -17,7 +17,7 @@ import type { PoolService } from '../src/services/pool.service';
 import { createFakeBusinessService, type FakeBusinessService } from './fakes/business.service.fake';
 import { createFakePoolService, type FakePoolService } from './fakes/pool.service.fake';
 
-const BLOCKCHAIN_QUEUE = 'blockchain.events.rwa';
+const BLOCKCHAIN_QUEUE = 'blockchain.97.events.rwa';
 const RESULTS_QUEUE = 'evaluation.results';
 
 const ROUTING: Array<[string, keyof FakeBusinessService | keyof FakePoolService, 'business' | 'pool']> = [
@@ -63,7 +63,7 @@ function makeResult(overrides: Record<string, unknown> = {}) {
 function makeMessage(
   routingKey: string,
   body: unknown,
-  options: { raw?: string; exchange?: string } = {},
+  options: { raw?: string; exchange?: string; messageId?: string } = {},
 ): ConsumeMessage {
   return {
     content: Buffer.from(options.raw ?? JSON.stringify(body)),
@@ -74,7 +74,7 @@ function makeMessage(
       exchange: options.exchange ?? 'blockchain.events',
       consumerTag: 'ctag',
     },
-    properties: { messageId: '97:0xtx1:0' },
+    properties: { messageId: options.messageId ?? '97:0xtx1:0' },
   } as unknown as ConsumeMessage;
 }
 
@@ -100,6 +100,10 @@ function createFakeRabbitClient() {
     }),
 
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
+    getEvaluationResultsQueue: mock(() => 'evaluation.results'),
+
+    getBlockchainEventsQueues: mock(() => ['blockchain.97.events.rwa']),
+
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
     consume: mock(
@@ -135,25 +139,19 @@ function createFakeRabbitClient() {
  */
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'deferred',
-    handlerError: null as unknown,
-    deliveries: 0,
+    markers: new Set<string>(),
+    commits: [] as string[],
   };
 
   const service = {
     state,
 
-    handle: mock(async (queueName: string, _message: ConsumeMessage, handler: () => Promise<void>) => {
-      state.deliveries += 1;
-
-      try {
-        await handler();
-      } catch (error) {
-        state.handlerError = error;
-      }
-
-      return state.outcome;
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      state.markers.add(messageId);
     }),
+
+    isCommitted: mock(async (messageId: string): Promise<boolean> => state.markers.has(messageId)),
   };
 
   return service;
@@ -179,18 +177,32 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     );
   });
 
+  async function waitForSettled(settledBefore: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (rabbit.state.acked.length + rabbit.state.nacked.length > settledBefore) return;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    throw new Error('the delivery did not settle (no ack / nack)');
+  }
+
   async function deliver(queue: string, routingKey: string, message: ConsumeMessage): Promise<void> {
     const handler = rabbit.state.handlers.get(queue);
     if (!handler) throw new Error(`the daemon never subscribed to ${queue}`);
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length;
+
+    // `evaluation.results` is parallel (isSync=false): the consumer handler
+    // returns before the delivery is acked, so the outcome is awaited separately.
     await handler(message);
+    await waitForSettled(settled);
   }
 
-  test('subscribes to both queues, with prefetch 1', async () => {
+  test('subscribes to both queues: blockchain with prefetch 1, results with prefetch 5', async () => {
     await daemon.initialize();
 
     expect(rabbit.state.consumed).toEqual([
+      { queue: RESULTS_QUEUE, options: { prefetch: 5 } },
       { queue: BLOCKCHAIN_QUEUE, options: { prefetch: 1 } },
-      { queue: RESULTS_QUEUE, options: { prefetch: 1 } },
     ]);
   });
 
@@ -199,14 +211,18 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
 
     for (const [eventName, method, target] of ROUTING) {
       const event = makeStockEvent(eventName);
-      await deliver(BLOCKCHAIN_QUEUE, eventName, makeMessage(eventName, event));
+      await deliver(
+        BLOCKCHAIN_QUEUE,
+        eventName,
+        makeMessage(eventName, event, { messageId: `97:0xtx1:${eventName}` }),
+      );
 
       const service = (target === 'business' ? businessService : poolService) as Record<
         string,
         ReturnType<typeof mock>
       >;
       expect(service[method as string]).toHaveBeenCalledTimes(1);
-      expect(service[method as string]).toHaveBeenCalledWith(event);
+      expect(service[method as string]).toHaveBeenCalledWith(event, expect.any(Function));
     }
 
     // The routing table covers the whole chain surface: 13 events, 13 calls.
@@ -249,7 +265,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     await deliver(RESULTS_QUEUE, 'poolResult', makeMessage('poolResult', result, { exchange: 'evaluation' }));
 
     expect(poolService.applyEvaluationResult).toHaveBeenCalledTimes(1);
-    expect(poolService.applyEvaluationResult).toHaveBeenCalledWith(result);
+    expect(poolService.applyEvaluationResult).toHaveBeenCalledWith(result, expect.any(Function));
     expect(businessService.applyEvaluationResult).toHaveBeenCalledTimes(0);
     expect(rabbit.state.acked).toHaveLength(1);
   });
@@ -261,7 +277,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     await deliver(RESULTS_QUEUE, 'businessResult', makeMessage('businessResult', result, { exchange: 'evaluation' }));
 
     expect(businessService.applyEvaluationResult).toHaveBeenCalledTimes(1);
-    expect(businessService.applyEvaluationResult).toHaveBeenCalledWith(result);
+    expect(businessService.applyEvaluationResult).toHaveBeenCalledWith(result, expect.any(Function));
     expect(poolService.applyEvaluationResult).toHaveBeenCalledTimes(0);
   });
 
@@ -271,7 +287,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
     const result = makeResult({ entityType: 'business', entityId: 'business-1' });
     await deliver(RESULTS_QUEUE, 'poolResult', makeMessage('poolResult', result, { exchange: 'evaluation' }));
 
-    expect(poolService.applyEvaluationResult).toHaveBeenCalledWith(result);
+    expect(poolService.applyEvaluationResult).toHaveBeenCalledWith(result, expect.any(Function));
     expect(businessService.applyEvaluationResult).toHaveBeenCalledTimes(0);
   });
 
@@ -286,7 +302,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
   });
 
   test('a service failure is handed to the retry queue: nack(requeue=false), the subscription stays', async () => {
-    consumerService.state.outcome = 'deferred';
+    rabbit.state.deferAfterAttempts = 1;
     poolService.syncPoolPausedState.mockImplementationOnce(async () => {
       throw new Error('mongo is down');
     });
@@ -305,6 +321,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
   });
 
   test('a malformed payload is reported and never reaches a service', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
 
     await deliver(
@@ -313,13 +330,12 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
       makeMessage('Pool_ReservesUpdated', null, { raw: '{not json' }),
     );
 
-    const error = consumerService.state.handlerError as Error;
-    expect(error.message).toContain('not valid JSON');
     expect(poolService.syncPoolReserves).toHaveBeenCalledTimes(0);
+    expect(rabbit.state.nacked).toHaveLength(1);
   });
 
   test('a malformed evaluation result is reported and handed to the retry queue', async () => {
-    consumerService.state.outcome = 'deferred';
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
 
     await deliver(
@@ -328,7 +344,6 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
       makeMessage('poolResult', null, { raw: 'not-json', exchange: 'evaluation' }),
     );
 
-    expect((consumerService.state.handlerError as Error).message).toContain('not valid JSON');
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(poolService.applyEvaluationResult).toHaveBeenCalledTimes(0);
   });
@@ -338,7 +353,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
 
     await daemon.stop();
 
-    expect(rabbit.state.cancelled).toEqual([`ctag-${BLOCKCHAIN_QUEUE}`, `ctag-${RESULTS_QUEUE}`]);
+    expect(rabbit.state.cancelled).toEqual([`ctag-${RESULTS_QUEUE}`, `ctag-${BLOCKCHAIN_QUEUE}`]);
   });
 
   test('stop() without a connection does not try to unsubscribe', async () => {

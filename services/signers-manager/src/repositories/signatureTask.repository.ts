@@ -14,21 +14,6 @@ export class SignatureTaskRepository {
   }
 
   @TraceDecorator()
-  async update(id: string, data: Partial<Pick<ISignatureTask, 'completed'>>) {
-    const doc = await this.model.findByIdAndUpdate(id, data, { new: true }).lean();
-
-    if (!doc) {
-      throw new AppError({
-        message: `SignatureTask ${id} not found`,
-        statusCode: 404,
-        code: 'NOT_FOUND',
-      });
-    }
-
-    return doc;
-  }
-
-  @TraceDecorator()
   async findById(id: string) {
     const doc = await this.model.findById(id).lean();
 

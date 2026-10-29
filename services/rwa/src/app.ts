@@ -18,8 +18,8 @@ export async function createApp(
   openRouterModel: string,
   rabbitMqUri: string,
   signersManagerUrl: string,
-  aiEvaluatorUrl: string,
   supportedNetworks: any[],
+  chainIds: string[],
   placeholderImageUrl: string,
   filesBaseUrl: string,
 ) {
@@ -38,7 +38,7 @@ export async function createApp(
         openRouterBaseUrl,
         rabbitMqUri,
         signersManagerUrl,
-        aiEvaluatorUrl,
+        chainIds,
       ),
   );
 

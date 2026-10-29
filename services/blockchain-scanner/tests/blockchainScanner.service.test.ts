@@ -12,6 +12,7 @@ import { BlockchainScannerService } from '../src/services/blockchainScanner.serv
 import type { EventRepository } from '../src/repositories/event.repository';
 import type { ScannerStateRepository } from '../src/repositories/scannerState.repository';
 import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { RabbitMQClient } from '../src/clients/rabbitmq.client';
 import {
   createFakeEventRepository,
   type CreateEventInput,
@@ -24,7 +25,7 @@ import {
 } from './fakes/scannerState.repository.fake';
 import { createFakeOutboxPublisher, EXCHANGE, type FakeOutboxPublisher } from './fakes/outboxPublisher.fake';
 
-const CHAIN_ID = 31337;
+const CHAIN_ID = '31337';
 const CONTRACT_ADDRESS = '0x00000000000000000000000000000000000000aa';
 const TX_HASH = `0x${'ab'.repeat(32)}`;
 const STALE_TX_HASH = `0x${'ff'.repeat(32)}`;
@@ -77,8 +78,7 @@ describe('BlockchainScannerService (unit, fake repositories + fake outbox publis
     service = new BlockchainScannerService(
       events as unknown as EventRepository,
       scannerState as unknown as ScannerStateRepository,
-      publisher as unknown as OutboxPublisherService,
-      EXCHANGE,
+      publisher as unknown as OutboxPublisherService<RabbitMQClient>,
       CHAIN_ID,
     );
   });

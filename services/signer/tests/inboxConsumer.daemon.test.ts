@@ -68,16 +68,30 @@ describe('signer InboxConsumerDaemon (unit, fake client + fake services)', () =>
     restoreLogs();
   });
 
+  async function waitForSettled(settledBefore: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (rabbit.state.acked.length + rabbit.state.nacked.length > settledBefore) return;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    throw new Error('the delivery did not settle (no ack / nack)');
+  }
+
   async function deliver(message: ConsumeMessage): Promise<void> {
     const handler = rabbit.state.handlers.get(REQUESTS_QUEUE);
     if (!handler) throw new Error('the daemon never subscribed to the requests queue');
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length;
+
+    // The queue is parallel (isSync=false): the consumer handler returns before
+    // the delivery is acked, so the outcome has to be awaited separately.
     await handler(message);
+    await waitForSettled(settled);
   }
 
-  test('subscribes to its own requests queue with prefetch 1', async () => {
+  test('subscribes to its own requests queue with prefetch 5', async () => {
     await daemon.initialize();
 
-    expect(rabbit.state.consumedOptions).toEqual([{ queue: REQUESTS_QUEUE, options: { prefetch: 1 } }]);
+    expect(rabbit.state.consumedOptions).toEqual([{ queue: REQUESTS_QUEUE, options: { prefetch: 5 } }]);
     expect(logLines.some((line) => line.includes(`Inbox consumer subscribed to ${REQUESTS_QUEUE}`))).toBe(true);
   });
 
@@ -91,34 +105,26 @@ describe('signer InboxConsumerDaemon (unit, fake client + fake services)', () =>
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('the queue deferAfterAttempts is passed to the consumer service', async () => {
-    rabbit.state.deferAfterAttempts = 3;
+  test('an exhausted delivery goes to the retry queue (requeue=false)', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
+    signature.state.error = new Error('Task expired');
 
-    await deliver(makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1_900_000_000 }));
+    await deliver(makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1 }));
 
-    expect(consumer.state.handles[0].maxAttempts).toBe(3);
-  });
-
-  test('a deferred delivery is handed to the retry queue (requeue=false)', async () => {
-    await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
-
-    await deliver(makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1_900_000_000 }));
-
+    expect(consumer.state.commits).toEqual([]);
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
   });
 
-  test('a signature failure is left to the inbox (no ack, outcome decides)', async () => {
+  test('a signature failure is not acked: the inbox retries the delivery', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
     signature.state.error = new Error('Task expired');
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1 }));
 
-    expect(consumer.state.handlerError).toBeInstanceOf(Error);
     expect(rabbit.state.acked).toHaveLength(0);
     expect(rabbit.state.nacked).toHaveLength(1);
   });
@@ -133,19 +139,22 @@ describe('signer InboxConsumerDaemon (unit, fake client + fake services)', () =>
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('a message without messageId still reaches the service (the dedup guard is in the inbox)', async () => {
+  test('a message without messageId is refused: the inbox cannot deduplicate it', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
 
     await deliver(
       makeMessage('task', { hash: '0xabc', taskId: 'task-1', expired: 1_900_000_000 }, { messageId: null }),
     );
 
-    expect(signature.state.tasks).toHaveLength(1);
+    expect(signature.state.tasks).toHaveLength(0);
+    expect(rabbit.state.nacked).toHaveLength(1);
+    expect(logLines.some((line) => line.includes('the message has no messageId'))).toBe(true);
   });
 
   test('a body that is not valid JSON never reaches the service', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('task', {}, { raw: 'not-json{' }));
 

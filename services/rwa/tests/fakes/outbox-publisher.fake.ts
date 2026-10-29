@@ -8,6 +8,8 @@ import { mock } from 'bun:test';
 
 export function createFakeOutboxPublisher() {
   return {
+    rabbitClient: { getEvaluationExchange: () => 'evaluation' },
+
     publish: mock(
       async (_exchange: string, _routingKey: string, _payload: unknown, _messageId: string): Promise<void> => {},
     ),

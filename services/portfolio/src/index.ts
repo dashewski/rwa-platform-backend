@@ -1,10 +1,12 @@
 import { createApp } from './app';
 import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
+
 const app = await withTraceAsync('portfolio.init.main', async () => {
   return await createApp(
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
+    JSON.parse(String(process.env.CHAIN_IDS)),
   );
 });
 

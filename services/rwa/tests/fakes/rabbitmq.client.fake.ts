@@ -33,6 +33,8 @@ export function createFakeRabbitMQClient() {
       connected = value;
     },
 
+    getEvaluationExchange: mock(() => 'evaluation'),
+
     isExchangeRegistered: mock((_name: string) => true),
 
     getExchange: mock((name: string) => name),

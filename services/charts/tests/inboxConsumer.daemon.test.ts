@@ -2,7 +2,7 @@
  * Unit tests for the charts InboxConsumerDaemon — routing only.
  *
  * The daemon extends the shared BaseInboxConsumerDaemon: it declares the
- * `blockchain.events.charts` queue, the prefetch and the routing table that
+ * `blockchain.97.events.charts` queue, the prefetch and the routing table that
  * maps every subscribed event name onto a service method. The RabbitMQ client
  * and the consumer service are fakes, the services are fakes: these tests need
  * no database, no Redis, no broker and no network.
@@ -15,7 +15,7 @@ import type { ChartsService } from '../src/services/charts.service';
 import type { TransactionsService } from '../src/services/transactions.service';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 
-const QUEUE = 'blockchain.events.charts';
+const QUEUE = 'blockchain.97.events.charts';
 const POOL_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 
 const RESERVES_DATA = {
@@ -56,11 +56,15 @@ function makeEvent(name: string, data: Record<string, string>) {
   };
 }
 
-function makeMessage(routingKey: string, body: unknown, options: { raw?: string } = {}): ConsumeMessage {
+function makeMessage(
+  routingKey: string,
+  body: unknown,
+  options: { raw?: string; messageId?: string } = {},
+): ConsumeMessage {
   return {
     content: Buffer.from(options.raw ?? JSON.stringify(body)),
     fields: { routingKey, redelivered: false, deliveryTag: 1, exchange: 'blockchain.events', consumerTag: 'ctag' },
-    properties: { messageId: '1:0xtx1:0' },
+    properties: { messageId: options.messageId ?? '1:0xtx1:0' },
   } as unknown as ConsumeMessage;
 }
 
@@ -85,6 +89,8 @@ function createFakeRabbitClient() {
     }),
 
     getQueueDeferAfterAttempts: mock(() => state.deferAfterAttempts),
+    getBlockchainEventsQueues: mock(() => ['blockchain.97.events.charts']),
+
     getQueueParkAfterCycles: mock(() => state.parkAfterCycles),
 
     consume: mock(
@@ -115,24 +121,19 @@ function createFakeRabbitClient() {
 
 function createFakeConsumerService() {
   const state = {
-    outcome: 'acked' as 'acked' | 'deferred',
-    handlerError: null as unknown,
-    deliveries: 0,
+    markers: new Set<string>(),
+    commits: [] as string[],
   };
 
   const service = {
     state,
 
-    handle: mock(async (queueName: string, _message: ConsumeMessage, handler: () => Promise<void>) => {
-      state.deliveries += 1;
-
-      try {
-        await handler();
-      } catch (error) {
-        state.handlerError = error;
-      }
-      return state.outcome;
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      state.markers.add(messageId);
     }),
+
+    isCommitted: mock(async (messageId: string): Promise<boolean> => state.markers.has(messageId)),
   };
 
   return service;
@@ -140,14 +141,20 @@ function createFakeConsumerService() {
 
 function createFakeChartsService() {
   return {
-    recordPriceData: mock(async (_event: unknown): Promise<void> => {}),
+    recordPriceData: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
   };
 }
 
 function createFakeTransactionsService() {
   return {
-    recordMint: mock(async (_event: unknown): Promise<void> => {}),
-    recordBurn: mock(async (_event: unknown): Promise<void> => {}),
+    recordMint: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    recordBurn: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
   };
 }
 
@@ -189,7 +196,7 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
     await deliver('Pool_ReservesUpdated', makeMessage('Pool_ReservesUpdated', event));
 
     expect(chartsService.recordPriceData).toHaveBeenCalledTimes(1);
-    expect(chartsService.recordPriceData).toHaveBeenCalledWith(event);
+    expect(chartsService.recordPriceData).toHaveBeenCalledWith(event, expect.any(Function));
     expect(transactionsService.recordMint).toHaveBeenCalledTimes(0);
     expect(transactionsService.recordBurn).toHaveBeenCalledTimes(0);
   });
@@ -199,13 +206,13 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
     const mint = makeEvent('Pool_RwaMinted', MINT_DATA);
     const burn = makeEvent('Pool_RwaBurned', BURN_DATA);
 
-    await deliver('Pool_RwaMinted', makeMessage('Pool_RwaMinted', mint));
-    await deliver('Pool_RwaBurned', makeMessage('Pool_RwaBurned', burn));
+    await deliver('Pool_RwaMinted', makeMessage('Pool_RwaMinted', mint, { messageId: '1:0xtx1:1' }));
+    await deliver('Pool_RwaBurned', makeMessage('Pool_RwaBurned', burn, { messageId: '1:0xtx1:2' }));
 
     expect(transactionsService.recordMint).toHaveBeenCalledTimes(1);
-    expect(transactionsService.recordMint).toHaveBeenCalledWith(mint);
+    expect(transactionsService.recordMint).toHaveBeenCalledWith(mint, expect.any(Function));
     expect(transactionsService.recordBurn).toHaveBeenCalledTimes(1);
-    expect(transactionsService.recordBurn).toHaveBeenCalledWith(burn);
+    expect(transactionsService.recordBurn).toHaveBeenCalledWith(burn, expect.any(Function));
     expect(chartsService.recordPriceData).toHaveBeenCalledTimes(0);
   });
 
@@ -253,8 +260,8 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
   });
 
   test('a service failure is not swallowed: the delivery is deferred to the retry queue', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
     chartsService.recordPriceData.mockRejectedValueOnce(new Error('virtualRwaReserve cannot be zero'));
 
     await deliver(
@@ -262,8 +269,6 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
       makeMessage('Pool_ReservesUpdated', makeEvent('Pool_ReservesUpdated', RESERVES_DATA)),
     );
 
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toBe('virtualRwaReserve cannot be zero');
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
@@ -272,15 +277,14 @@ describe('charts InboxConsumerDaemon (unit, fakes for client / consumer service 
   });
 
   test('a malformed payload fails the delivery instead of silently dropping the event', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumerService.state.outcome = 'deferred';
 
     await deliver('Pool_RwaMinted', makeMessage('Pool_RwaMinted', {}, { raw: '{"data":' }));
 
     expect(transactionsService.recordMint).toHaveBeenCalledTimes(0);
-    expect(consumerService.state.handlerError).toBeInstanceOf(Error);
-    expect((consumerService.state.handlerError as Error).message).toContain('not valid JSON');
     expect(rabbit.state.nacked).toHaveLength(1);
+    expect(rabbit.state.acked).toHaveLength(0);
   });
 
   test('stop cancels the consumer while the connection is alive', async () => {

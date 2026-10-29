@@ -118,6 +118,7 @@ describe('portfolio HTTP layer (component, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtx0001',
+      logIndex: 0,
       blockNumber: 100,
       amount: 250,
     });
@@ -129,6 +130,7 @@ describe('portfolio HTTP layer (component, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtx0002',
+      logIndex: 0,
       blockNumber: 101,
       amount: 1.5,
     });
@@ -162,6 +164,7 @@ describe('portfolio HTTP layer (component, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtx0001',
+      logIndex: 0,
       blockNumber: 100,
       amount: 1,
     });
@@ -173,6 +176,7 @@ describe('portfolio HTTP layer (component, fake repositories)', () => {
       poolAddress: POOL_ADDRESS,
       chainId: CHAIN_ID,
       transactionHash: '0xtx0002',
+      logIndex: 0,
       blockNumber: 101,
       amount: 2,
     });

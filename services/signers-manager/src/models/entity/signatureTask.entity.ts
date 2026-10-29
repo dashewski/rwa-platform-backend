@@ -26,11 +26,6 @@ const signatureTaskSchemaDefinition = {
     type: Number,
     required: true,
   },
-  completed: {
-    type: Boolean,
-    required: true,
-    default: false,
-  },
   createdAt: {
     type: Number,
     default: () => Math.floor(Date.now() / 1000),

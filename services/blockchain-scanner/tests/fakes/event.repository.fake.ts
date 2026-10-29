@@ -12,7 +12,7 @@ import { Types } from 'mongoose';
 
 export type FakeEventDoc = {
   _id: Types.ObjectId;
-  chainId: number;
+  chainId: string;
   blockNumber: number;
   transactionHash: string;
   logIndex: number;
@@ -79,7 +79,7 @@ export function createFakeEventRepository() {
       return docs;
     }),
 
-    deleteBlockEvents: mock(async (chainId: number, blockNumber: number): Promise<number> => {
+    deleteBlockEvents: mock(async (chainId: string, blockNumber: number): Promise<number> => {
       let deletedCount = 0;
       for (const [id, doc] of store) {
         if (doc.chainId === chainId && doc.blockNumber === blockNumber) {

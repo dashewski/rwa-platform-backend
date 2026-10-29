@@ -1,19 +1,17 @@
 import { createApp } from './app';
 import { withTraceAsync } from '@shared/monitoring/src/tracing';
 
+const chainIds: string[] = JSON.parse(String(process.env.CHAIN_IDS));
+const treasuries: Record<string, string> = JSON.parse(String(process.env.TREASURIES));
+
 const app = await withTraceAsync('loyalty.init.main', async () => {
   return await createApp(
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
     String(process.env.RABBITMQ_URL),
     String(process.env.SIGNERS_MANAGER_URL),
     Number(process.env.LOYALTY_REFERRAL_REWARD_PERCENTAGE),
-    [
-      {
-        chainId: '97',
-        name: 'BSC Testnet',
-        referralTreasuryAddress: '0xcf56E77069cC2aBfA6c1Df9bfD4155F782697B9D',
-      },
-    ],
+    chainIds.map((chainId) => ({ chainId, referralTreasuryAddress: treasuries[chainId] })),
+    chainIds,
   );
 });
 

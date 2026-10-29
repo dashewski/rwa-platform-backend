@@ -1,11 +1,9 @@
-import mongoose, { Types } from 'mongoose';
-import type { EvaluationJob } from '../models/entity/evaluationJob.entity';
-import { logger } from '@shared/monitoring/src/monitoring.plugin';
+import mongoose from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { OpenRouterClient } from '@shared/openrouter/client';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 import type { ChatMessage, TextContentPart, FileContentPart, ImageContentPart } from '@shared/openrouter/types';
 import type { EvaluationRepository } from '../repositories/evaluation.repository';
-import type { EvaluationJobRepository } from '../repositories/evaluationJob.repository';
 import type {
   RwaClient,
   DocumentsClient,
@@ -33,12 +31,9 @@ type FileMeta = {
   url: string;
 };
 
-const EVALUATION_JOB_MAX_ATTEMPTS = 3;
-
 export class RiskEvaluationService {
   constructor(
     private readonly evaluationRepository: EvaluationRepository,
-    private readonly evaluationJobRepository: EvaluationJobRepository,
     private readonly openRouterClient: OpenRouterClient,
     private readonly rwaClient: RwaClient,
     private readonly documentsClient: DocumentsClient,
@@ -46,8 +41,7 @@ export class RiskEvaluationService {
     private readonly reactionsClient: ReactionsClient,
     private readonly questionsClient: QuestionsClient,
     private readonly portfolioClient: PortfolioClient,
-    private readonly outboxPublisher: OutboxPublisherService,
-    private readonly evaluationExchange: string,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly openRouterModel: string,
     private readonly maxFilesPerRequest: number,
     private readonly useBase64Files: boolean = true,
@@ -60,7 +54,7 @@ export class RiskEvaluationService {
   @LogDecorator({
     args: (a) => ({ poolId: a[0].poolId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
-  async evaluatePool(params: { poolId: string; ownerId: string; ownerType: string }) {
+  async evaluatePool(params: { poolId: string; ownerId: string; ownerType: string }, commitInbox: () => Promise<void>) {
     setSpanAttributes({ entityId: params.poolId, entityType: 'pool' });
 
     const pool = await this.fetchPool({ poolId: params.poolId });
@@ -90,11 +84,13 @@ export class RiskEvaluationService {
       const evaluationId = evaluation._id.toString();
 
       await this.outboxPublisher.publish(
-        this.evaluationExchange,
+        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
         EVALUATION_RESULT_ROUTING_KEY.pool,
         { evaluationId, entityType: 'pool', entityId: params.poolId, riskScore: result.riskScore },
         evaluationId,
       );
+
+      await commitInbox();
     });
   }
 
@@ -103,7 +99,10 @@ export class RiskEvaluationService {
   @LogDecorator({
     args: (a) => ({ businessId: a[0].businessId, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
-  async evaluateBusiness(params: { businessId: string; ownerId: string; ownerType: string }) {
+  async evaluateBusiness(
+    params: { businessId: string; ownerId: string; ownerType: string },
+    commitInbox: () => Promise<void>,
+  ) {
     setSpanAttributes({ entityId: params.businessId, entityType: 'business' });
 
     const business = await this.fetchBusiness({ businessId: params.businessId });
@@ -130,72 +129,14 @@ export class RiskEvaluationService {
       const evaluationId = evaluation._id.toString();
 
       await this.outboxPublisher.publish(
-        this.evaluationExchange,
+        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
         EVALUATION_RESULT_ROUTING_KEY.business,
         { evaluationId, entityType: 'business', entityId: params.businessId, riskScore: result.riskScore },
         evaluationId,
       );
+
+      await commitInbox();
     });
-  }
-
-  async createPoolEvaluation(params: { poolId: string; ownerId: string; ownerType: string }) {
-    const job = await this.evaluationJobRepository.create({ entityType: 'pool', entityId: params.poolId, params });
-
-    return { jobId: job._id.toString() };
-  }
-
-  async createBusinessEvaluation(params: { businessId: string; ownerId: string; ownerType: string }) {
-    const job = await this.evaluationJobRepository.create({
-      entityType: 'business',
-      entityId: params.businessId,
-      params,
-    });
-
-    return { jobId: job._id.toString() };
-  }
-
-  @TraceDecorator()
-  async processEvaluationJobs(concurrency: number): Promise<void> {
-    await this.evaluationJobRepository.releaseProcessing();
-
-    const inFlight = new Set<Promise<void>>();
-
-    while (true) {
-      if (inFlight.size >= concurrency) await Promise.race(inFlight);
-
-      const job = await this.evaluationJobRepository.claimNext();
-      if (!job) break;
-
-      const processing = this.processEvaluationJob(job);
-      inFlight.add(processing);
-      processing.finally(() => inFlight.delete(processing));
-    }
-
-    await Promise.all(inFlight);
-  }
-
-  private async processEvaluationJob(job: EvaluationJob & { _id: Types.ObjectId }): Promise<void> {
-    const params = job.params as { poolId?: string; businessId?: string; ownerId: string; ownerType: string };
-
-    try {
-      if (job.entityType === 'pool') {
-        await this.evaluatePool(params as { poolId: string; ownerId: string; ownerType: string });
-      } else {
-        await this.evaluateBusiness(params as { businessId: string; ownerId: string; ownerType: string });
-      }
-
-      await this.evaluationJobRepository.markDone(job._id);
-    } catch (error) {
-      const failed = await this.evaluationJobRepository
-        .markAttemptFailed(job._id, EVALUATION_JOB_MAX_ATTEMPTS)
-        .catch(() => null);
-
-      logger.error(`Evaluation job "${job._id}" (${job.entityType} ${job.entityId}) failed:`, error);
-
-      if (failed?.status === 'failed') {
-        logger.error(`Evaluation job "${job._id}": attempts exhausted (${failed.attempts}); it is left alone`);
-      }
-    }
   }
 
   @TraceDecorator()

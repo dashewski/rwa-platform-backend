@@ -1,11 +1,12 @@
 import { BusinessRepository } from '../repositories/business.repository';
-import type { AiEvaluatorClient } from '../clients/aiEvaluator.client';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import type { BlockchainEvent } from '@shared/blockchain';
 import { AppError } from '@shared/errors/app-errors';
 import type { IBusinessEntity } from '../models/entity/business.entity';
 
 import { OpenRouterClient } from '@shared/openrouter/client';
 import { ethers } from 'ethers';
+import mongoose from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import type { SignersManagerClient } from '../clients/eden.clients';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
@@ -13,10 +14,10 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { buildFileUrl } from '@shared/files/src/index';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 interface NetworkConfig {
   chainId: string;
-  name: string;
   factoryAddress: string;
 }
 
@@ -29,11 +30,13 @@ export class BusinessService {
     private readonly businessRepository: BusinessRepository,
     private readonly openRouterClient: OpenRouterClient,
     private readonly signersManagerClient: SignersManagerClient,
-    private readonly aiEvaluatorClient: AiEvaluatorClient,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly supportedNetworks: NetworkConfig[],
     private readonly openRouterModel: string,
     private readonly filesBaseUrl: string,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   private isChainIdSupported(chainId: string): boolean {
     return this.supportedNetworks.some((network) => network.chainId === chainId);
@@ -294,23 +297,18 @@ Response format:
       });
     }
 
-    const response = await this.aiEvaluatorClient.createBusinessEvaluation.post({
-      businessId: id,
-      ownerId: business.ownerId,
-      ownerType: business.ownerType,
-    });
-
-    if (response.error) {
-      throw new AppError({
-        message: `ai-evaluator is unavailable (${response.status})`,
-        statusCode: 502,
-        code: 'AI_ERROR',
+    await mongoose.connection.transaction(async () => {
+      await this.businessRepository.updateBusiness(id, {
+        riskScoreEvaluationProcess: true,
+        riskScoreEvaluationStartedAt: now,
       });
-    }
 
-    await this.businessRepository.updateBusiness(id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: now,
+      await this.outboxPublisher.publish(
+        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
+        'evaluateBusiness',
+        { businessId: id, ownerId: business.ownerId, ownerType: business.ownerType },
+        `${id}:${now}`,
+      );
     });
 
     const updated = await this.businessRepository.findById(id);
@@ -355,13 +353,22 @@ Response format:
       entityId: a[0].entityId,
     }),
   })
-  async applyEvaluationResult(result: {
-    evaluationId: string;
-    entityType: 'business';
-    entityId: string;
-    riskScore: number;
-  }) {
-    return this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
+  async applyEvaluationResult(
+    result: {
+      evaluationId: string;
+      entityType: 'business';
+      entityId: string;
+      riskScore: number;
+    },
+    commitInbox: () => Promise<void>,
+  ) {
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.setRiskScore({ id: result.entityId, riskScore: result.riskScore });
+
+      await commitInbox();
+
+      return updated;
+    });
   }
 
   @TraceDecorator()
@@ -489,6 +496,7 @@ Response format:
       emittedFrom: string;
       owner: string;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({
       entityId: event.data.entityId,
@@ -496,14 +504,16 @@ Response format:
       tokenAddress: event.data.emittedFrom,
       ownerWallet: event.data.owner,
     });
-    const updated = await this.businessRepository.updateBusiness(event.data.entityId, {
-      tokenAddress: event.data.emittedFrom,
-      ownerWallet: event.data.owner,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.businessRepository.updateBusiness(event.data.entityId, {
+        tokenAddress: event.data.emittedFrom,
+        ownerWallet: event.data.owner,
+      });
+
+      await commitInbox();
+
+      return this.mapBusiness(updated);
     });
-
-    const businessDto = this.mapBusiness(updated);
-
-    return businessDto;
   }
 
   @TraceDecorator()
@@ -516,12 +526,18 @@ Response format:
       emittedFrom: string;
       isPaused: boolean;
     }>,
+    commitInbox: () => Promise<void>,
   ) {
     setSpanAttributes({ entityType: 'business', tokenAddress: event.data.emittedFrom });
-    const updated = await this.businessRepository.updateBusinessByTokenAddress(event.data.emittedFrom, {
-      paused: event.data.isPaused,
+    return mongoose.connection.transaction(async () => {
+      const updated = await this.businessRepository.updateBusinessByTokenAddress(event.data.emittedFrom, {
+        paused: event.data.isPaused,
+      });
+
+      await commitInbox();
+
+      return this.mapBusiness(updated);
     });
-    return this.mapBusiness(updated);
   }
 
   private mapBusiness(business: IBusinessEntity) {

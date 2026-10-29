@@ -22,7 +22,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'charts.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
@@ -33,7 +33,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
       .use(clientsPlugin)
       .decorate('chartsService', chartsService)
       .decorate('transactionsService', transactionsService)
-      .decorate('inboxConsumer', inboxConsumer),
+      .decorate('inboxConsumerService', inboxConsumerService),
   );
 
   return plugin;

@@ -1,10 +1,12 @@
 import { ethers, Wallet } from 'ethers';
+import mongoose from 'mongoose';
 import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { AppError } from '@shared/errors/app-errors';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 /**
  * Service for handling digital signatures
@@ -14,9 +16,10 @@ export class SignatureService {
   private readonly wallet: Wallet;
 
   constructor(
-    private readonly outboxPublisher: OutboxPublisherService,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     privateKey: string,
   ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
     this.wallet = new Wallet(privateKey);
   }
 
@@ -28,7 +31,7 @@ export class SignatureService {
   @LogDecorator({
     args: (a) => ({ hash: a[0].hash, taskId: a[0].taskId, expired: a[0].expired }),
   })
-  async signHash(task: { hash: string; taskId: string; expired: number }) {
+  async signHash(task: { hash: string; taskId: string; expired: number }, commitInbox: () => Promise<void>) {
     const { hash, taskId, expired } = task;
 
     setSpanAttributes({
@@ -48,12 +51,16 @@ export class SignatureService {
     const signer = this.wallet.address;
     const signature = await this.wallet.signMessage(ethers.getBytes(hash));
 
-    await this.outboxPublisher.publish(
-      'sign.exchange',
-      'response',
-      { taskId, signer, hash, signature },
-      `${taskId}:${signer}`,
-    );
+    await mongoose.connection.transaction(async () => {
+      await this.outboxPublisher.publish(
+        this.outboxPublisher.rabbitClient.getSignExchange(),
+        'response',
+        { taskId, signer, hash, signature },
+        `${taskId}:${signer}`,
+      );
+
+      await commitInbox();
+    });
 
     return { signer, signature };
   }

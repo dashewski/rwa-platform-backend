@@ -9,7 +9,7 @@ import { createControllersPlugin } from './plugins/controllers.plugin';
 import { createDaemonsPlugin } from './plugins/daemons.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export async function createApp(mongoUri: string, rabbitMqUri: string) {
+export async function createApp(mongoUri: string, rabbitMqUri: string, chainIds: string[]) {
   const repositoriesPlugin = await withTraceAsync(
     'portfolio.init.repositories_plugin',
     async () => await createRepositoriesPlugin(mongoUri),
@@ -17,7 +17,7 @@ export async function createApp(mongoUri: string, rabbitMqUri: string) {
 
   const clientsPlugin = await withTraceAsync(
     'portfolio.init.clients_plugin',
-    async () => await createClientsPlugin(rabbitMqUri),
+    async () => await createClientsPlugin(rabbitMqUri, chainIds),
   );
 
   const servicesPlugin = withTraceSync('portfolio.init.services_plugin', () =>

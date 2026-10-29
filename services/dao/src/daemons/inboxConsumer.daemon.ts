@@ -3,52 +3,55 @@ import { BaseInboxConsumerDaemon } from '@shared/inbox-consumer';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { DaoService } from '../services/dao.service';
 
-export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
-  constructor(
-    rabbitClient: RabbitMQClient,
-    consumerService: InboxConsumerService,
-    private readonly daoService: DaoService,
-  ) {
-    super(rabbitClient, consumerService, {
-      'blockchain.events.dao': {
-        prefetch: 1,
-        isSync: true,
-        handlers: {
-          Governance_ProposalCreated: async (event) => {
-            await this.daoService.processProposalCreated(event);
+export class InboxConsumerDaemon extends BaseInboxConsumerDaemon {
+  constructor(rabbitClient: RabbitMQClient, consumerService: InboxConsumerService, daoService: DaoService) {
+    super(
+      rabbitClient,
+      consumerService,
+      Object.fromEntries(
+        rabbitClient.getBlockchainEventsQueues().map((queue) => [
+          queue,
+          {
+            prefetch: 1,
+            isSync: true,
+            handlers: {
+              Governance_ProposalCreated: async (event, commitInbox) => {
+                await daoService.processProposalCreated(event, commitInbox);
+              },
+              Governance_ProposalExecuted: async (event, commitInbox) => {
+                await daoService.processProposalExecuted(event, commitInbox);
+              },
+              Governance_ProposalCancelled: async (event, commitInbox) => {
+                await daoService.processProposalCancelled(event, commitInbox);
+              },
+              Governance_VoteCast: async (event, commitInbox) => {
+                await daoService.processVoteCast(event, commitInbox);
+              },
+              DaoStaking_TokensStaked: async (event, commitInbox) => {
+                await daoService.processTokensStaked(event, commitInbox);
+              },
+              DaoStaking_TokensUnstaked: async (event, commitInbox) => {
+                await daoService.processTokensUnstaked(event, commitInbox);
+              },
+              DaoStaking_TokensLocked: async (event, commitInbox) => {
+                await daoService.processTokensLocked(event, commitInbox);
+              },
+              Timelock_TransactionQueued: async (event, commitInbox) => {
+                await daoService.processTransactionQueued(event, commitInbox);
+              },
+              Timelock_TransactionExecuted: async (event, commitInbox) => {
+                await daoService.processTransactionExecuted(event, commitInbox);
+              },
+              Timelock_TransactionCancelled: async (event, commitInbox) => {
+                await daoService.processTransactionCancelled(event, commitInbox);
+              },
+              Treasury_Withdrawal: async (event, commitInbox) => {
+                await daoService.processTreasuryWithdrawal(event, commitInbox);
+              },
+            },
           },
-          Governance_ProposalExecuted: async (event) => {
-            await this.daoService.processProposalExecuted(event);
-          },
-          Governance_ProposalCancelled: async (event) => {
-            await this.daoService.processProposalCancelled(event);
-          },
-          Governance_VoteCast: async (event) => {
-            await this.daoService.processVoteCast(event);
-          },
-          DaoStaking_TokensStaked: async (event) => {
-            await this.daoService.processTokensStaked(event);
-          },
-          DaoStaking_TokensUnstaked: async (event) => {
-            await this.daoService.processTokensUnstaked(event);
-          },
-          DaoStaking_TokensLocked: async (event) => {
-            await this.daoService.processTokensLocked(event);
-          },
-          Timelock_TransactionQueued: async (event) => {
-            await this.daoService.processTransactionQueued(event);
-          },
-          Timelock_TransactionExecuted: async (event) => {
-            await this.daoService.processTransactionExecuted(event);
-          },
-          Timelock_TransactionCancelled: async (event) => {
-            await this.daoService.processTransactionCancelled(event);
-          },
-          Treasury_Withdrawal: async (event) => {
-            await this.daoService.processTreasuryWithdrawal(event);
-          },
-        },
-      },
-    });
+        ]),
+      ),
+    );
   }
 }

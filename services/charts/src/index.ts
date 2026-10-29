@@ -7,6 +7,7 @@ const app = await withTraceAsync('charts.init.main', async () => {
     String(process.env.REDIS_URL),
     String(process.env.SERVICE_NAME),
     String(process.env.RABBITMQ_URL),
+    JSON.parse(String(process.env.CHAIN_IDS)),
   );
 });
 

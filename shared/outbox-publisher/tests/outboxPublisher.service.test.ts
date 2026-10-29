@@ -13,7 +13,7 @@ import { AppError } from '@shared/errors/app-errors';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { metrics } from '@shared/monitoring/src/metrics';
 import type { OutboxPublisherMessageRepository } from '../src/repositories/outboxPublisherMessage.repository';
-import { asRabbitClient, createFakeRabbitClient, EXCHANGE, type FakeRabbitClient } from './fakes';
+import { asRabbitClient, createFakeRabbitClient, EXCHANGE, type FakeRabbitClient } from './fakes/rabbitmq.client.fake';
 
 type Row = {
   _id: string;

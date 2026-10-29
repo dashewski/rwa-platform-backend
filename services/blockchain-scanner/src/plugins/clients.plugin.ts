@@ -3,10 +3,10 @@ import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createClientsPlugin = async (rabbitMqUri: string) => {
+export const createClientsPlugin = async (rabbitMqUri: string, chainId: string) => {
   const rabbitMQClient = withTraceSync(
     'blockchain-scanner.init.clients.rabbitmq',
-    () => new RabbitMQClient(rabbitMqUri),
+    () => new RabbitMQClient(rabbitMqUri, chainId),
   );
 
   await withTraceAsync('blockchain-scanner.init.clients.rabbitmq_connect', async () => {

@@ -5,9 +5,9 @@ import { metrics } from '@shared/monitoring/src/metrics';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { OutboxPublisherMessageRepository } from '../repositories/outboxPublisherMessage.repository';
 
-export class OutboxPublisherService {
+export class OutboxPublisherService<TRabbitMQClient extends BaseRabbitMQClient = BaseRabbitMQClient> {
   constructor(
-    public readonly rabbitClient: BaseRabbitMQClient,
+    public readonly rabbitClient: TRabbitMQClient,
     private readonly outboxPublisherMessageRepository: OutboxPublisherMessageRepository,
   ) {}
 

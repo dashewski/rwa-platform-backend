@@ -60,6 +60,7 @@ function buildApp(signatures: FakeSignatureRepository, tasks: FakeSignatureTaskR
     });
 
   const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('rabbitMQClient', {
+    getSignExchange: () => 'sign.exchange',
     isExchangeRegistered: mock(() => true),
     publish: mock(async () => undefined),
   });
@@ -142,8 +143,10 @@ describe('signers-manager HTTP layer (component, fake repositories and outbox)',
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });
     expect(fetched.status).toBe(200);
-    expect(fetched.body).toEqual(created.body);
-    expect(fetched.body.signatures).toBeUndefined(); // an open task exposes no signatures
+
+    const { signatures, ...fetchedTask } = fetched.body;
+    expect(fetchedTask).toEqual(created.body);
+    expect(signatures).toEqual([]); // an open task carries no signatures yet
   });
 
   test('createSignatureTask: an invalid payload never reaches the service', async () => {
@@ -176,7 +179,10 @@ describe('signers-manager HTTP layer (component, fake repositories and outbox)',
   test('getSignatureTask: a completed task exposes its signatures without ids', async () => {
     const created = await post(app, '/createSignatureTask', { ...TASK, requiredSignatures: 1 });
     // Simulate what the responses inbox does once a signer replies.
-    await signaturesService.addSignature({ taskId: created.body.id, signer: SIGNER_1, signature: SIGNATURE_1 });
+    await signaturesService.addSignature(
+      { taskId: created.body.id, signer: SIGNER_1, signature: SIGNATURE_1 },
+      async () => undefined,
+    );
 
     const fetched = await post(app, '/getSignatureTask', { taskId: created.body.id });
 

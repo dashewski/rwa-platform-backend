@@ -14,7 +14,7 @@ export class ScannerStateRepository {
   }
 
   @TraceDecorator()
-  async update(chainId: number, data: Pick<IScannerStateEntity, 'lastScannedBlock'>) {
+  async update(chainId: string, data: Pick<IScannerStateEntity, 'lastScannedBlock'>) {
     const doc = await this.model.findOneAndUpdate({ chainId }, data, { new: true }).lean();
 
     if (!doc) {
@@ -29,7 +29,7 @@ export class ScannerStateRepository {
   }
 
   @TraceDecorator()
-  async delete(chainId: number) {
+  async delete(chainId: string) {
     const doc = await this.model.findOneAndDelete({ chainId }).lean();
 
     if (!doc) {

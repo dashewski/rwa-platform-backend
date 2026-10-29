@@ -2,6 +2,9 @@ import { createApp } from './app';
 import { withTraceAsync } from '@shared/monitoring/src/tracing';
 import { buildFilesBaseUrl } from '@shared/files/src/index';
 
+const chainIds: string[] = JSON.parse(String(process.env.CHAIN_IDS));
+const factories: Record<string, string> = JSON.parse(String(process.env.FACTORIES));
+
 const app = await withTraceAsync('rwa.init.main', async () => {
   return await createApp(
     String(process.env.MONGODB_URI) + '/' + String(process.env.MONGODB_DBNAME),
@@ -12,14 +15,8 @@ const app = await withTraceAsync('rwa.init.main', async () => {
     String(process.env.OPENROUTER_MODEL),
     String(process.env.RABBITMQ_URL),
     String(process.env.SIGNERS_MANAGER_URL),
-    String(process.env.AI_EVALUATOR_URL),
-    [
-      {
-        chainId: '97',
-        name: 'BSC Testnet',
-        factoryAddress: '0xF46A71cac8B1A8F734559Cc4367CD1546A1A29bF',
-      },
-    ],
+    chainIds.map((chainId) => ({ chainId, factoryAddress: factories[chainId] })),
+    chainIds,
     `https://${String(process.env.BASE_DOMAIN)}${String(process.env.PLACEHOLDER_IMAGE_PATH)}`,
     buildFilesBaseUrl(String(process.env.BASE_DOMAIN), String(process.env.FILES_URL_PATH)),
   );

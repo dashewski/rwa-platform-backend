@@ -75,16 +75,30 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
     restoreLogs();
   });
 
+  async function waitForSettled(settledBefore: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (rabbit.state.acked.length + rabbit.state.nacked.length > settledBefore) return;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    throw new Error('the delivery did not settle (no ack / nack)');
+  }
+
   async function deliver(message: ConsumeMessage): Promise<void> {
     const handler = rabbit.state.handlers.get(RESPONSES_QUEUE);
     if (!handler) throw new Error('the daemon never subscribed to the responses queue');
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length;
+
+    // The queue is parallel (isSync=false): the consumer handler returns before
+    // the delivery is acked, so the outcome has to be awaited separately.
     await handler(message);
+    await waitForSettled(settled);
   }
 
-  test('subscribes to sign.responses with prefetch 1', async () => {
+  test('subscribes to sign.responses with prefetch 5', async () => {
     await daemon.initialize();
 
-    expect(rabbit.state.consumedOptions).toEqual([{ queue: RESPONSES_QUEUE, options: { prefetch: 1 } }]);
+    expect(rabbit.state.consumedOptions).toEqual([{ queue: RESPONSES_QUEUE, options: { prefetch: 5 } }]);
     expect(logLines.some((line) => line.includes(`subscribed to ${RESPONSES_QUEUE}`))).toBe(true);
   });
 
@@ -97,30 +111,24 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
     expect(rabbit.state.acked).toHaveLength(1);
   });
 
-  test('the queue deferAfterAttempts is passed to the consumer service', async () => {
-    rabbit.state.deferAfterAttempts = 3;
+  test('an exhausted delivery goes to the retry queue (requeue=false)', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
+    signatures.state.error = new Error('Task already completed');
 
     await deliver(makeMessage('response', RESPONSE));
 
-    expect(consumer.state.handles[0].maxAttempts).toBe(3);
-  });
-
-  test('a deferred delivery is handed to the retry queue (requeue=false)', async () => {
-    await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
-
-    await deliver(makeMessage('response', RESPONSE));
-
+    expect(consumer.state.commits).toEqual([]);
     expect(rabbit.state.nacked).toHaveLength(1);
     expect(rabbit.state.nacked[0].requeue).toBe(false);
     expect(rabbit.state.acked).toHaveLength(0);
   });
 
   test('after parkAfterCycles retry cycles the message is parked and acked', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     rabbit.state.parkAfterCycles = 1;
     await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
+    signatures.state.error = new Error('Task already completed');
 
     await deliver(
       makeMessage('response', RESPONSE, {
@@ -141,13 +149,12 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
   });
 
   test('a service failure is left to the inbox (no ack)', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
     signatures.state.error = new Error('Task already completed');
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('response', RESPONSE));
 
-    expect(consumer.state.handlerError).toBeInstanceOf(Error);
     expect(rabbit.state.acked).toHaveLength(0);
     expect(rabbit.state.nacked).toHaveLength(1);
   });
@@ -163,8 +170,8 @@ describe('signers-manager InboxConsumerDaemon (unit, fake client + fake services
   });
 
   test('a body that is not valid JSON never reaches the service', async () => {
+    rabbit.state.deferAfterAttempts = 1;
     await daemon.initialize();
-    consumer.state.nextOutcome = 'deferred';
 
     await deliver(makeMessage('response', {}, { raw: 'not-json{' }));
 

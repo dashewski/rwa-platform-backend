@@ -9,17 +9,39 @@ import { mock } from 'bun:test';
 
 export function createFakeDaoService() {
   return {
-    processProposalCreated: mock(async (_event: unknown): Promise<void> => {}),
-    processProposalExecuted: mock(async (_event: unknown): Promise<void> => {}),
-    processProposalCancelled: mock(async (_event: unknown): Promise<void> => {}),
-    processVoteCast: mock(async (_event: unknown): Promise<void> => {}),
-    processTokensStaked: mock(async (_event: unknown): Promise<void> => {}),
-    processTokensUnstaked: mock(async (_event: unknown): Promise<void> => {}),
-    processTokensLocked: mock(async (_event: unknown): Promise<void> => {}),
-    processTransactionQueued: mock(async (_event: unknown): Promise<void> => {}),
-    processTransactionExecuted: mock(async (_event: unknown): Promise<void> => {}),
-    processTransactionCancelled: mock(async (_event: unknown): Promise<void> => {}),
-    processTreasuryWithdrawal: mock(async (_event: unknown): Promise<void> => {}),
+    processProposalCreated: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processProposalExecuted: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processProposalCancelled: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processVoteCast: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTokensStaked: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTokensUnstaked: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTokensLocked: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTransactionQueued: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTransactionExecuted: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTransactionCancelled: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
+    processTreasuryWithdrawal: mock(async (_event: unknown, commitInbox: () => Promise<void>): Promise<void> => {
+      await commitInbox();
+    }),
   };
 }
 

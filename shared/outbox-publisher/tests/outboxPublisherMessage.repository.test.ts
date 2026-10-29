@@ -7,8 +7,8 @@
 import './setup';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Types } from 'mongoose';
-import type { Model } from 'mongoose';
 import { OutboxPublisherMessageRepository } from '../src/repositories/outboxPublisherMessage.repository';
+import { OutboxPublisherMessageEntity } from '../src/models/entity/outboxPublisherMessage.entity';
 
 const EXCHANGE = 'blockchain.events';
 const OTHER_EXCHANGE = 'evaluation';
@@ -69,7 +69,7 @@ function createFakeModel() {
 type FakeModel = ReturnType<typeof createFakeModel>;
 
 function repoWith(model: FakeModel): OutboxPublisherMessageRepository {
-  return new OutboxPublisherMessageRepository(model as unknown as Model<unknown>);
+  return new OutboxPublisherMessageRepository(model as unknown as typeof OutboxPublisherMessageEntity);
 }
 
 describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
@@ -132,7 +132,7 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
 
       const claimed = await repository.claimNext(EXCHANGE);
 
-      expect(claimed).toEqual({ _id: 'row-1', status: 'sending' });
+      expect(claimed as unknown).toEqual({ _id: 'row-1', status: 'sending' });
       expect(model.state.claimCalls).toHaveLength(1);
 
       const call = model.state.claimCalls[0];
@@ -161,7 +161,7 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
   });
 
   describe('markSent', () => {
-    test('marks the row sent, stamps sentAt and schedules the 30-day TTL', async () => {
+    test('marks the row sent and stamps sentAt', async () => {
       const id = new Types.ObjectId();
       const before = Math.floor(Date.now() / 1000);
 
@@ -169,16 +169,11 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
 
       const { filter, update } = model.state.markSentCalls[0] as {
         filter: { _id: Types.ObjectId };
-        update: { $set: { status: string; sentAt: number; expiresAt: Date } };
+        update: { $set: { status: string; sentAt: number } };
       };
       expect(filter).toEqual({ _id: id });
-      expect(update.$set.status).toBe('sent');
+      expect(update.$set).toEqual({ status: 'sent', sentAt: expect.any(Number) });
       expect(update.$set.sentAt).toBeGreaterThanOrEqual(before);
-      expect(update.$set.expiresAt).toBeInstanceOf(Date);
-
-      const ttlDays = (update.$set.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
-      expect(ttlDays).toBeGreaterThan(29.9);
-      expect(ttlDays).toBeLessThan(30.1);
     });
   });
 
@@ -189,7 +184,7 @@ describe('OutboxPublisherMessageRepository (unit, fake model)', () => {
 
       const updated = await repository.markAttemptFailed(id, 5);
 
-      expect(updated).toEqual({ _id: id, attempts: 2, status: 'sending' });
+      expect(updated as unknown).toEqual({ _id: id, attempts: 2, status: 'sending' });
       const call = model.state.markAttemptCalls[0];
       expect(call.filter).toEqual({ _id: id });
       expect(call.update).toEqual([

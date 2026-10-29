@@ -1,21 +1,21 @@
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
-import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { OutboxPublisherService } from '../services/outboxPublisher.service';
 
-export abstract class BaseOutboxPublisherDaemon<TRabbitMQClient extends BaseRabbitMQClient = BaseRabbitMQClient> {
+export abstract class BaseOutboxPublisherDaemon {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private stopped = false;
 
   constructor(
     private readonly publisherService: OutboxPublisherService,
     private readonly pollIntervalMs: number,
-    private readonly exchangesConfig: {
-      [E in keyof ReturnType<TRabbitMQClient['getTopologyDefinition']>['exchanges']]: {
+    private readonly exchangesConfig: Record<
+      string,
+      {
         isSync: boolean;
         concurrency: number;
         maxAttempts: number;
-      };
-    },
+      }
+    >,
   ) {}
 
   async initialize() {

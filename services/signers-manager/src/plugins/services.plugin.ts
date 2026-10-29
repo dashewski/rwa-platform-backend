@@ -7,7 +7,7 @@ import type { RepositoriesPlugin } from './repositories.plugin';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
 export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, clientsPlugin: ClientsPlugin) => {
-  const outboxPublisher = withTraceSync(
+  const outboxPublisherService = withTraceSync(
     'signers-manager.init.services.outbox_publisher',
     () =>
       new OutboxPublisherService(
@@ -16,7 +16,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
       ),
   );
 
-  const inboxConsumer = withTraceSync(
+  const inboxConsumerService = withTraceSync(
     'signers-manager.init.services.inbox_consumer',
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
@@ -27,7 +27,7 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
       new SignaturesService(
         repositoriesPlugin.decorator.signatureRepository,
         repositoriesPlugin.decorator.signatureTaskRepository,
-        outboxPublisher,
+        outboxPublisherService,
       ),
   );
 
@@ -35,8 +35,8 @@ export const createServicesPlugin = (repositoriesPlugin: RepositoriesPlugin, cli
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
       .use(clientsPlugin)
-      .decorate('outboxPublisher', outboxPublisher)
-      .decorate('inboxConsumer', inboxConsumer)
+      .decorate('outboxPublisherService', outboxPublisherService)
+      .decorate('inboxConsumerService', inboxConsumerService)
       .decorate('signaturesService', signaturesService),
   );
 

@@ -5,7 +5,7 @@ import { ChartEventsClient } from '../clients/redis.client';
 import { RabbitMQClient } from '../clients/rabbitmq.client';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
-export const createClientsPlugin = async (redisUrl: string, serviceName: string, rabbitMqUri: string) => {
+export const createClientsPlugin = async (redisUrl: string, serviceName: string, rabbitMqUri: string, chainIds: string[]) => {
   const redisEventsClient = withTraceSync(
     'charts.init.clients.redis_events',
     () => new RedisEventsClient(redisUrl, serviceName),
@@ -16,7 +16,7 @@ export const createClientsPlugin = async (redisUrl: string, serviceName: string,
     () => new ChartEventsClient(redisEventsClient),
   );
 
-  const rabbitMQClient = withTraceSync('charts.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri));
+  const rabbitMQClient = withTraceSync('charts.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri, chainIds));
 
   await withTraceAsync('charts.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');

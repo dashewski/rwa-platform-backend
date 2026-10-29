@@ -11,7 +11,8 @@ const app = await withTraceAsync('blockchain-scanner.init.main', async () => {
     Number(process.env.SCAN_INTERVAL),
     Number(process.env.BATCH_SIZE),
     String(process.env.CHAIN_ID),
-    Number(process.env.INIT_SCAN_BLOCK_NUMBER ?? process.env.initScanBlockNumber),
+    Number(process.env.INIT_SCAN_BLOCK_NUMBER),
+    String(process.env.BLOCK_TAG),
   );
 });
 

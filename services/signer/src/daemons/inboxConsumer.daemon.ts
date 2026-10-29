@@ -3,19 +3,19 @@ import { BaseInboxConsumerDaemon } from '@shared/inbox-consumer';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { SignatureService } from '../services/signature.service';
 
-export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
+export class InboxConsumerDaemon extends BaseInboxConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
     consumerService: InboxConsumerService,
     private readonly signatureService: SignatureService,
   ) {
     super(rabbitClient, consumerService, {
-      [`sign.requests.${rabbitClient.channelName}`]: {
-        prefetch: 1,
-        isSync: true,
+      [rabbitClient.getSignRequestsQueue()]: {
+        prefetch: 5,
+        isSync: false,
         handlers: {
-          task: async (request) => {
-            await this.signatureService.signHash(request);
+          task: async (request, commitInbox) => {
+            await this.signatureService.signHash(request, commitInbox);
           },
         },
       },

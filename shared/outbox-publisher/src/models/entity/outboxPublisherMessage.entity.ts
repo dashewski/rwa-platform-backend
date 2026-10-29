@@ -41,9 +41,10 @@ const outboxPublisherMessageSchemaDefinition = {
     type: Number,
     default: () => Math.floor(Date.now() / 1000),
   },
-  expiresAt: {
+  ttlDate: {
     type: Date,
-    default: null,
+    required: true,
+    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   },
 } as const;
 
@@ -53,7 +54,7 @@ export const outboxPublisherMessageSchema = new Schema(outboxPublisherMessageSch
 
 outboxPublisherMessageSchema.index({ exchange: 1, status: 1, _id: 1 });
 outboxPublisherMessageSchema.index({ exchange: 1, messageId: 1 }, { unique: true });
-outboxPublisherMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+outboxPublisherMessageSchema.index({ ttlDate: 1 }, { expireAfterSeconds: 0 });
 
 type InferredOutboxPublisherMessage = InferRawDocType<typeof outboxPublisherMessageSchemaDefinition>;
 

@@ -105,6 +105,8 @@ export function createConsumeMessage(body: unknown, routingKey = 'requests'): Co
   const content = typeof body === 'string' ? body : JSON.stringify(body);
 
   return {
+    getEvaluationRequestsQueue: () => 'evaluation.requests',
+
     content: Buffer.from(content),
     fields: {
       routingKey,

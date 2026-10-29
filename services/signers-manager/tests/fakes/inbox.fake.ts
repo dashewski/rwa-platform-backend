@@ -6,7 +6,7 @@ import { mock } from 'bun:test';
 import type { ConsumeMessage } from 'amqplib';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
-import type { SignaturesService } from '../src/services/signatures.service';
+import type { SignaturesService } from '../../src/services/signatures.service';
 
 export const RESPONSES_QUEUE = 'sign.responses';
 
@@ -53,6 +53,8 @@ export function createFakeRabbitClient() {
     state,
     channelName: 'signers-manager',
 
+    getSignResponsesQueue: () => RESPONSES_QUEUE,
+
     consume: mock(
       async (
         queue: string,
@@ -97,35 +99,19 @@ export const asRabbitClient = (fake: FakeRabbitClient): BaseRabbitMQClient => fa
 
 export function createFakeConsumerService() {
   const state = {
-    nextOutcome: 'acked' as 'acked' | 'deferred',
-    handles: [] as Array<{ queueName: string; message: ConsumeMessage; maxAttempts?: number }>,
-    runHandler: true,
-    handlerError: null as unknown,
+    markers: new Set<string>(),
+    commits: [] as string[],
   };
 
   const service = {
     state,
 
-    handle: mock(
-      async (
-        queueName: string,
-        message: ConsumeMessage,
-        handler: () => Promise<void>,
-        maxAttempts?: number,
-      ): Promise<'acked' | 'deferred'> => {
-        state.handles.push({ queueName, message, maxAttempts });
+    commit: mock(async (messageId: string): Promise<void> => {
+      state.commits.push(messageId);
+      state.markers.add(messageId);
+    }),
 
-        if (state.runHandler) {
-          try {
-            await handler();
-          } catch (error) {
-            state.handlerError = error;
-          }
-        }
-
-        return state.nextOutcome;
-      },
-    ),
+    isCommitted: mock(async (messageId: string): Promise<boolean> => state.markers.has(messageId)),
   };
 
   return service;
@@ -145,11 +131,17 @@ export function createFakeSignaturesService() {
   const service = {
     state,
 
-    addSignature: mock(async (response: { taskId: string; signer: string; hash: string; signature: string }) => {
-      if (state.error) throw state.error;
-      state.responses.push(response);
-      return { signature: { id: 'sig-1' }, isCompleted: false };
-    }),
+    addSignature: mock(
+      async (
+        response: { taskId: string; signer: string; hash: string; signature: string },
+        commitInbox: () => Promise<void>,
+      ) => {
+        if (state.error) throw state.error;
+        await commitInbox();
+        state.responses.push(response);
+        return { signature: { id: 'sig-1' }, isCompleted: false };
+      },
+    ),
   };
 
   return service;

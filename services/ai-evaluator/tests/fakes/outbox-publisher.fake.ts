@@ -12,6 +12,7 @@ export function createFakeOutboxPublisher() {
   const published: Array<Record<string, unknown>> = [];
 
   const publisher = {
+    rabbitClient: { getEvaluationExchange: () => 'evaluation' },
     published,
 
     publish: mock(

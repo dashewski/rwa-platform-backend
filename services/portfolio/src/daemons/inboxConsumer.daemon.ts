@@ -3,22 +3,29 @@ import { BaseInboxConsumerDaemon } from '@shared/inbox-consumer';
 import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { PortfolioService } from '../services/portfolio.service';
 
-export class InboxConsumerDaemon extends BaseInboxConsumerDaemon<RabbitMQClient> {
+export class InboxConsumerDaemon extends BaseInboxConsumerDaemon {
   constructor(
     rabbitClient: RabbitMQClient,
     consumerService: InboxConsumerService,
-    private readonly portfolioService: PortfolioService,
+    portfolioService: PortfolioService,
   ) {
-    super(rabbitClient, consumerService, {
-      'blockchain.events.portfolio': {
-        prefetch: 1,
-        isSync: true,
-        handlers: {
-          RWA_Transfer: async (event) => {
-            await this.portfolioService.processTransfer(event);
+    super(
+      rabbitClient,
+      consumerService,
+      Object.fromEntries(
+        rabbitClient.getBlockchainEventsQueues().map((queue) => [
+          queue,
+          {
+            prefetch: 1,
+            isSync: true,
+            handlers: {
+              RWA_Transfer: async (event, commitInbox) => {
+                await portfolioService.processTransfer(event, commitInbox);
+              },
+            },
           },
-        },
-      },
-    });
+        ]),
+      ),
+    );
   }
 }

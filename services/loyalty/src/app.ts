@@ -15,6 +15,7 @@ export async function createApp(
   signersManagerUrl: string,
   referralRewardPercentage: number,
   supportedNetworks: any[],
+  chainIds: string[],
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'loyalty.init.repositories_plugin',
@@ -23,7 +24,7 @@ export async function createApp(
 
   const clientsPlugin = await withTraceAsync(
     'loyalty.init.clients_plugin',
-    async () => await createClientsPlugin(signersManagerUrl, rabbitMqUri),
+    async () => await createClientsPlugin(signersManagerUrl, rabbitMqUri, chainIds),
   );
 
   const servicesPlugin = withTraceSync('loyalty.init.services_plugin', () =>

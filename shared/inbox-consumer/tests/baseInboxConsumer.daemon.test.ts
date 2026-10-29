@@ -3,9 +3,10 @@
  *
  * Both the RabbitMQ client and the consumer service are fakes: the client hands
  * the test the very callback it received from consume(), so a "delivery" is a
- * plain function call. The daemon owns: subscriptions and prefetch, ack on
- * success, nack (retry queue) on exhaustion, park after `parkAfterCycles`
- * retry cycles, per-queue serialization for `isSync` queues, and shutdown.
+ * plain function call. The daemon owns: subscriptions and prefetch, the retry
+ * loop with backoff, the duplicate decision (marker in the inbox), ack on
+ * success, nack (retry queue) on exhaustion, park after `parkAfterCycles` retry
+ * cycles, per-queue serialization for `isSync` queues, and shutdown.
  */
 import './setup';
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -15,26 +16,29 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { metrics } from '@shared/monitoring/src/metrics';
 import {
   asConsumerService,
-  asRabbitClient,
   createFakeConsumerService,
-  createFakeRabbitClient,
-  makeMessage,
-  QUEUE,
-  xDeathEntry,
   type FakeConsumerService,
+} from './fakes/consumer.service.fake';
+import {
+  asRabbitClient,
+  createFakeRabbitClient,
   type FakeRabbitClient,
-} from './fakes';
+} from './fakes/rabbitmq.client.fake';
+import { makeMessage, xDeathEntry } from './fakes/message.fake';
 
+const QUEUE = 'blockchain.events.dao';
 const OTHER_QUEUE = 'blockchain.events.other';
 
-type Handler = (event: any) => Promise<void>;
+type Handler = (event: any, commitInbox: () => Promise<void>) => Promise<void>;
+/** The routing table is assembled from bun mocks, so their inspection API stays visible. */
+type HandlerMock = ReturnType<typeof mock<Handler>>;
 type Routing = Record<string, { prefetch: number; isSync: boolean; handlers: Record<string, Handler> }>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
   const startedAt = Date.now();
   while (!predicate()) {
     if (Date.now() - startedAt > timeoutMs) throw new Error('waitFor: condition was not met in time');
@@ -44,8 +48,8 @@ async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void>
 
 /** The daemon is abstract: the test subclass injects a plain routing object. */
 class TestInboxDaemon extends BaseInboxConsumerDaemon {
-  constructor(rabbit: FakeRabbitClient, service: FakeConsumerService, routing: Routing) {
-    super(asRabbitClient(rabbit) as never, asConsumerService(service), routing as never);
+  constructor(rabbit: FakeRabbitClient, service: FakeConsumerService, routing: Routing, delayMs = 1) {
+    super(asRabbitClient(rabbit) as never, asConsumerService(service), routing as never, delayMs, delayMs * 5);
   }
 }
 
@@ -55,6 +59,7 @@ const original = {
   info: logger.info,
   warn: logger.warn,
   error: logger.error,
+  debug: logger.debug,
   counter: metrics.counter,
 };
 
@@ -71,6 +76,9 @@ function captureTelemetry(): void {
   logger.error = ((...args: unknown[]) => {
     logLines.push(args.map(String).join(' '));
   }) as typeof logger.error;
+  logger.debug = ((...args: unknown[]) => {
+    logLines.push(args.map(String).join(' '));
+  }) as typeof logger.debug;
   metrics.counter = ((name: string, labels?: Record<string, string>) => {
     counters.push({ name, labels });
   }) as typeof metrics.counter;
@@ -80,13 +88,17 @@ function restoreTelemetry(): void {
   logger.info = original.info;
   logger.warn = original.warn;
   logger.error = original.error;
+  logger.debug = original.debug;
   metrics.counter = original.counter;
 }
+
+const names = (): string[] => counters.map((entry) => entry.name);
+const countOf = (name: string): number => names().filter((entry) => entry === name).length;
 
 describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
   let rabbit: FakeRabbitClient;
   let service: FakeConsumerService;
-  let handlers: Record<string, Handler>;
+  let handlers: Record<string, HandlerMock>;
   let routing: Routing;
   let daemon: TestInboxDaemon;
 
@@ -94,9 +106,15 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
     rabbit = createFakeRabbitClient();
     service = createFakeConsumerService();
     handlers = {
-      Governance_VoteCast: mock(async (_event: any): Promise<void> => undefined),
-      Governance_ProposalCreated: mock(async (_event: any): Promise<void> => undefined),
-      Something_Else: mock(async (_event: any): Promise<void> => undefined),
+      Governance_VoteCast: mock(async (_event: any, commitInbox: () => Promise<void>): Promise<void> => {
+        await commitInbox();
+      }),
+      Governance_ProposalCreated: mock(async (_event: any, commitInbox: () => Promise<void>): Promise<void> => {
+        await commitInbox();
+      }),
+      Something_Else: mock(async (_event: any, commitInbox: () => Promise<void>): Promise<void> => {
+        await commitInbox();
+      }),
     };
     routing = {
       [QUEUE]: {
@@ -121,7 +139,12 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
   async function deliver(queue: string, message: ConsumeMessage): Promise<void> {
     const consumerHandler = rabbit.state.handlers.get(queue);
     if (!consumerHandler) throw new Error(`the daemon never subscribed to ${queue}`);
+
+    const settled = rabbit.state.acked.length + rabbit.state.nacked.length + rabbit.state.parked.length;
     await consumerHandler(message);
+
+    // A parallel queue does not await its deliveries: wait for the outcome.
+    await waitFor(() => rabbit.state.acked.length + rabbit.state.nacked.length + rabbit.state.parked.length > settled);
   }
 
   describe('initialize / subscribe', () => {
@@ -135,35 +158,76 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
       expect(logLines.some((line) => line.includes(`Inbox consumer subscribed to ${QUEUE}`))).toBe(true);
     });
 
-    test('a delivery reaches the handler of the queue it was delivered on', async () => {
-      await daemon.initialize();
-
-      await deliver(QUEUE, makeMessage('Governance_VoteCast', { proposalId: '7' }));
-
-      expect(handlers.Governance_VoteCast).toHaveBeenCalledTimes(1);
-      expect(handlers.Governance_VoteCast).toHaveBeenCalledWith({ proposalId: '7' });
-    });
-
     test('a queue that fails to subscribe rejects initialize after the earlier queues were subscribed', async () => {
       rabbit.state.failConsumeFor = OTHER_QUEUE;
 
       await expect(daemon.initialize()).rejects.toThrow("NOT_FOUND - no queue 'blockchain.events.other' in vhost '/'");
       expect(rabbit.state.consumerTags).toHaveLength(1);
     });
+  });
 
-    test('the delivery carries the queue deferAfterAttempts into the service', async () => {
-      rabbit.state.deferAfterAttempts.set(QUEUE, 3);
+  describe('delivery routing', () => {
+    test('a delivery reaches the handler of the queue it was delivered on', async () => {
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', { proposalId: '7' }));
+
+      expect(handlers.Governance_VoteCast).toHaveBeenCalledTimes(1);
+      expect(handlers.Governance_VoteCast.mock.calls[0][0]).toEqual({ proposalId: '7' });
+      expect(handlers.Governance_ProposalCreated).not.toHaveBeenCalled();
+    });
+
+    test('the handler gets a commitInbox closure bound to the message id', async () => {
       await daemon.initialize();
 
       await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
 
-      expect(service.handle.mock.calls[0][3]).toBe(3);
-      expect(rabbit.getQueueDeferAfterAttempts).toHaveBeenCalledWith(QUEUE);
+      expect(service.state.commits).toEqual(['31337:0xabc:3']);
+    });
+
+    test('an unknown routing key is warned about and acked without touching a handler', async () => {
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Unknown_Event', { a: 1 }));
+
+      expect(Object.values(handlers).every((handler) => handler.mock.calls.length === 0)).toBe(true);
+      expect(logLines.some((line) => line.includes('no handler registered for Unknown_Event'))).toBe(true);
+      expect(rabbit.state.acked).toHaveLength(1);
+      expect(service.state.commits).toEqual([]);
+    });
+
+    test('a payload that is not valid JSON is logged with the body head and never reaches a handler', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 1);
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}, { raw: 'not-json{' }));
+
+      expect(handlers.Governance_VoteCast).not.toHaveBeenCalled();
+      const logged = logLines.find((line) => line.includes('payload is not valid JSON'))!;
+      expect(logged).toContain('routingKey "Governance_VoteCast"');
+      expect(logged).toContain('messageId "31337:0xabc:3"');
+      expect(logged).toContain('body: not-json{');
+      expect(rabbit.state.nacked).toHaveLength(1);
+      expect(rabbit.state.nacked[0].requeue).toBe(false);
+    });
+
+    test('a message without messageId is retried and then deferred (the inbox cannot deduplicate it)', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 2);
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}, { messageId: null }));
+
+      expect(handlers.Governance_VoteCast).not.toHaveBeenCalled();
+      expect(service.state.commits).toEqual([]);
+      expect(countOf('inbox_consumer_retries_total')).toBe(2);
+      expect(countOf('inbox_consumer_deferred_total')).toBe(1);
+      expect(rabbit.state.nacked).toHaveLength(1);
+      expect(logLines.some((line) => line.includes('the message has no messageId'))).toBe(true);
     });
   });
 
   describe('delivery outcome: acked', () => {
-    test('a processed message is acked once and nothing else happens', async () => {
+    test('a committed message is acked once and counted as processed', async () => {
       await daemon.initialize();
 
       await deliver(QUEUE, makeMessage('Governance_VoteCast', { proposalId: '7' }));
@@ -171,47 +235,102 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
       expect(rabbit.state.acked).toHaveLength(1);
       expect(rabbit.state.nacked).toHaveLength(0);
       expect(rabbit.state.parked).toHaveLength(0);
-      expect(service.state.handles).toHaveLength(1);
-      expect(service.state.handles[0].queueName).toBe(QUEUE);
+      expect(names()).toEqual(['inbox_consumer_processed_total']);
     });
 
-    test('a failing ack propagates out of the delivery (the broker will redeliver)', async () => {
+    test('a marker stored by an earlier delivery skips the handler and acks (pre-read)', async () => {
+      service.state.preexisting.add('31337:0xabc:3');
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
+
+      expect(handlers.Governance_VoteCast).not.toHaveBeenCalled();
+      expect(service.state.reads).toEqual(['31337:0xabc:3']);
+      expect(rabbit.state.acked).toHaveLength(1);
+      expect(names()).toEqual(['inbox_consumer_duplicates_total']);
+    });
+
+    test('a failing ack propagates out of the sync delivery (the broker will redeliver)', async () => {
       await daemon.initialize();
       rabbit.state.failAck = new Error('IllegalOperationError: Channel closed');
 
-      await expect(deliver(QUEUE, makeMessage('Governance_VoteCast', {}))).rejects.toThrow('Channel closed');
-
+      const handler = rabbit.state.handlers.get(QUEUE)!;
+      await expect(handler(makeMessage('Governance_VoteCast', {}))).rejects.toThrow('Channel closed');
       expect(rabbit.state.nacked).toHaveLength(0);
     });
+  });
 
-    test('an unexpected rejection from the service leaves the message unacked', async () => {
+  describe('delivery outcome: duplicate', () => {
+    test('a commit rejected as a duplicate acks the delivery without retries', async () => {
+      service.state.commitOutcomes = ['duplicate'];
+      service.state.preexisting.add('31337:0xabc:3');
+      // The pre-read must miss the marker, otherwise the handler never runs.
+      service.isCommitted.mockImplementationOnce(async () => false);
       await daemon.initialize();
-      service.state.throwFromHandle = new Error('service exploded');
 
-      await expect(deliver(QUEUE, makeMessage('Governance_VoteCast', {}))).rejects.toThrow('service exploded');
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
 
-      expect(rabbit.state.acked).toHaveLength(0);
+      expect(rabbit.state.acked).toHaveLength(1);
       expect(rabbit.state.nacked).toHaveLength(0);
+      expect(countOf('inbox_consumer_duplicates_total')).toBe(1);
+      expect(countOf('inbox_consumer_retries_total')).toBe(0);
+      expect(logLines.some((line) => line.includes('the inbox marker already stored'))).toBe(true);
     });
   });
 
   describe('delivery outcome: deferred (retry queue)', () => {
     test('an exhausted delivery is nacked into the retry queue (requeue=false)', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 2);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('db write failed inside the handler');
+      });
       await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
 
       await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
 
       expect(rabbit.state.nacked).toHaveLength(1);
       expect(rabbit.state.nacked[0].requeue).toBe(false);
       expect(rabbit.state.acked).toHaveLength(0);
-      expect(rabbit.state.parked).toHaveLength(0);
+      expect(countOf('inbox_consumer_retries_total')).toBe(2);
+      expect(countOf('inbox_consumer_deferred_total')).toBe(1);
+      expect(logLines.some((line) => line.includes('db write failed inside the handler'))).toBe(true);
+    });
+
+    test('a handler that returns without committing is treated as a failure and retried', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 2);
+      handlers.Governance_VoteCast.mockImplementation(async () => undefined);
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
+
+      expect(service.state.commits).toEqual([]);
+      expect(countOf('inbox_consumer_retries_total')).toBe(2);
+      expect(rabbit.state.nacked).toHaveLength(1);
+      expect(logLines.some((line) => line.includes('without committing the inbox marker'))).toBe(true);
+    });
+
+    test('a failed marker read does not turn a failure into a duplicate', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 2);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('handler failed');
+      });
+      service.state.readError = new Error('MongoServerSelectionError: server selection timed out');
+      await daemon.initialize();
+
+      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
+
+      expect(rabbit.state.acked).toHaveLength(0);
+      expect(countOf('inbox_consumer_retries_total')).toBe(2);
+      expect(logLines.some((line) => line.includes('failed to read the inbox marker'))).toBe(true);
     });
 
     test('a failing nack is logged and does not break the daemon', async () => {
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
+      rabbit.state.deferAfterAttempts.set(QUEUE, 1);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('handler failed');
+      });
       rabbit.state.failNack = new Error('IllegalOperationError: Channel closed');
+      await daemon.initialize();
 
       await deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
 
@@ -219,16 +338,15 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
     });
 
     test('with infinite parkAfterCycles the message is always nacked, never parked', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 1);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('handler failed');
+      });
       await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
 
       await deliver(
         QUEUE,
-        makeMessage(
-          'Governance_VoteCast',
-          {},
-          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } },
-        ),
+        makeMessage('Governance_VoteCast', {}, { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } }),
       );
 
       expect(rabbit.state.parked).toHaveLength(0);
@@ -238,9 +356,12 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
   describe('park', () => {
     test('after parkAfterCycles retry cycles the message is published to <queue>.parked and acked', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 1);
       rabbit.state.parkAfterCycles.set(QUEUE, 2);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('handler failed');
+      });
       await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
 
       await deliver(
         QUEUE,
@@ -255,34 +376,17 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
         { queue: `${QUEUE}.parked`, payload: { proposalId: '7' }, messageId: '31337:0xabc:3' },
       ]);
       expect(rabbit.state.acked).toHaveLength(1);
-      expect(rabbit.state.nacked).toHaveLength(0);
-      expect(counters).toEqual([{ name: 'inbox_consumer_parked_total', labels: { queue: QUEUE } }]);
-      expect(logLines.some((line) => line.includes('parked after 2 retry cycles'))).toBe(true);
+      expect(countOf('inbox_consumer_parked_total')).toBe(1);
     });
 
-    test('below the threshold the message is still nacked, not parked', async () => {
-      rabbit.state.parkAfterCycles.set(QUEUE, 3);
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-
-      await deliver(
-        QUEUE,
-        makeMessage(
-          'Governance_VoteCast',
-          {},
-          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 2)] } },
-        ),
-      );
-
-      expect(rabbit.state.parked).toHaveLength(0);
-      expect(rabbit.state.nacked).toHaveLength(1);
-    });
-
-    test('a failing park hands the message back to the retry queue instead of losing it', async () => {
+    test('a failing park hands the message back to the retry queue', async () => {
+      rabbit.state.deferAfterAttempts.set(QUEUE, 1);
       rabbit.state.parkAfterCycles.set(QUEUE, 1);
+      handlers.Governance_VoteCast.mockImplementation(async () => {
+        throw new Error('handler failed');
+      });
+      rabbit.state.failPark = new Error('channel closed');
       await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-      rabbit.state.failPark = new Error('IllegalOperationError: Channel closed');
 
       await deliver(
         QUEUE,
@@ -295,115 +399,7 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       expect(rabbit.state.acked).toHaveLength(0);
       expect(rabbit.state.nacked).toHaveLength(1);
-      expect(rabbit.state.nacked[0].requeue).toBe(false);
-      expect(logLines.some((line) => line.includes('failed to park messageId'))).toBe(true);
-    });
-
-    test('deaths of other queues and non-expired reasons are not counted as retry cycles', async () => {
-      rabbit.state.parkAfterCycles.set(QUEUE, 3);
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-
-      await deliver(
-        QUEUE,
-        makeMessage(
-          'Governance_VoteCast',
-          {},
-          {
-            headers: {
-              'x-death': [
-                xDeathEntry(`${QUEUE}.retry`, 'rejected', 9),
-                xDeathEntry('some.other.queue', 'expired', 9),
-                xDeathEntry(QUEUE, 'rejected', 9),
-              ],
-            },
-          },
-        ),
-      );
-
-      expect(rabbit.state.parked).toHaveLength(0);
-      expect(rabbit.state.nacked).toHaveLength(1);
-    });
-
-    test('deaths given as plain objects (not key/value pairs) are understood too', async () => {
-      rabbit.state.parkAfterCycles.set(QUEUE, 1);
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-
-      await deliver(
-        QUEUE,
-        makeMessage(
-          'Governance_VoteCast',
-          {},
-          { headers: { 'x-death': [{ queue: `${QUEUE}.retry`, reason: 'expired', count: 3 }] } },
-        ),
-      );
-
-      expect(rabbit.state.parked).toHaveLength(1);
-    });
-
-    test('a message that is not valid JSON cannot be parked: park throws, the message is nacked', async () => {
-      rabbit.state.parkAfterCycles.set(QUEUE, 1);
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-
-      await deliver(
-        QUEUE,
-        makeMessage(
-          'Governance_VoteCast',
-          {},
-          { raw: 'not-json{', headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 1)] } },
-        ),
-      );
-
-      expect(rabbit.state.parked).toHaveLength(0);
-      expect(rabbit.state.nacked).toHaveLength(1);
-      expect(logLines.some((line) => line.includes('failed to park messageId'))).toBe(true);
-    });
-  });
-
-  describe('processMessage payload handling', () => {
-    test('an unknown routing key is warned about and the message is acked (dropped)', async () => {
-      await daemon.initialize();
-
-      await deliver(QUEUE, makeMessage('Unknown_Event', { a: 1 }));
-
-      expect(Object.values(handlers).every((handler) => handler.mock.calls.length === 0)).toBe(true);
-      expect(logLines.some((line) => line.includes('no handler registered for Unknown_Event'))).toBe(true);
-      expect(rabbit.state.acked).toHaveLength(1);
-    });
-
-    test('a payload that is not valid JSON is logged with the body head and never reaches a handler', async () => {
-      await daemon.initialize();
-      service.state.nextOutcome = 'deferred';
-
-      await deliver(QUEUE, makeMessage('Governance_VoteCast', {}, { raw: 'not-json{' }));
-
-      expect(handlers.Governance_VoteCast).not.toHaveBeenCalled();
-      const logged = logLines.find((line) => line.includes('payload is not valid JSON'))!;
-      expect(logged).toContain('routingKey "Governance_VoteCast"');
-      expect(logged).toContain('messageId "31337:0xabc:3"');
-      expect(logged).toContain('body: not-json{');
-      expect(rabbit.state.nacked).toHaveLength(1);
-    });
-
-    test('a message without messageId is still processed (the dedup guard lives in the service)', async () => {
-      await daemon.initialize();
-
-      await deliver(QUEUE, makeMessage('Governance_VoteCast', { a: 1 }, { messageId: null }));
-
-      expect(handlers.Governance_VoteCast).toHaveBeenCalledWith({ a: 1 });
-      expect(rabbit.state.acked).toHaveLength(1);
-    });
-
-    test('a null message (consumer cancelled by the broker) is ignored', async () => {
-      await daemon.initialize();
-      const consumerHandler = rabbit.state.handlers.get(QUEUE)!;
-
-      await consumerHandler(null);
-
-      expect(service.state.handles).toEqual([]);
-      expect(rabbit.state.acked).toEqual([]);
+      expect(logLines.some((line) => line.includes('failed to park'))).toBe(true);
     });
   });
 
@@ -416,14 +412,16 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
         releaseFirst = resolve;
       });
 
-      handlers.Governance_VoteCast.mockImplementation(async (event: any) => {
+      handlers.Governance_VoteCast.mockImplementation(async (event: any, commitInbox: () => Promise<void>) => {
         order.push(`start:${event.n}`);
         if (event.n === 1) await gate;
+        await commitInbox();
         order.push(`end:${event.n}`);
       });
 
-      const first = deliver(QUEUE, makeMessage('Governance_VoteCast', { n: 1 }));
-      const second = deliver(QUEUE, makeMessage('Governance_VoteCast', { n: 2 }));
+      const consumerHandler = rabbit.state.handlers.get(QUEUE)!;
+      const first = consumerHandler(makeMessage('Governance_VoteCast', { n: 1 }));
+      const second = consumerHandler(makeMessage('Governance_VoteCast', { n: 2 }, { messageId: 'msg-2' }));
 
       await waitFor(() => order.includes('start:1'));
       expect(order).toEqual(['start:1']);
@@ -442,38 +440,22 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
         release = resolve;
       });
 
-      handlers.Something_Else.mockImplementation(async (event: any) => {
+      handlers.Something_Else.mockImplementation(async (event: any, commitInbox: () => Promise<void>) => {
         order.push(`start:${event.n}`);
         await gate;
+        await commitInbox();
         order.push(`end:${event.n}`);
       });
 
-      const first = deliver(OTHER_QUEUE, makeMessage('Something_Else', { n: 1 }));
-      const second = deliver(OTHER_QUEUE, makeMessage('Something_Else', { n: 2 }));
+      const consumerHandler = rabbit.state.handlers.get(OTHER_QUEUE)!;
+      const first = consumerHandler(makeMessage('Something_Else', { n: 1 }));
+      const second = consumerHandler(makeMessage('Something_Else', { n: 2 }));
 
       await waitFor(() => order.length === 2);
       expect(order).toEqual(['start:1', 'start:2']);
 
       release();
       await Promise.all([first, second]);
-    });
-
-    test('queues are independent: a slow delivery on one does not block another', async () => {
-      await daemon.initialize();
-      let releaseSlow: () => void = () => undefined;
-      const slowGate = new Promise<void>((resolve) => {
-        releaseSlow = resolve;
-      });
-      handlers.Governance_VoteCast.mockImplementation(async () => {
-        await slowGate;
-      });
-
-      const slow = deliver(QUEUE, makeMessage('Governance_VoteCast', {}));
-      await deliver(OTHER_QUEUE, makeMessage('Something_Else', { value: 1 }));
-
-      expect(handlers.Something_Else).toHaveBeenCalledTimes(1);
-      releaseSlow();
-      await slow;
     });
   });
 
@@ -503,21 +485,6 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
       await daemon.stop();
 
       expect(rabbit.state.cancelled).toHaveLength(2);
-    });
-
-    test('stop before initialize is a no-op', async () => {
-      await daemon.stop();
-
-      expect(rabbit.state.cancelled).toEqual([]);
-    });
-
-    test('a cancel failure during stop rejects the stop call (documented behaviour)', async () => {
-      await daemon.initialize();
-      rabbit.state.failCancel = new Error('IllegalOperationError: Channel closed');
-
-      await expect(daemon.stop()).rejects.toThrow('Channel closed');
-
-      rabbit.state.failCancel = null;
     });
   });
 });

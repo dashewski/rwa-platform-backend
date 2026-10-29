@@ -5,14 +5,14 @@
  * replaced with in-memory fakes (tests/fakes/*.fake.ts), so these tests need
  * no database, no broker and no network. Run with `bun test` from services/rwa.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import mongoose from 'mongoose';
 import { ethers } from 'ethers';
 import { AppError } from '@shared/errors/app-errors';
 import { BusinessService } from '../src/services/business.service';
 import type { BusinessRepository } from '../src/repositories/business.repository';
 import type { SignersManagerClient } from '../src/clients/eden.clients';
 import type { OpenRouterClient } from '@shared/openrouter/client';
-import type { AiEvaluatorClient } from '../src/clients/aiEvaluator.client';
 import { createFakeBusinessRepository, type FakeBusinessRepository } from './fakes/business.repository.fake';
 import { createFakeOpenRouterClient, type FakeOpenRouterClient } from './fakes/open-router.client.fake';
 import {
@@ -20,7 +20,9 @@ import {
   DEFAULT_SIGNATURE_TASK_ID,
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
-import { createFakeAiEvaluatorClient, type FakeAiEvaluatorClient } from './fakes/ai-evaluator.client.fake';
+import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { RabbitMQClient } from '../src/clients/rabbitmq.client';
 
 const OWNER_ID = 'owner-1';
 const OWNER_TYPE = 'business';
@@ -31,6 +33,7 @@ const DEPLOYER_WALLET = '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc';
 const CREATE_RWA_FEE = '1000000000000000';
 const OPEN_ROUTER_MODEL = 'test/model';
 const FILES_BASE_URL = 'https://files.test/files';
+const EVALUATION_EXCHANGE = 'evaluation';
 const SUPPORTED_NETWORKS = [{ chainId: CHAIN_ID, name: 'BSC Testnet', factoryAddress: FACTORY_ADDRESS }];
 
 const BUSINESS = {
@@ -65,23 +68,42 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
   let businesses: FakeBusinessRepository;
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
-  let aiEvaluator: FakeAiEvaluatorClient;
-  let service: BusinessService;
+  let outbox: FakeOutboxPublisher;
+  let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
+  // The proxy appends the commit closure, so the call sites keep one argument.
+  let service: any;
 
   beforeEach(() => {
     businesses = createFakeBusinessRepository();
     openRouter = createFakeOpenRouterClient(BUSINESS_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
-    aiEvaluator = createFakeAiEvaluatorClient();
-    service = new BusinessService(
+    outbox = createFakeOutboxPublisher();
+
+    // The service writes its rows (and the inbox marker) in one transaction.
+    (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+      fn: () => Promise<T>,
+    ): Promise<T> => fn();
+
+    commitInbox = mock(async (): Promise<void> => undefined);
+    const raw = new BusinessService(
       businesses as unknown as BusinessRepository,
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
-      aiEvaluator as unknown as AiEvaluatorClient,
+      outbox as unknown as OutboxPublisherService<RabbitMQClient>,
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,
     );
+
+    // Every inbox handler takes the commit closure: the proxy appends it.
+    service = new Proxy(raw, {
+      get: (target, property, receiver) => {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== 'function') return value;
+
+        return (...args: unknown[]) => value.apply(target, [...args, commitInbox]);
+      },
+    }) as BusinessService;
   });
 
   test('createBusiness: forwards the payload and returns a mapped business', async () => {
@@ -265,11 +287,12 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       riskScoreEvaluationProcess: true,
       riskScoreEvaluationStartedAt: expect.any(Number),
     });
-    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledWith({
-      businessId: created.id,
-      ownerId: OWNER_ID,
-      ownerType: OWNER_TYPE,
-    });
+    expect(outbox.publish).toHaveBeenCalledWith(
+      EVALUATION_EXCHANGE,
+      'evaluateBusiness',
+      { businessId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
+      expect.stringMatching(new RegExp(`^${created.id}:\\d+$`)),
+    );
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
@@ -286,7 +309,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       message: 'Evaluation already in progress',
     });
 
-    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledTimes(0);
+    expect(outbox.publish).toHaveBeenCalledTimes(0);
   });
 
   test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
@@ -299,24 +322,15 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
 
     const result = await service.requestEvaluation({ id: created.id });
 
-    expect(aiEvaluator.createBusinessEvaluation.post).toHaveBeenCalledTimes(1);
+    expect(outbox.publish).toHaveBeenCalledTimes(1);
     expect(result.riskScoreEvaluationProcess).toBe(true);
   });
 
-  test('requestEvaluation: an unavailable evaluator is reported as 502 and the flags stay untouched', async () => {
+  test('requestEvaluation: a failed publish propagates and the flags are not committed', async () => {
     const created = await service.createBusiness(BUSINESS);
-    aiEvaluator.state.nextStatus = 502;
-    aiEvaluator.state.nextError = 'ai-evaluator is unavailable';
+    outbox.publish.mockRejectedValueOnce(new Error('outbox is unavailable'));
 
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
-      statusCode: 502,
-      code: 'AI_ERROR',
-    });
-
-    expect(businesses.updateBusiness).toHaveBeenCalledTimes(0); // the flag is written only after a successful request
-    const stored = businesses.store.get(created.id)!;
-    expect(stored.riskScoreEvaluationProcess).toBe(false);
-    expect(stored.riskScoreEvaluationStartedAt).toBe(0);
+    await expect(service.requestEvaluation({ id: created.id })).rejects.toThrow('outbox is unavailable');
   });
 
   test('setRiskScore: accepts the 1..100 boundaries and clears the evaluation flags', async () => {
@@ -622,7 +636,7 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
 
     expect(businesses.findAll).toHaveBeenCalledWith({ ownerId: 'owner-2' }, undefined, 10, 0);
     expect(result).toHaveLength(2);
-    expect(result.map((business) => business.name)).toEqual(['Second', 'Third']); // insertion order is stable in the fake
+    expect(result.map((business: any) => business.name)).toEqual(['Second', 'Third']); // insertion order is stable in the fake
     for (const business of result) expect(business).not.toHaveProperty('_id');
   });
 

@@ -32,6 +32,10 @@ export function createFakeOutboxPublisher() {
     queued,
     state,
 
+    rabbitClient: {
+      getBlockchainEventsExchange: () => EXCHANGE,
+    },
+
     publish: mock(async (exchange: string, routingKey: string, payload: any, messageId: string): Promise<void> => {
       if (state.failPublishFor === routingKey) {
         throw new Error(`publish failed for routing key ${routingKey}`);

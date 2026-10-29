@@ -1,7 +1,6 @@
 import { Elysia } from 'elysia';
 import mongoose from 'mongoose';
 import { EvaluationRepository } from '../repositories/evaluation.repository';
-import { EvaluationJobRepository } from '../repositories/evaluationJob.repository';
 import { InboxConsumerMessageRepository } from '@shared/inbox-consumer';
 import { OutboxPublisherMessageRepository } from '@shared/outbox-publisher';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
@@ -10,11 +9,6 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
   const evaluationRepository = withTraceSync(
     'ai-evaluator.init.repositories.evaluation',
     () => new EvaluationRepository(),
-  );
-
-  const evaluationJobRepository = withTraceSync(
-    'ai-evaluator.init.repositories.evaluation_job',
-    () => new EvaluationJobRepository(),
   );
 
   const inboxConsumerMessageRepository = withTraceSync(
@@ -37,7 +31,6 @@ export const createRepositoriesPlugin = async (mongoUri: string) => {
   const plugin = withTraceSync('ai-evaluator.init.repositories.plugin', () =>
     new Elysia({ name: 'Repositories' })
       .decorate('evaluationRepository', evaluationRepository)
-      .decorate('evaluationJobRepository', evaluationJobRepository)
       .decorate('inboxConsumerMessageRepository', inboxConsumerMessageRepository)
       .decorate('outboxPublisherMessageRepository', outboxPublisherMessageRepository)
       .onStop(async () => {
