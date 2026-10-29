@@ -1,0 +1,1 @@
+preload = ["../../shared/monitoring/src/monitoring.plugin.ts"]
