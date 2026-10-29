@@ -472,7 +472,7 @@ describe("RWA Flow", () => {
       const file = makePngFile("business.png");
 
       const result = await makeRestRequest(
-        "/api/business/uploadImage",
+        "/api/upload/uploadBusinessImage",
         { file, businessId },
         accessToken,
       );
@@ -1093,7 +1093,7 @@ describe("RWA Flow", () => {
       const file = new File(["fake image"], "test.png", { type: "image/png" });
 
       const result = await makeRestRequest(
-        "/api/pool/uploadImage",
+        "/api/upload/uploadPoolImage",
         { file, poolId: "some-pool-id" },
         undefined,
       );
@@ -1106,7 +1106,7 @@ describe("RWA Flow", () => {
       const file = new File(["fake image"], "test.png", { type: "image/png" });
 
       const result = await makeRestRequest(
-        "/api/business/uploadImage",
+        "/api/upload/uploadBusinessImage",
         { file, businessId: "some-business-id" },
         undefined,
       );
@@ -1119,7 +1119,7 @@ describe("RWA Flow", () => {
       const file = new File(["not an image"], "test.txt", { type: "text/plain" });
 
       const result = await makeRestRequest(
-        "/api/pool/uploadImage",
+        "/api/upload/uploadPoolImage",
         { file, poolId },
         accessToken,
       );
@@ -1132,7 +1132,7 @@ describe("RWA Flow", () => {
       const file = new File(["not an image"], "test.txt", { type: "text/plain" });
 
       const result = await makeRestRequest(
-        "/api/business/uploadImage",
+        "/api/upload/uploadBusinessImage",
         { file, businessId },
         accessToken,
       );
@@ -1145,7 +1145,7 @@ describe("RWA Flow", () => {
       const file = new File(["fake image"], "test.png", { type: "image/png" });
 
       const result = await makeRestRequest(
-        "/api/pool/uploadImage",
+        "/api/upload/uploadPoolImage",
         { file, poolId },
         accessToken2,
       );
@@ -1158,7 +1158,7 @@ describe("RWA Flow", () => {
       const file = new File(["fake image"], "test.png", { type: "image/png" });
 
       const result = await makeRestRequest(
-        "/api/business/uploadImage",
+        "/api/upload/uploadBusinessImage",
         { file, businessId },
         accessToken2,
       );
@@ -1171,7 +1171,7 @@ describe("RWA Flow", () => {
       const file = makePngFile("pool.png");
 
       const result = await makeRestRequest(
-        "/api/pool/uploadImage",
+        "/api/upload/uploadPoolImage",
         { file, poolId },
         accessToken,
       );

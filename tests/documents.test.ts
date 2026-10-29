@@ -341,7 +341,7 @@ describe("Documents Flow", () => {
       const file = makePdfFile("test.pdf");
 
       const result = await makeRestRequest(
-        "/api/documents/createDocument",
+        "/api/upload/createDocument",
         { file, folderId, name: "Test Document" },
         accessToken
       );
@@ -459,7 +459,7 @@ describe("Documents Flow", () => {
       const file = new File([fileContent], "test.jpg", { type: "image/jpeg" });
 
       const result = await makeRestRequest(
-        "/api/documents/createDocument",
+        "/api/upload/createDocument",
         { file, folderId, name: "Should Fail" },
         accessToken
       );
@@ -474,7 +474,7 @@ describe("Documents Flow", () => {
       const file = new File([oversizedContent], "big.pdf", { type: "application/pdf" });
 
       const result = await makeRestRequest(
-        "/api/documents/createDocument",
+        "/api/upload/createDocument",
         { file, folderId, name: "Should Fail Oversized" },
         accessToken
       );

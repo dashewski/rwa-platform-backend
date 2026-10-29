@@ -94,7 +94,7 @@ describe("Gallery Flow", () => {
       const file = new File([imageContent], "test.jpg", { type: "image/jpeg" });
 
       const result = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId: "some-gallery-id", name: "Test Image", description: "Test Description" },
         undefined
       );
@@ -163,7 +163,7 @@ describe("Gallery Flow", () => {
       const file = new File([imageContent], "test.jpg", { type: "image/jpeg" });
 
       const result = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId, name: "Test Image", description: "Test Description" },
         accessToken2
       );
@@ -177,7 +177,7 @@ describe("Gallery Flow", () => {
       const file = makeJpegFile("test.jpg");
 
       const createResult = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId, name: "Test Image", description: "Test Description" },
         accessToken
       );
@@ -325,7 +325,7 @@ describe("Gallery Flow", () => {
       const file = makeJpegFile("test.jpg");
 
       const result = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId, name: "Test Image", description: "Test Description" },
         accessToken
       );
@@ -451,7 +451,7 @@ describe("Gallery Flow", () => {
       const file = new File([fileContent], "test.txt", { type: "text/plain" });
 
       const result = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId, name: "Should Fail", description: "Wrong type" },
         accessToken
       );
@@ -466,7 +466,7 @@ describe("Gallery Flow", () => {
       const file = new File([oversizedContent], "big.jpg", { type: "image/jpeg" });
 
       const result = await makeRestRequest(
-        "/api/gallery/createImage",
+        "/api/upload/createImage",
         { file, galleryId, name: "Should Fail Oversized", description: "Too big" },
         accessToken
       );

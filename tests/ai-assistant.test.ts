@@ -2,7 +2,6 @@ import { expect, test, describe, beforeAll } from "bun:test";
 import { ethers, HDNodeWallet } from "ethers";
 import { makeGraphQLRequest } from "./utils/graphql/makeGraphQLRequest";
 import { CREATE_ASSISTANT, GET_ASSISTANT, GET_USER_ASSISTANTS, UPDATE_ASSISTANT, CREATE_MESSAGE, GET_MESSAGE_HISTORY, GET_MESSAGE, UPDATE_MESSAGE, DELETE_ASSISTANT, DELETE_MESSAGE } from "./utils/graphql/schema/ai-assistant";
-import { AUTHENTICATE } from "./utils/graphql/schema/auth";
 import { authenticate } from "./utils/authenticate";
 
 describe("AI Assistant Flow Tests", () => {
