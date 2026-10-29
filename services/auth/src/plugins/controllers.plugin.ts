@@ -1,9 +1,10 @@
 import { Elysia } from 'elysia';
 import { createAuthenticateController } from '../controllers/authenticate.controller';
-import { createRefreshTokenController } from '../controllers/refreshToken.controller';
+import { createChallengeController } from '../controllers/challenge.controller';
+import { createRefreshController } from '../controllers/refresh.controller';
 import { createGetUserController } from '../controllers/getUser.controller';
-import { createGetUserTokensController } from '../controllers/getUserTokens.controller';
-import { createRevokeTokensController } from '../controllers/revokeTokens.controller';
+import { createLogoutController } from '../controllers/logout.controller';
+import { createLogoutAllController } from '../controllers/logoutAll.controller';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 import type { ServicesPlugin } from './services.plugin';
 
@@ -12,29 +13,34 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
     createAuthenticateController(servicesPlugin),
   );
 
-  const refreshTokenController = withTraceSync('auth.init.controllers.refresh_token', () =>
-    createRefreshTokenController(servicesPlugin),
+  const challengeController = withTraceSync('auth.init.controllers.challenge', () =>
+    createChallengeController(servicesPlugin),
+  );
+
+  const refreshController = withTraceSync('auth.init.controllers.refresh', () =>
+    createRefreshController(servicesPlugin),
   );
 
   const getUserController = withTraceSync('auth.init.controllers.get_user', () =>
     createGetUserController(servicesPlugin),
   );
 
-  const getUserTokensController = withTraceSync('auth.init.controllers.get_user_tokens', () =>
-    createGetUserTokensController(servicesPlugin),
+  const logoutController = withTraceSync('auth.init.controllers.logout', () =>
+    createLogoutController(servicesPlugin),
   );
 
-  const revokeTokensController = withTraceSync('auth.init.controllers.revoke', () =>
-    createRevokeTokensController(servicesPlugin),
+  const logoutAllController = withTraceSync('auth.init.controllers.logout_all', () =>
+    createLogoutAllController(servicesPlugin),
   );
 
   const plugin = withTraceSync('auth.init.controllers.plugin', () =>
     new Elysia({ name: 'Controllers' })
       .use(authenticateController)
-      .use(refreshTokenController)
+      .use(challengeController)
+      .use(refreshController)
       .use(getUserController)
-      .use(getUserTokensController)
-      .use(revokeTokensController),
+      .use(logoutController)
+      .use(logoutAllController),
   );
 
   return plugin;

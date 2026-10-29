@@ -1,9 +1,10 @@
 import { ethers } from 'ethers';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { AppError } from '@shared/errors/app-errors';
+import { SessionsJwt, type ExpiresIn, type RefreshTokenPayload } from '@shared/sessions/src/sessionsJwt';
 import { UserRepository } from '../repositories/user.repository';
-import { RefreshTokenRepository } from '../repositories/refreshToken.repository';
+import { SessionRepository } from '../repositories/session.repository';
+import { ChallengeRepository } from '../repositories/challenge.repository';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
@@ -13,46 +14,87 @@ import { metrics } from '@shared/monitoring/src/metrics';
 export class AuthService {
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly refreshTokenRepository: RefreshTokenRepository,
-    private readonly jwtSecret: string,
-    private readonly accessTokenExpiry: jwt.SignOptions['expiresIn'],
-    private readonly refreshTokenExpiry: jwt.SignOptions['expiresIn'],
+    private readonly sessionRepository: SessionRepository,
+    private readonly challengeRepository: ChallengeRepository,
+    private readonly sessionsJwt: SessionsJwt,
+    private readonly accessTokenExpiry: ExpiresIn,
+    private readonly refreshTokenExpiry: ExpiresIn,
     private readonly domainName: string,
     private readonly domainVersion: string,
-  ) {}
+    private readonly signDomain: string,
+    private readonly challengeTtlSeconds: number,
+    private readonly cookieName: string,
+    private readonly cookieMaxAge: number,
+    private readonly cookieSecure: boolean,
+    private readonly cookiePath: string,
+  ) { }
+
+  async createChallenge(wallet: string) {
+    const nonce = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Math.floor(Date.now() / 1000) + this.challengeTtlSeconds;
+
+    await this.challengeRepository.create({ nonce, wallet, expiresAt });
+
+    return {
+      nonce,
+      expiresAt,
+      typedData: this.buildTypedData(wallet, nonce),
+    };
+  }
 
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
     args: (a) => ({
       wallet: a[0].wallet,
-      timestamp: a[0].timestamp,
+      nonce: a[0].nonce,
     }),
   })
-  async authenticate(data: { wallet: string; signature: string; timestamp: number }) {
+  async authenticate(data: { wallet: string; signature: string; nonce: string }, headers: Record<string, unknown>) {
     setSpanAttributes({ wallet: data.wallet });
 
-    // Check timestamp is within 1 minute of server time
-    const now = Math.floor(Date.now() / 1000);
-    const timeDiff = Math.abs(now - data.timestamp);
+    const challenge = await this.challengeRepository.consume(data.nonce);
 
-    if (timeDiff > 60) {
+    if (!challenge) {
       throw new AppError({
-        message: 'Timestamp is too far from server time',
+        message: 'Challenge not found or expired',
         statusCode: 401,
         code: 'AUTHENTICATION_ERROR',
       });
     }
 
-    // Build EIP-712 message object
-    const message = {
-      wallet: data.wallet,
-      timestamp: data.timestamp,
-      message: `Welcome to RWA Platform!\n\nWe prioritize the security of your assets and personal data. To ensure secure access to your account, we kindly request you to verify ownership of your wallet by signing this message.`,
-    };
+    if (challenge.wallet.toLowerCase() !== data.wallet.toLowerCase()) {
+      throw new AppError({
+        message: 'Challenge wallet mismatch',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
 
-    // Verify signature using EIP-712
-    const isValid = this.verifySignature(message, data.signature, data.wallet);
+    if (challenge.expiresAt <= Math.floor(Date.now() / 1000)) {
+      throw new AppError({
+        message: 'Challenge expired',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
+
+    const typedData = this.buildTypedData(data.wallet, data.nonce);
+
+    let isValid = false;
+
+    try {
+      const recovered = ethers.verifyTypedData(
+        typedData.domain,
+        { Message: typedData.types.Message },
+        typedData.message,
+        data.signature,
+      );
+
+      isValid = recovered.toLowerCase() === data.wallet.toLowerCase();
+    } catch {
+      isValid = false;
+    }
 
     if (!isValid) {
       throw new AppError({
@@ -64,46 +106,71 @@ export class AuthService {
 
     const isNewUser = !(await this.userRepository.exists(data.wallet));
 
-    // Find or create user
     const user = await this.userRepository.findOrCreate(data.wallet);
 
     if (isNewUser) {
       metrics.counter('auth_users_created_total');
     }
 
-    // Generate tokens
-    const tokens = await this.generateTokens(data.wallet, user._id.toString());
+    const sessionKey = crypto.randomUUID();
+    const jti = crypto.randomUUID();
+    const tokens = this.generateTokens(data.wallet, user._id.toString(), sessionKey, jti);
+    const session = await this.sessionRepository.create(
+      user._id.toString(),
+      sessionKey,
+      jti,
+      this.sessionsJwt.decodeExpiration(tokens.refreshToken),
+    );
+
+    if (!session) {
+      throw new AppError({
+        message: 'Duplicate session',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
+
+    this.setRefreshCookie(headers, tokens.refreshToken);
 
     return {
       userId: user._id.toString(),
       wallet: user.wallet,
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
     };
   }
 
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator()
-  async refreshToken(data: { refreshToken: string }) {
-    // Verify JWT token payload (this checks expiration automatically)
-    const payload = this.verifyToken(data.refreshToken);
-    setSpanAttributes({ wallet: payload.wallet });
-    if (payload.type !== 'refresh') {
-      throw new AppError({
-        message: 'Invalid token type',
-        statusCode: 401,
-        code: 'AUTHENTICATION_ERROR',
-      });
+  async refresh(headers: Record<string, unknown>, cookieHeader: string | null) {
+    const refreshToken = this.parseRefreshCookie(cookieHeader);
+
+    if (!refreshToken) {
+      throw new AppError({ message: 'Refresh session required', statusCode: 401, code: 'UNAUTHORIZED' });
     }
 
-    // Create token hash for database lookup
-    const tokenHash = crypto.createHash('sha256').update(data.refreshToken).digest('hex');
+    try {
+      const data = await this.rotateRefreshToken(refreshToken);
 
-    // Find token in database
-    const tokenRecord = await this.refreshTokenRepository.findByTokenHash(tokenHash);
+      this.setRefreshCookie(headers, data.refreshToken);
 
-    if (!tokenRecord) {
+      return {
+        userId: data.userId,
+        wallet: data.wallet,
+        accessToken: data.accessToken,
+      };
+    } catch {
+      this.clearRefreshCookie(headers);
+
+      throw new AppError({ message: 'Invalid refresh session', statusCode: 401, code: 'UNAUTHORIZED' });
+    }
+  }
+
+  @TraceDecorator()
+  private async rotateRefreshToken(refreshToken: string) {
+    const payload = this.parseRefreshToken(refreshToken);
+
+    if (!payload.sessionKey || !payload.jti) {
       throw new AppError({
         message: 'Invalid refresh token',
         statusCode: 401,
@@ -111,14 +178,45 @@ export class AuthService {
       });
     }
 
-    // Delete the used refresh token (one-time use)
-    await this.refreshTokenRepository.deleteTokens(tokenRecord.userId.toString(), [tokenHash]);
+    setSpanAttributes({ wallet: payload.wallet });
 
-    // Get user by userId from token payload
+    const record = await this.sessionRepository.findBySessionKey(payload.sessionKey);
+
+    if (!record) {
+      throw new AppError({
+        message: 'Invalid refresh token',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
+
+    if (payload.jti !== record.jti) {
+      await this.sessionRepository.deleteBySessionKey(payload.sessionKey);
+
+      throw new AppError({
+        message: 'Refresh token reuse detected',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
+
     const user = await this.userRepository.findById(payload.userId);
+    const sessionKey = payload.sessionKey;
+    const newJti = crypto.randomUUID();
+    const tokens = this.generateTokens(payload.wallet, user._id.toString(), sessionKey, newJti);
+    const expiresAt = this.sessionsJwt.decodeExpiration(tokens.refreshToken);
 
-    // Generate new tokens
-    const tokens = await this.generateTokens(payload.wallet, user._id.toString());
+    const rotated = await this.sessionRepository.rotate(sessionKey, record.jti, newJti, expiresAt);
+
+    if (!rotated) {
+      await this.sessionRepository.deleteBySessionKey(sessionKey);
+
+      throw new AppError({
+        message: 'Refresh token reuse detected',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
 
     return {
       userId: user._id.toString(),
@@ -128,93 +226,64 @@ export class AuthService {
     };
   }
 
-  @TraceDecorator()
-  private verifySignature(
-    message: { wallet: string; timestamp: number; message: string },
-    signature: string,
-    wallet: string,
-  ): boolean {
-    try {
-      const typedData = {
-        types: {
-          EIP712Domain: [
-            { name: 'name', type: 'string' },
-            { name: 'version', type: 'string' },
-          ],
-          Message: [
-            { name: 'wallet', type: 'address' },
-            { name: 'timestamp', type: 'uint256' },
-            { name: 'message', type: 'string' },
-          ],
-        },
-        primaryType: 'Message',
-        domain: {
-          name: this.domainName,
-          version: this.domainVersion,
-        },
-        message,
-      };
-
-      const recovered = ethers.verifyTypedData(
-        typedData.domain,
-        { Message: typedData.types.Message },
-        message,
-        signature,
-      );
-
-      return recovered.toLowerCase() === wallet.toLowerCase();
-    } catch (error) {
-      return false;
-    }
-  }
-
-  @TraceDecorator()
-  private async generateTokens(wallet: string, userId: string) {
-    const accessTokenJti = crypto.randomBytes(16).toString('hex');
-    const refreshTokenJti = crypto.randomBytes(16).toString('hex');
-
-    const accessToken = jwt.sign(
-      {
-        userId,
-        wallet,
-        type: 'access',
-        jti: accessTokenJti,
+  private buildTypedData(wallet: string, nonce: string) {
+    return {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+        ],
+        Message: [
+          { name: 'domain', type: 'string' },
+          { name: 'wallet', type: 'address' },
+          { name: 'nonce', type: 'string' },
+          { name: 'message', type: 'string' },
+        ],
       },
-      this.jwtSecret,
-      { expiresIn: this.accessTokenExpiry },
-    );
-
-    const refreshToken = jwt.sign(
-      {
-        userId,
-        wallet,
-        type: 'refresh',
-        jti: refreshTokenJti,
+      primaryType: 'Message' as const,
+      domain: {
+        name: this.domainName,
+        version: this.domainVersion,
       },
-      this.jwtSecret,
-      { expiresIn: this.refreshTokenExpiry },
-    );
+      message: {
+        domain: this.signDomain,
+        wallet,
+        nonce,
+        message: `Welcome to RWA Platform!
 
-    // Save refresh token to database
-    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const decoded = jwt.decode(refreshToken) as any;
-    const expiresAt = decoded.exp;
-
-    await this.refreshTokenRepository.create(userId, tokenHash, expiresAt);
-
-    return { wallet, accessToken, refreshToken };
-  }
-
-  @TraceDecorator()
-  private verifyToken(token: string) {
-    const payload = jwt.verify(token, this.jwtSecret) as {
-      userId: string;
-      wallet: string;
-      type: 'access' | 'refresh';
-      jti: string;
+We prioritize the security of your assets and personal data. To ensure secure access to your account, we kindly request you to verify ownership of your wallet by signing this message.`,
+      },
     };
+  }
 
-    return payload;
+
+
+
+  @TraceDecorator()
+  private generateTokens(wallet: string, userId: string, sessionKey: string, jti: string) {
+    return {
+      accessToken: this.sessionsJwt.signAccessToken({ userId, wallet }, this.accessTokenExpiry),
+      refreshToken: this.sessionsJwt.signRefreshToken(
+        { userId, wallet, sessionKey, jti },
+        this.refreshTokenExpiry,
+      ),
+    };
+  }
+
+  @TraceDecorator()
+  private parseRefreshToken(token: string): RefreshTokenPayload {
+    try {
+      return this.sessionsJwt.verifyRefreshToken(token);
+    } catch (error) {
+      // Malformed/expired tokens and foreign token types share the public auth error.
+      throw new AppError({
+        message: error instanceof AppError && error.message === 'Invalid token type'
+          ? 'Invalid token type'
+          : 'Invalid refresh token',
+        statusCode: 401,
+        code: 'AUTHENTICATION_ERROR',
+      });
+    }
   }
 
   @TraceDecorator()
@@ -236,34 +305,73 @@ export class AuthService {
 
   @TraceDecorator()
   @MetricsDecorator()
-  @LogDecorator({
-    args: (a) => ({ userId: a[0] }),
-  })
-  async getUserTokens(userId: string) {
-    setSpanAttributes({ userId });
-    const tokens = await this.refreshTokenRepository.findByUserId(userId);
+  @LogDecorator()
+  async logout(headers: Record<string, unknown>, cookieHeader: string | null) {
+    const refreshToken = this.parseRefreshCookie(cookieHeader);
 
-    return tokens.map((token) => ({
-      tokenId: token._id.toString(),
-      userId: token.userId.toString(),
-      tokenHash: token.tokenHash,
-      expiresAt: token.expiresAt,
-      createdAt: token.createdAt,
-      updatedAt: token.updatedAt,
-    }));
+    this.clearRefreshCookie(headers);
+
+    if (refreshToken) {
+      try {
+        const payload = this.parseRefreshToken(refreshToken);
+
+        if (payload.sessionKey) {
+          await this.sessionRepository.deleteBySessionKey(payload.sessionKey);
+        }
+      } catch {
+        // the session is already gone or the token is malformed
+      }
+    }
+
+    return { ok: true };
   }
 
   @TraceDecorator()
   @MetricsDecorator()
-  @LogDecorator({
-    args: (a) => ({ userId: a[0] }),
-  })
-  async revokeTokens(userId: string, tokenHashes: string[]) {
-    setSpanAttributes({ userId });
-    const revokedCount = await this.refreshTokenRepository.deleteTokens(userId, tokenHashes);
+  @LogDecorator()
+  async logoutAll(headers: Record<string, unknown>, cookieHeader: string | null) {
+    const refreshToken = this.parseRefreshCookie(cookieHeader);
 
-    return {
-      revokedCount,
-    };
+    if (!refreshToken) {
+      throw new AppError({ message: 'Refresh session required', statusCode: 401, code: 'UNAUTHORIZED' });
+    }
+
+    const payload = this.parseRefreshToken(refreshToken);
+
+    setSpanAttributes({ wallet: payload.wallet });
+
+    const revokedCount = await this.sessionRepository.deleteByUserId(payload.userId);
+
+    this.clearRefreshCookie(headers);
+
+    return { revokedCount };
+  }
+
+  private parseRefreshCookie(cookieHeader: string | null) {
+    if (!cookieHeader) {
+      return null;
+    }
+
+    for (const part of cookieHeader.split(';')) {
+      const [key, ...value] = part.trim().split('=');
+
+      if (key === this.cookieName) {
+        return decodeURIComponent(value.join('='));
+      }
+    }
+
+    return null;
+  }
+
+  private setRefreshCookie(headers: Record<string, unknown>, token: string) {
+    headers['Set-Cookie'] =
+      `${this.cookieName}=${encodeURIComponent(token)}; Path=${this.cookiePath}; Max-Age=${this.cookieMaxAge}; HttpOnly; SameSite=Strict` +
+      (this.cookieSecure ? '; Secure' : '');
+  }
+
+  private clearRefreshCookie(headers: Record<string, unknown>) {
+    headers['Set-Cookie'] =
+      `${this.cookieName}=; Path=${this.cookiePath}; Max-Age=0; HttpOnly; SameSite=Strict` +
+      (this.cookieSecure ? '; Secure' : '');
   }
 }

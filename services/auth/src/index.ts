@@ -9,6 +9,12 @@ const app = await withTraceAsync('auth.init.main', async () => {
     String(process.env.REFRESH_TOKEN_EXPIRY),
     String(process.env.DOMAIN_NAME),
     String(process.env.DOMAIN_VERSION),
+    String(process.env.BASE_DOMAIN),
+    Number(process.env.CHALLENGE_TTL_SECONDS),
+    String(process.env.AUTH_COOKIE_NAME),
+    Number(process.env.AUTH_COOKIE_MAX_AGE),
+    String(process.env.AUTH_COOKIE_SECURE) === 'true',
+    String(process.env.AUTH_COOKIE_PATH),
   );
 });
 

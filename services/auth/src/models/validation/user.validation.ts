@@ -16,7 +16,36 @@ export const userSchema = t.Object({
 export const authenticateRequest = t.Object({
   wallet: t.String({ minLength: 1 }),
   signature: t.String({ minLength: 1 }),
-  timestamp: t.Number(),
+  nonce: t.String({ minLength: 1 }),
+});
+
+/*
+ * Challenge
+ */
+export const challengeRequest = t.Object({
+  wallet: t.String({ minLength: 1 }),
+});
+
+export const challengeResponse = t.Object({
+  nonce: t.String(),
+  expiresAt: t.Number(),
+  typedData: t.Object({
+    domain: t.Object({
+      name: t.String(),
+      version: t.String(),
+    }),
+    types: t.Object({
+      EIP712Domain: t.Array(t.Object({ name: t.String(), type: t.String() })),
+      Message: t.Array(t.Object({ name: t.String(), type: t.String() })),
+    }),
+    primaryType: t.String(),
+    message: t.Object({
+      domain: t.String(),
+      wallet: t.String(),
+      nonce: t.String(),
+      message: t.String(),
+    }),
+  }),
 });
 
 export const authenticateResponse = t.Object({
@@ -26,18 +55,14 @@ export const authenticateResponse = t.Object({
   refreshToken: t.String(),
 });
 
-/*
- * Refresh token
- */
-export const refreshTokenRequest = t.Object({
-  refreshToken: t.String({ minLength: 1 }),
-});
-
-export const refreshTokenResponse = t.Object({
+export const sessionResponse = t.Object({
   userId: t.String(),
   wallet: t.String(),
   accessToken: t.String(),
-  refreshToken: t.String(),
+});
+
+export const logoutCookieResponse = t.Object({
+  ok: t.Boolean(),
 });
 
 /*
@@ -50,31 +75,9 @@ export const getUserRequest = t.Object({
 export const getUserResponse = userSchema;
 
 /*
- * Get user tokens
+ * Logout all
  */
-export const getUserTokensRequest = t.Object({
-  userId: t.String({ minLength: 1 }),
-});
-
-export const getUserTokensResponse = t.Array(
-  t.Object({
-    tokenId: t.String(),
-    userId: t.String(),
-    tokenHash: t.String(),
-    expiresAt: t.Number(),
-    createdAt: t.Number(),
-    updatedAt: t.Number(),
-  }),
-);
-
-/*
- * Revoke tokens
- */
-export const revokeTokensRequest = t.Object({
-  userId: t.String({ minLength: 1 }),
-  tokenHashes: t.Array(t.String({ minLength: 1 })),
-});
-
-export const revokeTokensResponse = t.Object({
+export const logoutResponse = t.Object({
   revokedCount: t.Number(),
 });
+

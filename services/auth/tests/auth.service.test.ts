@@ -6,316 +6,368 @@
  * and no network. Wallet signatures are real EIP-712 signatures produced by
  * locally generated ethers wallets. Run with `bun test` from services/auth.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
-import crypto from 'crypto';
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
 import jwt from 'jsonwebtoken';
-import { ethers, HDNodeWallet } from 'ethers';
-import { AppError } from '@shared/errors/app-errors';
+import { ethers } from 'ethers';
 import { AuthService } from '../src/services/auth.service';
+import { SessionsJwt } from '@shared/sessions/src/sessionsJwt';
 import type { UserRepository } from '../src/repositories/user.repository';
-import type { RefreshTokenRepository } from '../src/repositories/refreshToken.repository';
+import type { SessionRepository } from '../src/repositories/session.repository';
+import type { ChallengeRepository } from '../src/repositories/challenge.repository';
 import { createFakeUserRepository, type FakeUserRepository } from './fakes/user.repository.fake';
-import {
-  createFakeRefreshTokenRepository,
-  type FakeRefreshTokenRepository,
-} from './fakes/refreshToken.repository.fake';
+import { createFakeSessionRepository, type FakeSessionRepository } from './fakes/session.repository.fake';
+import { createFakeChallengeRepository, type FakeChallengeRepository } from './fakes/challenge.repository.fake';
 
 const JWT_SECRET = 'unit-test-jwt-secret';
-const ACCESS_TOKEN_EXPIRY = 900; // 15 minutes, in seconds
-const REFRESH_TOKEN_EXPIRY = 604800; // 7 days, in seconds
+const ACCESS_TOKEN_EXPIRY = 900;
+const REFRESH_TOKEN_EXPIRY = 604800;
 const DOMAIN_NAME = 'RWA Platform';
 const DOMAIN_VERSION = '1';
-
-// Byte-for-byte the welcome text the service rebuilds inside verifySignature().
-const WELCOME_MESSAGE = `Welcome to RWA Platform!
-
-We prioritize the security of your assets and personal data. To ensure secure access to your account, we kindly request you to verify ownership of your wallet by signing this message.`;
-
-const AUTH_DOMAIN = { name: DOMAIN_NAME, version: DOMAIN_VERSION };
-const AUTH_MESSAGE_TYPES = [
-  { name: 'wallet', type: 'address' },
-  { name: 'timestamp', type: 'uint256' },
-  { name: 'message', type: 'string' },
-];
+const SIGN_DOMAIN = 'rwa.local';
+const CHALLENGE_TTL_SECONDS = 180;
+const COOKIE_NAME = '__Secure-rwa_refresh';
+const COOKIE_MAX_AGE = 604800;
+const COOKIE_SECURE = true;
+const COOKIE_PATH = '/api/auth';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
-const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
 
-function buildAuthMessage(wallet: string, timestamp: number) {
-  return { wallet, timestamp, message: WELCOME_MESSAGE };
-}
+const signedHeaders = () => ({}) as Record<string, unknown>;
 
-// Signs the same EIP-712 payload the client signs; the service rebuilds that payload when verifying.
-async function signAuthMessage(signer: HDNodeWallet, timestamp: number) {
-  const message = buildAuthMessage(signer.address, timestamp);
-  const signature = await signer.signTypedData(AUTH_DOMAIN, { Message: AUTH_MESSAGE_TYPES }, message);
+function cookieHeaderFrom(headers: Record<string, unknown>) {
+  const setCookie = String(headers['Set-Cookie'] ?? '');
+  const pair = setCookie.split(';')[0];
 
-  return { wallet: signer.address, signature, timestamp };
+  return pair || null;
 }
 
 describe('AuthService (unit, fake repositories)', () => {
   let users: FakeUserRepository;
-  let refreshTokens: FakeRefreshTokenRepository;
+  let sessions: FakeSessionRepository;
+  let challenges: FakeChallengeRepository;
   let service: AuthService;
 
   beforeEach(() => {
     users = createFakeUserRepository();
-    refreshTokens = createFakeRefreshTokenRepository();
+    sessions = createFakeSessionRepository();
+    challenges = createFakeChallengeRepository();
     service = new AuthService(
       users as unknown as UserRepository,
-      refreshTokens as unknown as RefreshTokenRepository,
-      JWT_SECRET,
+      sessions as unknown as SessionRepository,
+      challenges as unknown as ChallengeRepository,
+      new SessionsJwt(JWT_SECRET),
       ACCESS_TOKEN_EXPIRY,
       REFRESH_TOKEN_EXPIRY,
       DOMAIN_NAME,
       DOMAIN_VERSION,
+      SIGN_DOMAIN,
+      CHALLENGE_TTL_SECONDS,
+      COOKIE_NAME,
+      COOKIE_MAX_AGE,
+      COOKIE_SECURE,
+      COOKIE_PATH,
     );
   });
 
-  test('authenticate: verifies a real EIP-712 signature and returns mapped tokens', async () => {
+  afterEach(() => {
+    setSystemTime();
+  });
+
+  async function sign(signer: ethers.HDNodeWallet, challenge: { typedData: any; nonce: string }) {
+    const signature = await signer.signTypedData(
+      challenge.typedData.domain,
+      { Message: challenge.typedData.types.Message },
+      challenge.typedData.message,
+    );
+
+    return { wallet: signer.address, signature, nonce: challenge.nonce };
+  }
+
+  async function login(signer: ethers.HDNodeWallet, headers = signedHeaders()) {
+    const challenge = await service.createChallenge(signer.address);
+    const result = await service.authenticate(await sign(signer, challenge), headers);
+
+    return { result, headers, challenge };
+  }
+
+  test('createChallenge: returns a nonce, an expiry and the typed data to sign', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await signAuthMessage(wallet, nowSeconds());
 
-    const result = await service.authenticate(auth);
+    const challenge = await service.createChallenge(wallet.address);
 
-    expect(users.exists).toHaveBeenCalledTimes(1);
-    expect(users.exists).toHaveBeenCalledWith(wallet.address);
-    expect(users.findOrCreate).toHaveBeenCalledTimes(1);
+    expect(challenge.nonce).toHaveLength(64);
+    expect(challenge.expiresAt).toBeGreaterThan(nowSeconds());
+    expect(challenge.typedData.message).toMatchObject({
+      domain: SIGN_DOMAIN,
+      wallet: wallet.address,
+      nonce: challenge.nonce,
+    });
+    expect(challenges.store.size).toBe(1);
+  });
+
+  test('authenticate: verifies a real EIP-712 signature and sets the refresh cookie', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const headers = signedHeaders();
+
+    const { result } = await login(wallet, headers);
+
     expect(users.findOrCreate).toHaveBeenCalledWith(wallet.address);
-
     expect(typeof result.userId).toBe('string');
-    expect(result.userId).toHaveLength(24); // Mongo ObjectId hex
+    expect(result.userId).toHaveLength(24);
     expect(result.wallet).toBe(wallet.address.toLowerCase());
     expect(typeof result.accessToken).toBe('string');
-    expect(typeof result.refreshToken).toBe('string');
-    expect(result.accessToken).not.toBe(result.refreshToken);
+    expect(result).not.toHaveProperty('refreshToken');
+    expect(String(headers['Set-Cookie'])).toStartWith(`${COOKIE_NAME}=`);
+    expect(String(headers['Set-Cookie'])).toContain(`Path=${COOKIE_PATH}`);
+    expect(String(headers['Set-Cookie'])).toContain('HttpOnly');
   });
 
-  test('authenticate: access and refresh tokens carry the expected JWT payloads', async () => {
+  test('authenticate: the consumed challenge stores the session with the token jti', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await signAuthMessage(wallet, nowSeconds());
+    const headers = signedHeaders();
 
-    const result = await service.authenticate(auth);
+    const { result } = await login(wallet, headers);
 
+    const refreshToken = decodeURIComponent(String(headers['Set-Cookie']).split(';')[0].split('=').slice(1).join('='));
+    const payload = jwt.decode(refreshToken) as any;
+
+    expect(challenges.store.size).toBe(0);
+    expect(sessions.create).toHaveBeenCalledTimes(1);
+
+    const [userIdArg, sessionKeyArg, jtiArg, expiresAtArg] = sessions.create.mock.calls[0];
+    expect(userIdArg).toBe(result.userId);
+    expect(sessionKeyArg).toBe(payload.sessionKey);
+    expect(jtiArg).toBe(payload.jti);
+    expect(expiresAtArg).toBe(payload.exp);
+  });
+
+  test('authenticate: access and refresh tokens carry the expected payloads', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const headers = signedHeaders();
+
+    const { result } = await login(wallet, headers);
+
+    const refreshToken = decodeURIComponent(String(headers['Set-Cookie']).split(';')[0].split('=').slice(1).join('='));
     const accessPayload = jwt.decode(result.accessToken) as any;
-    const refreshPayload = jwt.decode(result.refreshToken) as any;
+    const refreshPayload = jwt.decode(refreshToken) as any;
 
-    // The token wallet is the value from the request; the response wallet is the stored (lowercased) one.
     expect(accessPayload).toMatchObject({ userId: result.userId, wallet: wallet.address, type: 'access' });
     expect(refreshPayload).toMatchObject({ userId: result.userId, wallet: wallet.address, type: 'refresh' });
-    expect(accessPayload.jti).not.toBe(refreshPayload.jti);
-    expect(accessPayload.exp - accessPayload.iat).toBe(ACCESS_TOKEN_EXPIRY);
+    expect(typeof refreshPayload.sessionKey).toBe('string');
+    expect(typeof refreshPayload.jti).toBe('string');
     expect(refreshPayload.exp - refreshPayload.iat).toBe(REFRESH_TOKEN_EXPIRY);
-
-    // Both tokens must verify with the configured secret and fail with any other.
-    expect(() => jwt.verify(result.accessToken, JWT_SECRET)).not.toThrow();
-    expect(() => jwt.verify(result.refreshToken, JWT_SECRET)).not.toThrow();
-    expect(() => jwt.verify(result.accessToken, 'another-secret')).toThrow();
-  });
-
-  test('authenticate: stores only the sha256 hash of the refresh token', async () => {
-    const wallet = ethers.Wallet.createRandom();
-    const auth = await signAuthMessage(wallet, nowSeconds());
-
-    const result = await service.authenticate(auth);
-
-    const expectedHash = sha256(result.refreshToken);
-    expect(refreshTokens.create).toHaveBeenCalledTimes(1);
-
-    const [userIdArg, tokenHashArg, expiresAtArg] = refreshTokens.create.mock.calls[0];
-    expect(userIdArg).toBe(result.userId);
-    expect(tokenHashArg).toBe(expectedHash);
-    expect(tokenHashArg).not.toBe(result.refreshToken);
-    expect(expiresAtArg).toBe((jwt.decode(result.refreshToken) as any).exp);
-
-    const stored = Array.from(refreshTokens.store.values());
-    expect(stored).toHaveLength(1);
-    expect(stored[0].tokenHash).toBe(expectedHash);
-    expect(stored[0].userId.toString()).toBe(result.userId);
+    expect(() => jwt.verify(refreshToken, JWT_SECRET)).not.toThrow();
+    expect(() => jwt.verify(refreshToken, 'another-secret')).toThrow();
   });
 
   test('authenticate: reuses the existing user record on the next call', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const first = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
-    const second = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
 
-    expect(second.userId).toBe(first.userId);
+    const first = await login(wallet);
+    const second = await login(wallet);
+
+    expect(second.result.userId).toBe(first.result.userId);
     expect(users.store.size).toBe(1);
-    expect(users.exists).toHaveBeenCalledTimes(2);
     expect(users.findOrCreate).toHaveBeenCalledTimes(2);
   });
 
-  test('authenticate: accepts a timestamp just inside the allowed window', async () => {
+  test('authenticate: rejects an unknown nonce', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await signAuthMessage(wallet, nowSeconds() - 59);
+    const challenge = await service.createChallenge(wallet.address);
+    const payload = await sign(wallet, challenge);
 
-    const result = await service.authenticate(auth);
+    challenges.store.clear();
 
-    expect(result.wallet).toBe(wallet.address.toLowerCase());
-    expect(users.findOrCreate).toHaveBeenCalledTimes(1);
+    await expect(service.authenticate(payload, signedHeaders())).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTHENTICATION_ERROR',
+      message: 'Challenge not found or expired',
+    });
   });
 
-  test('authenticate: rejects a timestamp outside the allowed window', async () => {
+  test('authenticate: rejects a challenge issued for another wallet', async () => {
     const wallet = ethers.Wallet.createRandom();
+    const other = ethers.Wallet.createRandom();
 
-    for (const offset of [-120, 120]) {
-      const auth = await signAuthMessage(wallet, nowSeconds() + offset);
+    const challenge = await service.createChallenge(other.address);
+    const payload = await sign(wallet, challenge);
 
-      await expect(service.authenticate(auth)).rejects.toMatchObject({
-        statusCode: 401,
-        code: 'AUTHENTICATION_ERROR',
-        message: 'Timestamp is too far from server time',
-      });
-    }
+    await expect(service.authenticate(payload, signedHeaders())).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTHENTICATION_ERROR',
+      message: 'Challenge wallet mismatch',
+    });
+  });
 
-    // The timestamp check runs before signature verification and the user lookup.
-    expect(users.exists).toHaveBeenCalledTimes(0);
-    expect(users.findOrCreate).toHaveBeenCalledTimes(0);
+  test('authenticate: rejects an expired challenge', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const challenge = await service.createChallenge(wallet.address);
+
+    const stored = challenges.store.get(challenge.nonce)!;
+    stored.expiresAt = nowSeconds() - 1;
+
+    await expect(service.authenticate(await sign(wallet, challenge), signedHeaders())).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTHENTICATION_ERROR',
+      message: 'Challenge expired',
+    });
   });
 
   test('authenticate: rejects a signature produced by another wallet', async () => {
     const wallet = ethers.Wallet.createRandom();
     const impostor = ethers.Wallet.createRandom();
-    const timestamp = nowSeconds();
+    const challenge = await service.createChallenge(wallet.address);
     const signature = await impostor.signTypedData(
-      AUTH_DOMAIN,
-      { Message: AUTH_MESSAGE_TYPES },
-      buildAuthMessage(wallet.address, timestamp),
+      challenge.typedData.domain,
+      { Message: challenge.typedData.types.Message },
+      challenge.typedData.message,
     );
 
-    await expect(service.authenticate({ wallet: wallet.address, signature, timestamp })).rejects.toMatchObject({
-      statusCode: 401,
-      code: 'AUTHENTICATION_ERROR',
-      message: 'Invalid signature',
-    });
-
-    expect(users.exists).toHaveBeenCalledTimes(0);
-    expect(users.findOrCreate).toHaveBeenCalledTimes(0);
-    expect(refreshTokens.create).toHaveBeenCalledTimes(0);
-  });
-
-  test('authenticate: rejects a malformed signature', async () => {
-    const wallet = ethers.Wallet.createRandom();
-
     await expect(
-      service.authenticate({ wallet: wallet.address, signature: 'not-a-signature', timestamp: nowSeconds() }),
+      service.authenticate({ wallet: wallet.address, signature, nonce: challenge.nonce }, signedHeaders()),
     ).rejects.toMatchObject({
       statusCode: 401,
       code: 'AUTHENTICATION_ERROR',
       message: 'Invalid signature',
     });
 
-    expect(users.exists).toHaveBeenCalledTimes(0);
     expect(users.findOrCreate).toHaveBeenCalledTimes(0);
   });
 
-  test('refreshToken: rotates the token pair and maps the user', async () => {
+  test('authenticate: rejects a malformed signature', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
-    const oldHash = sha256(auth.refreshToken);
+    const challenge = await service.createChallenge(wallet.address);
 
-    const refreshed = await service.refreshToken({ refreshToken: auth.refreshToken });
+    await expect(
+      service.authenticate({ wallet: wallet.address, signature: 'not-a-signature', nonce: challenge.nonce }, signedHeaders()),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTHENTICATION_ERROR',
+      message: 'Invalid signature',
+    });
+  });
 
-    expect(refreshTokens.findByTokenHash).toHaveBeenCalledWith(oldHash);
-    expect(refreshTokens.deleteTokens).toHaveBeenCalledWith(auth.userId, [oldHash]);
-    expect(users.findById).toHaveBeenCalledWith(auth.userId);
+  test('authenticate: the same nonce cannot be used twice', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const challenge = await service.createChallenge(wallet.address);
+    const payload = await sign(wallet, challenge);
 
-    expect(refreshed.userId).toBe(auth.userId);
+    await service.authenticate(payload, signedHeaders());
+
+    await expect(service.authenticate(payload, signedHeaders())).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'AUTHENTICATION_ERROR',
+      message: 'Challenge not found or expired',
+    });
+
+    expect(sessions.store.size).toBe(1);
+  });
+
+  test('refresh: rotates the token pair and sets a new cookie', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const headers = signedHeaders();
+    const { result, challenge } = await login(wallet, headers);
+    const refreshToken = cookieHeaderFrom(headers)!;
+
+    const refreshHeaders = signedHeaders();
+    const refreshed = await service.refresh(refreshHeaders, refreshToken);
+
+    expect(refreshed.userId).toBe(result.userId);
     expect(refreshed.wallet).toBe(wallet.address.toLowerCase());
-    expect(refreshed.accessToken).not.toBe(auth.accessToken);
-    expect(refreshed.refreshToken).not.toBe(auth.refreshToken);
-    expect((jwt.decode(refreshed.refreshToken) as any).type).toBe('refresh');
+    expect(refreshed).not.toHaveProperty('refreshToken');
+    expect(cookieHeaderFrom(refreshHeaders)).not.toBe(refreshToken);
 
-    // The used hash is gone; only the rotated token remains, stored hashed.
-    const storedHashes = Array.from(refreshTokens.store.values()).map((token) => token.tokenHash);
-    expect(storedHashes).toEqual([sha256(refreshed.refreshToken)]);
+    const stored = Array.from(sessions.store.values());
+    expect(stored).toHaveLength(1);
+
+    const newPayload = jwt.decode(decodeURIComponent(cookieHeaderFrom(refreshHeaders)!.split('=')[1])) as any;
+    expect(newPayload.sessionKey).toBe(stored[0].sessionKey);
+    expect(newPayload.jti).toBe(stored[0].jti);
+    expect(newPayload.jti).not.toBe((jwt.decode(decodeURIComponent(refreshToken.split('=')[1])) as any).jti);
+    expect(challenge).toBeDefined();
   });
 
-  test('refreshToken: a refresh token can only be used once', async () => {
+  test('refresh: a rotated token is rejected and the session is dropped', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
+    const headers = signedHeaders();
+    await login(wallet, headers);
+    const refreshToken = cookieHeaderFrom(headers)!;
 
-    await service.refreshToken({ refreshToken: auth.refreshToken });
+    await service.refresh(signedHeaders(), refreshToken);
 
-    await expect(service.refreshToken({ refreshToken: auth.refreshToken })).rejects.toMatchObject({
+    const replayHeaders = signedHeaders();
+
+    await expect(service.refresh(replayHeaders, refreshToken)).rejects.toMatchObject({
       statusCode: 401,
-      code: 'AUTHENTICATION_ERROR',
-      message: 'Invalid refresh token',
+      code: 'UNAUTHORIZED',
+      message: 'Invalid refresh session',
+    });
+
+    expect(sessions.store.size).toBe(0);
+    expect(String(replayHeaders['Set-Cookie'])).toContain('Max-Age=0');
+  });
+
+  test('refresh: requires the cookie', async () => {
+    await expect(service.refresh(signedHeaders(), null)).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Refresh session required',
     });
   });
 
-  test('refreshToken: rejects an access token', async () => {
+  test('refresh: rejects an access token presented as a refresh cookie', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
+    const { result } = await login(wallet);
 
-    await expect(service.refreshToken({ refreshToken: auth.accessToken })).rejects.toMatchObject({
+    await expect(service.refresh(signedHeaders(), `${COOKIE_NAME}=${result.accessToken}`)).rejects.toMatchObject({
       statusCode: 401,
-      code: 'AUTHENTICATION_ERROR',
-      message: 'Invalid token type',
+      code: 'UNAUTHORIZED',
+      message: 'Invalid refresh session',
     });
 
-    // The type check short-circuits before any database lookup.
-    expect(refreshTokens.findByTokenHash).toHaveBeenCalledTimes(0);
-    expect(refreshTokens.deleteTokens).toHaveBeenCalledTimes(0);
+    expect(sessions.findBySessionKey).toHaveBeenCalledTimes(0);
   });
 
-  test('refreshToken: rejects a well-formed token that has no stored record', async () => {
+  test('refresh: rejects a string that is not a JWT', async () => {
+    await expect(service.refresh(signedHeaders(), `${COOKIE_NAME}=not-a-token`)).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Invalid refresh session',
+    });
+  });
+
+  test('refresh: a token signed with another secret is rejected', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
-    const stray = jwt.sign(
-      { userId: auth.userId, wallet: wallet.address, type: 'refresh', jti: 'stray-jti' },
-      JWT_SECRET,
+    await login(wallet);
+
+    const foreign = jwt.sign(
+      { userId: 'user', wallet: wallet.address, type: 'refresh', sessionKey: 'key', jti: 'jti' },
+      'another-secret',
       { expiresIn: REFRESH_TOKEN_EXPIRY },
     );
 
-    await expect(service.refreshToken({ refreshToken: stray })).rejects.toMatchObject({
+    await expect(service.refresh(signedHeaders(), `${COOKIE_NAME}=${foreign}`)).rejects.toMatchObject({
       statusCode: 401,
-      code: 'AUTHENTICATION_ERROR',
-      message: 'Invalid refresh token',
+      code: 'UNAUTHORIZED',
+      message: 'Invalid refresh session',
     });
 
-    expect(refreshTokens.findByTokenHash).toHaveBeenCalledWith(sha256(stray));
-    expect(refreshTokens.deleteTokens).toHaveBeenCalledTimes(0);
-  });
-
-  test('refreshToken: surfaces NOT_FOUND when the user record is gone', async () => {
-    const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
-    users.store.delete(auth.userId);
-
-    await expect(service.refreshToken({ refreshToken: auth.refreshToken })).rejects.toMatchObject({
-      statusCode: 404,
-      code: 'NOT_FOUND',
-    });
-  });
-
-  test('refreshToken: a string that is not a JWT fails in token verification', async () => {
-    const error = await service.refreshToken({ refreshToken: 'not-a-token' }).then(
-      () => null,
-      (caught) => caught,
-    );
-
-    // jwt.verify throws raw (non-AppError) errors for malformed or expired tokens — the service does not wrap them.
-    expect(error).toBeInstanceOf(Error);
-    expect(error).not.toBeInstanceOf(AppError);
-    expect(refreshTokens.findByTokenHash).toHaveBeenCalledTimes(0);
+    expect(sessions.store.size).toBe(1);
   });
 
   test('getUser: returns the mapped user record', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
+    const { result } = await login(wallet);
 
-    const user = await service.getUser(auth.userId);
+    const user = await service.getUser(result.userId);
 
-    expect(users.findById).toHaveBeenCalledWith(auth.userId);
+    expect(users.findById).toHaveBeenCalledWith(result.userId);
     expect(user).toEqual({
-      userId: auth.userId,
+      userId: result.userId,
       wallet: wallet.address.toLowerCase(),
       createdAt: expect.any(Number),
       updatedAt: expect.any(Number),
     });
-    expect(user).not.toHaveProperty('_id');
-    // The result must be plain JSON — no ObjectId or class instances leaking to the caller.
     expect(JSON.parse(JSON.stringify(user))).toEqual(user);
   });
 
@@ -326,49 +378,58 @@ describe('AuthService (unit, fake repositories)', () => {
     });
   });
 
-  test('getUserTokens: maps every stored token to a plain object', async () => {
+  test('logout: clears the cookie and drops the presented session', async () => {
     const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
+    const first = await login(wallet, signedHeaders());
+    await login(wallet, signedHeaders());
 
-    const tokens = await service.getUserTokens(auth.userId);
+    const headers = signedHeaders();
+    const result = await service.logout(headers, cookieHeaderFrom(first.headers)!);
 
-    expect(refreshTokens.findByUserId).toHaveBeenCalledWith(auth.userId);
-    expect(tokens).toHaveLength(1);
-    expect(tokens[0]).toEqual({
-      tokenId: expect.any(String),
-      userId: auth.userId,
-      tokenHash: sha256(auth.refreshToken),
-      expiresAt: (jwt.decode(auth.refreshToken) as any).exp,
-      createdAt: expect.any(Number),
-      updatedAt: expect.any(Number),
+    expect(result).toEqual({ ok: true });
+    expect(String(headers['Set-Cookie'])).toContain('Max-Age=0');
+    expect(sessions.store.size).toBe(1);
+  });
+
+  test('logout: a request without a cookie is still a success', async () => {
+    const headers = signedHeaders();
+
+    const result = await service.logout(headers, null);
+
+    expect(result).toEqual({ ok: true });
+    expect(String(headers['Set-Cookie'])).toContain('Max-Age=0');
+  });
+
+  test('logoutAll: drops every session of the user', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const first = await login(wallet, signedHeaders());
+    await login(wallet, signedHeaders());
+
+    const headers = signedHeaders();
+    const result = await service.logoutAll(headers, cookieHeaderFrom(first.headers)!);
+
+    expect(result).toEqual({ revokedCount: 2 });
+    expect(sessions.deleteByUserId).toHaveBeenCalledWith(first.result.userId);
+    expect(sessions.store.size).toBe(0);
+    expect(String(headers['Set-Cookie'])).toContain('Max-Age=0');
+  });
+
+  test('logoutAll: does not touch other users', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    const otherWallet = ethers.Wallet.createRandom();
+    const auth = await login(wallet, signedHeaders());
+    await login(otherWallet, signedHeaders());
+
+    await service.logoutAll(signedHeaders(), cookieHeaderFrom(auth.headers)!);
+
+    expect(sessions.store.size).toBe(1);
+  });
+
+  test('logoutAll: requires the cookie', async () => {
+    await expect(service.logoutAll(signedHeaders(), null)).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Refresh session required',
     });
-    expect(tokens[0]).not.toHaveProperty('_id');
-    expect(JSON.parse(JSON.stringify(tokens))).toEqual(tokens);
-  });
-
-  test('getUserTokens: returns an empty array when the user has no tokens', async () => {
-    const tokens = await service.getUserTokens('user-without-tokens');
-
-    expect(refreshTokens.findByUserId).toHaveBeenCalledWith('user-without-tokens');
-    expect(tokens).toEqual([]);
-  });
-
-  test('revokeTokens: deletes only the requested hashes and returns the count', async () => {
-    const wallet = ethers.Wallet.createRandom();
-    const auth = await service.authenticate(await signAuthMessage(wallet, nowSeconds()));
-    const hash = sha256(auth.refreshToken);
-
-    const result = await service.revokeTokens(auth.userId, [hash, 'unknown-hash']);
-
-    expect(refreshTokens.deleteTokens).toHaveBeenCalledWith(auth.userId, [hash, 'unknown-hash']);
-    expect(result).toEqual({ revokedCount: 1 });
-    expect(refreshTokens.store.size).toBe(0);
-  });
-
-  test('revokeTokens: returns zero when nothing matches', async () => {
-    const result = await service.revokeTokens('unknown-user', ['unknown-hash']);
-
-    expect(refreshTokens.deleteTokens).toHaveBeenCalledWith('unknown-user', ['unknown-hash']);
-    expect(result).toEqual({ revokedCount: 0 });
   });
 });

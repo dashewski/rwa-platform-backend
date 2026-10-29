@@ -14,6 +14,12 @@ export async function createApp(
   refreshTokenExpiry: any,
   domainName: string,
   domainVersion: string,
+  signDomain: string,
+  challengeTtlSeconds: number,
+  cookieName: string,
+  cookieMaxAge: number,
+  cookieSecure: boolean,
+  cookiePath: string,
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'auth.init.repositories_plugin',
@@ -28,6 +34,12 @@ export async function createApp(
       refreshTokenExpiry,
       domainName,
       domainVersion,
+      signDomain,
+      challengeTtlSeconds,
+      cookieName,
+      cookieMaxAge,
+      cookieSecure,
+      cookiePath,
     ),
   );
 

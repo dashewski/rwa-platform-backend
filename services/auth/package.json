@@ -8,7 +8,9 @@
     "test": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 bun test"
   },
   "dependencies": {
+    "@shared/errors": "workspace:*",
     "@shared/monitoring": "workspace:*",
+    "@shared/sessions": "workspace:*",
     "elysia": "1.3.5",
     "ethers": "6.15.0",
     "jsonwebtoken": "9.0.2",

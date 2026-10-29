@@ -7,6 +7,7 @@ COPY package.json .
 
 COPY shared/monitoring/package.json ./shared/monitoring/
 COPY shared/errors/package.json ./shared/errors/
+COPY shared/sessions/package.json ./shared/sessions/
 
 COPY services/auth/package.json ./services/auth/
 
