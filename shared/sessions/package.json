@@ -1,0 +1,14 @@
+{
+  "name": "@shared/sessions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@shared/errors": "1.0.0",
+    "jsonwebtoken": "9.0.2"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.19",
+    "@types/jsonwebtoken": "9.0.10"
+  }
+}

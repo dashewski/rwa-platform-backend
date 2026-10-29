@@ -1,0 +1,16 @@
+{
+  "name": "@shared/ownership",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@services/auth": "workspace:*",
+    "@services/company": "workspace:*",
+    "@shared/errors": "workspace:*",
+    "@shared/monitoring": "workspace:*",
+    "ioredis": "5.6.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.19"
+  }
+}
