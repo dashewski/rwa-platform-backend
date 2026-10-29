@@ -19,7 +19,11 @@ export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, client
 
   const outboxPublisherDaemon = withTraceSync(
     'signer.init.daemons.outbox_publisher',
-    () => new OutboxPublisherDaemon(servicesPlugin.decorator.outboxPublisherService, clientsPlugin.decorator.rabbitMQClient),
+    () =>
+      new OutboxPublisherDaemon(
+        servicesPlugin.decorator.outboxPublisherService,
+        clientsPlugin.decorator.rabbitMQClient,
+      ),
   );
 
   await withTraceAsync('signer.init.daemons.initialize', async () => {

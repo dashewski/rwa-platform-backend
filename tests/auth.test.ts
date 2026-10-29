@@ -281,4 +281,26 @@ describe("Auth Flow Tests", () => {
     expect(response.status).toBe(401);
     expect(response.body.error.message).toBe("Invalid signature");
   });
+
+  test("sessions: lists every session of the wallet", async () => {
+    const first = await authenticate(wallet);
+    const second = await authenticate(wallet);
+
+    const response = await fetch(`${AUTH_URL}/sessions`, {
+      headers: { Authorization: `Bearer ${second.accessToken}` },
+    });
+    const sessions = (await response.json()) as Array<{ id: string; createdAt: number; expiresAt: number }>;
+
+    expect(response.status).toBe(200);
+    expect(sessions.length).toBeGreaterThanOrEqual(2);
+    expect(sessions.every((session) => typeof session.id === "string" && session.expiresAt > 0)).toBe(true);
+    expect(new Set(sessions.map((session) => session.id)).size).toBe(sessions.length);
+    expect(first.accessToken).not.toBe(second.accessToken);
+  });
+
+  test("sessions: rejects an anonymous request", async () => {
+    const response = await fetch(`${AUTH_URL}/sessions`);
+
+    expect(response.status).toBe(401);
+  });
 });

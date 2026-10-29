@@ -107,10 +107,12 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         edenError(500, 'INTERNAL_ERROR', 'boom'),
       );
 
-      await expect(getEvaluations!(null as never, { input: {} } as never, asContext(fake), INFO)).rejects.toMatchObject({
-        statusCode: 502,
-        code: 'BAD_GATEWAY',
-      });
+      await expect(getEvaluations!(null as never, { input: {} } as never, asContext(fake), INFO)).rejects.toMatchObject(
+        {
+          statusCode: 502,
+          code: 'BAD_GATEWAY',
+        },
+      );
     });
   });
 
@@ -140,7 +142,9 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         edenError(404, 'NOT_FOUND', 'no evaluation'),
       );
 
-      await expect(getEvaluation!(null as never, { id: 'eval-1' } as never, asContext(fake), INFO)).rejects.toMatchObject({
+      await expect(
+        getEvaluation!(null as never, { id: 'eval-1' } as never, asContext(fake), INFO),
+      ).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
       });

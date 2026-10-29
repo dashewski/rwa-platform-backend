@@ -72,7 +72,12 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
 
-    const result = await getFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO);
+    const result = await getFaqTopic!(
+      null as never,
+      { id: 'topic-1' } as never,
+      fake as unknown as GraphQLContext,
+      INFO,
+    );
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledWith({ id: 'topic-1' });
     expect(result).toEqual(TOPIC); // storage-only fields such as `_id` are dropped
@@ -133,7 +138,12 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     const fake = createFakeContext();
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenOk(UPSTREAM_ANSWER));
 
-    const result = await getFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO);
+    const result = await getFaqAnswer!(
+      null as never,
+      { id: 'answer-1' } as never,
+      fake as unknown as GraphQLContext,
+      INFO,
+    );
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledWith({ id: 'answer-1' });
     expect(result).toEqual(ANSWER);
@@ -211,7 +221,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: CREATE_TOPIC_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'parent-1', 'user-1');
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -264,7 +275,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledTimes(0);
@@ -304,7 +316,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'missing', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -323,7 +336,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.updateTopic.post).toHaveBeenCalledTimes(0);
@@ -339,7 +353,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'topic-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -359,7 +374,12 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getTopic.post.mockImplementation(async () => edenOk(UPSTREAM_TOPIC));
     fake.clients.faqClient.deleteTopic.post.mockImplementation(async () => edenOk({ id: 'topic-1' }));
 
-    const result = await deleteFaqTopic!(null as never, { id: 'topic-1' } as never, fake as unknown as GraphQLContext, INFO);
+    const result = await deleteFaqTopic!(
+      null as never,
+      { id: 'topic-1' } as never,
+      fake as unknown as GraphQLContext,
+      INFO,
+    );
 
     expect(fake.clients.faqClient.getTopic.post).toHaveBeenCalledWith({ id: 'topic-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -414,7 +434,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: CREATE_ANSWER_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -502,7 +523,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledTimes(0);
@@ -542,7 +564,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'missing', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.faqClient.updateAnswer.post).toHaveBeenCalledTimes(0);
@@ -560,7 +583,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.faqClient.updateAnswer.post).toHaveBeenCalledTimes(0);
@@ -576,7 +600,8 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'answer-1', updateData: { answer: 'Updated' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -596,7 +621,12 @@ describe('gateway FAQ resolvers (unit, fake clients/services)', () => {
     fake.clients.faqClient.getAnswer.post.mockImplementation(async () => edenOk(UPSTREAM_ANSWER));
     fake.clients.faqClient.deleteAnswer.post.mockImplementation(async () => edenOk({ id: 'answer-1' }));
 
-    const result = await deleteFaqAnswer!(null as never, { id: 'answer-1' } as never, fake as unknown as GraphQLContext, INFO);
+    const result = await deleteFaqAnswer!(
+      null as never,
+      { id: 'answer-1' } as never,
+      fake as unknown as GraphQLContext,
+      INFO,
+    );
 
     expect(fake.clients.faqClient.getAnswer.post).toHaveBeenCalledWith({ id: 'answer-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({

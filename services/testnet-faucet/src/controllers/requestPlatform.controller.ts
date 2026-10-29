@@ -3,6 +3,7 @@ import { Elysia } from 'elysia';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 import { requestPlatformResponse, requestPlatformSchema } from '../models/validation/faucet.validation';
 
+// Private endpoint
 export const requestPlatformController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestPlatformController' }).use(servicesPlugin).post(
     '/requestPlatform',

@@ -242,7 +242,4 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
     expect(response.status).not.toBe(200);
     expect(evaluationRepository.findAll).toHaveBeenCalledTimes(0);
   });
-
-
-
 });

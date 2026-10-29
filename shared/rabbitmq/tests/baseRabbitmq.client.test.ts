@@ -312,7 +312,9 @@ describe('BaseRabbitMQClient (unit, fake amqplib)', () => {
       await client.initialize();
       broker.channel.onPublish = (message) => message.confirm(new Error('nack from broker'));
 
-      await expect(client.publish(EXCHANGE, 'task', { a: 1 }, { messageId: 'id-1' })).rejects.toThrow('nack from broker');
+      await expect(client.publish(EXCHANGE, 'task', { a: 1 }, { messageId: 'id-1' })).rejects.toThrow(
+        'nack from broker',
+      );
     });
 
     test('a channel that closes before the confirm rejects the publish', async () => {
@@ -378,9 +380,7 @@ describe('BaseRabbitMQClient (unit, fake amqplib)', () => {
     test('a payload JSON cannot represent is rejected before anything reaches the channel', async () => {
       await client.initialize();
 
-      await expect(client.publish(EXCHANGE, 'task', { amount: 10n }, { messageId: 'id-1' })).rejects.toThrow(
-        /BigInt/,
-      );
+      await expect(client.publish(EXCHANGE, 'task', { amount: 10n }, { messageId: 'id-1' })).rejects.toThrow(/BigInt/);
       expect(broker.channel.published).toHaveLength(0);
     });
 

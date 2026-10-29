@@ -62,7 +62,12 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
         edenOk({ ...GALLERY, internalField: 'must not leak' }),
       );
 
-      const result = await getGallery!(null as never, { id: 'gallery-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getGallery!(
+        null as never,
+        { id: 'gallery-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.galleryClient.getGallery.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.galleryClient.getGallery.post).toHaveBeenCalledWith({ id: 'gallery-1' });
@@ -108,7 +113,12 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.galleryClient.getGalleries.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getGalleries!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getGalleries!(
+        null as never,
+        { input: {} } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.galleryClient.getGalleries.post).toHaveBeenCalledWith({
         filter: {},
@@ -136,7 +146,12 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenOk(IMAGE));
 
-      const result = await getImage!(null as never, { id: 'image-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getImage!(
+        null as never,
+        { id: 'image-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.galleryClient.getImage.post).toHaveBeenCalledWith({ id: 'image-1' });
       expect(result).toEqual(IMAGE);
@@ -216,7 +231,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { name: 'Exterior renders', parentId: 'business-1', type: 'business' } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'business-1', fakeUser.id);
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -244,7 +260,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Exterior renders', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.services.parent.getParentInfo).toHaveBeenCalledTimes(0);
@@ -267,7 +284,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Exterior renders', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.galleryClient.createGallery.post).toHaveBeenCalledTimes(0);
@@ -289,7 +307,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Exterior renders', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to create gallery' });
     });
 
@@ -307,7 +326,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Exterior renders', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to get business data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -348,7 +368,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'gallery-1', updateData: { name: 'Interior renders' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.galleryClient.getGallery.post).toHaveBeenCalledTimes(0);
@@ -366,7 +387,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'missing', updateData: { name: 'Interior renders' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get gallery data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -385,7 +407,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'gallery-1', updateData: { name: 'Interior renders' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to update gallery' });
     });
   });
@@ -400,7 +423,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
         null as never,
         { id: 'gallery-1' } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -482,7 +506,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'image-1', updateData: { name: 'front-v2.png' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.galleryClient.getImage.post).toHaveBeenCalledTimes(0);
@@ -498,7 +523,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'missing', updateData: { name: 'front-v2.png' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get image data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -517,7 +543,8 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'image-1', updateData: { name: 'front-v2.png' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to update image' });
     });
   });
@@ -528,7 +555,12 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
       fake.clients.galleryClient.getImage.post.mockImplementation(async () => edenOk(IMAGE));
       fake.clients.galleryClient.deleteImage.post.mockImplementation(async () => edenOk({ id: 'image-1' }));
 
-      const result = await deleteImage!(null as never, { id: 'image-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await deleteImage!(
+        null as never,
+        { id: 'image-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -588,7 +620,12 @@ describe('gateway gallery resolvers (unit, fake clients/services)', () => {
       );
       fake.clients.galleryClient.deleteImage.post.mockImplementation(async () => edenOk({ id: 'image-1' }));
 
-      const result = await deleteImage!(null as never, { id: 'image-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await deleteImage!(
+        null as never,
+        { id: 'image-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.galleryClient.deleteImage.post).toHaveBeenCalledWith({ id: 'image-1' });
       expect(result).toBe('image-1');

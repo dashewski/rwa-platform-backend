@@ -3,6 +3,7 @@ import { Elysia } from 'elysia';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 import { requestGasResponse, requestGasSchema } from '../models/validation/faucet.validation';
 
+// Private endpoint
 export const requestGasController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestGasController' }).use(servicesPlugin).post(
     '/requestGas',

@@ -5,6 +5,7 @@ import {
   createQuestionAnswerResponse,
 } from '../../models/validation/questions.validation';
 
+// Private endpoint
 export const createQuestionAnswerController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'CreateQuestionAnswerController' }).use(servicesPlugin).post(
     '/createQuestionAnswer',

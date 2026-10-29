@@ -14,16 +14,8 @@ import type { ConsumeMessage } from 'amqplib';
 import { BaseInboxConsumerDaemon } from '../src/daemons/baseInboxConsumer.daemon';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { metrics } from '@shared/monitoring/src/metrics';
-import {
-  asConsumerService,
-  createFakeConsumerService,
-  type FakeConsumerService,
-} from './fakes/consumer.service.fake';
-import {
-  asRabbitClient,
-  createFakeRabbitClient,
-  type FakeRabbitClient,
-} from './fakes/rabbitmq.client.fake';
+import { asConsumerService, createFakeConsumerService, type FakeConsumerService } from './fakes/consumer.service.fake';
+import { asRabbitClient, createFakeRabbitClient, type FakeRabbitClient } from './fakes/rabbitmq.client.fake';
 import { makeMessage, xDeathEntry } from './fakes/message.fake';
 
 const QUEUE = 'blockchain.events.dao';
@@ -346,7 +338,11 @@ describe('BaseInboxConsumerDaemon (unit, fake client + fake service)', () => {
 
       await deliver(
         QUEUE,
-        makeMessage('Governance_VoteCast', {}, { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } }),
+        makeMessage(
+          'Governance_VoteCast',
+          {},
+          { headers: { 'x-death': [xDeathEntry(`${QUEUE}.retry`, 'expired', 99)] } },
+        ),
       );
 
       expect(rabbit.state.parked).toHaveLength(0);

@@ -5,6 +5,7 @@ import {
   requestPoolApprovalSignaturesResponse,
 } from '../../models/validation/pool.validation';
 
+// Private endpoint
 export const requestPoolApprovalSignaturesController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestPoolApprovalSignaturesController' }).use(servicesPlugin).post(
     '/requestPoolApprovalSignatures',

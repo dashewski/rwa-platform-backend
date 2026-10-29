@@ -3,6 +3,7 @@ import { Elysia } from 'elysia';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 import { requestHoldResponse, requestHoldSchema } from '../models/validation/faucet.validation';
 
+// Private endpoint
 export const requestHoldController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestHoldController' }).use(servicesPlugin).post(
     '/requestHold',

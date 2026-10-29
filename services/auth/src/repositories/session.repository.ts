@@ -29,6 +29,11 @@ export class SessionRepository {
   }
 
   @TraceDecorator()
+  async findByUserId(userId: string) {
+    return await this.model.find({ userId }).sort({ createdAt: -1 }).lean();
+  }
+
+  @TraceDecorator()
   async rotate(sessionKey: string, jti: string, newJti: string, expiresAt: number) {
     const now = Math.floor(Date.now() / 1000);
 
@@ -54,5 +59,4 @@ export class SessionRepository {
 
     return result.deletedCount;
   }
-
 }

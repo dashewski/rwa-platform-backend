@@ -5,6 +5,7 @@ import {
   getReferrerClaimHistoryResponse,
 } from '../models/validation/loyalty.validation';
 
+// Private endpoint
 export const getReferrerClaimHistoryController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'GetReferrerClaimHistoryController' }).use(servicesPlugin).post(
     '/getReferrerClaimHistory',

@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { updateFileRequest, updateFileResponse } from '../models/validation/file.validation';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 
+// Private endpoint
 export const updateFileController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'UpdateFileController' }).use(servicesPlugin).post(
     '/updateFile',

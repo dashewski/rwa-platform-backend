@@ -40,7 +40,8 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       null as never,
       { parentId: 'parent-1', parentType: 'post' } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.clients.reactionsClient.getEntityReactions.post).toHaveBeenCalledWith({
       parentId: 'parent-1',
@@ -60,7 +61,8 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       null as never,
       { parentId: 'parent-1', parentType: 'post' } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     const [payload] = fake.clients.reactionsClient.getEntityReactions.post.mock.calls[0] as [Record<string, unknown>];
     expect(Object.keys(payload).sort()).toEqual(['parentId', 'parentType', 'userId']);
@@ -79,7 +81,8 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
         null as never,
         { parentId: 'parent-1', parentType: 'post' } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -150,7 +153,8 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: SET_REACTION_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.clients.reactionsClient.setReaction.post).toHaveBeenCalledWith({
       parentId: 'parent-1',
@@ -191,7 +195,8 @@ describe('gateway reactions resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: SET_REACTION_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.clients.reactionsClient.resetReaction.post).toHaveBeenCalledWith({
       parentId: 'parent-1',

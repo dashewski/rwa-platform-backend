@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { type ServicesPlugin } from '../../plugins/services.plugin';
 import { getGalleryRequest, getGalleryResponse } from '../../models/validation/images.validation';
 
+// Private endpoint
 export const getGalleryController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'GetGalleryController' }).use(servicesPlugin).post(
     '/getGallery',

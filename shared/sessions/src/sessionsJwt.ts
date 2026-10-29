@@ -39,11 +39,9 @@ export class SessionsJwt {
   }
 
   signAccessToken(payload: { userId: string; wallet: string }, expiresIn: ExpiresIn): string {
-    return jwt.sign(
-      { ...payload, type: 'access', jti: crypto.randomBytes(16).toString('hex') },
-      this.secret,
-      { expiresIn },
-    );
+    return jwt.sign({ ...payload, type: 'access', jti: crypto.randomBytes(16).toString('hex') }, this.secret, {
+      expiresIn,
+    });
   }
 
   signRefreshToken(

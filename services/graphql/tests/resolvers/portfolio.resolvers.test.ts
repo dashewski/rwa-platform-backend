@@ -43,7 +43,8 @@ const TRANSACTION: Transaction = {
   createdAt: 1700000000,
   updatedAt: 1700000001,
 
-  logIndex: 0,};
+  logIndex: 0,
+};
 
 const LIST_INPUT = {
   filter: { owner: '0xwallet' },
@@ -62,7 +63,8 @@ describe('portfolio resolvers (unit, fake clients)', () => {
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.portfolioClient.getBalances.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -81,7 +83,8 @@ describe('portfolio resolvers (unit, fake clients)', () => {
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(result).toEqual([]);
     });
@@ -107,7 +110,8 @@ describe('portfolio resolvers (unit, fake clients)', () => {
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.portfolioClient.getTransactions.post).toHaveBeenCalledWith({
         filter: LIST_INPUT.filter,
@@ -126,7 +130,8 @@ describe('portfolio resolvers (unit, fake clients)', () => {
         null as never,
         { input: LIST_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(result).toEqual([]);
     });

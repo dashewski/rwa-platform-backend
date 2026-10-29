@@ -211,11 +211,7 @@ describe('rwa InboxConsumerDaemon (unit, fakes for client / consumer service / s
 
     for (const [eventName, method, target] of ROUTING) {
       const event = makeStockEvent(eventName);
-      await deliver(
-        BLOCKCHAIN_QUEUE,
-        eventName,
-        makeMessage(eventName, event, { messageId: `97:0xtx1:${eventName}` }),
-      );
+      await deliver(BLOCKCHAIN_QUEUE, eventName, makeMessage(eventName, event, { messageId: `97:0xtx1:${eventName}` }));
 
       const service = (target === 'business' ? businessService : poolService) as Record<
         string,

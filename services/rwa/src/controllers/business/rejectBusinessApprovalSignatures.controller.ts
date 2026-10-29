@@ -5,6 +5,7 @@ import {
   rejectBusinessApprovalSignaturesResponse,
 } from '../../models/validation/business.validation';
 
+// Private endpoint
 export const rejectBusinessApprovalSignaturesController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RejectBusinessApprovalSignaturesController' }).use(servicesPlugin).post(
     '/rejectBusinessApprovalSignatures',

@@ -239,7 +239,10 @@ describe('AuthService (unit, fake repositories)', () => {
     const challenge = await service.createChallenge(wallet.address);
 
     await expect(
-      service.authenticate({ wallet: wallet.address, signature: 'not-a-signature', nonce: challenge.nonce }, signedHeaders()),
+      service.authenticate(
+        { wallet: wallet.address, signature: 'not-a-signature', nonce: challenge.nonce },
+        signedHeaders(),
+      ),
     ).rejects.toMatchObject({
       statusCode: 401,
       code: 'AUTHENTICATION_ERROR',
@@ -431,5 +434,25 @@ describe('AuthService (unit, fake repositories)', () => {
       code: 'UNAUTHORIZED',
       message: 'Refresh session required',
     });
+  });
+
+  test('getSessions: returns every session of the resolved user', async () => {
+    const wallet = ethers.Wallet.createRandom();
+    await login(wallet);
+    const second = await login(wallet);
+
+    const sessions = await service.getSessions(second.result.userId);
+
+    expect(sessions).toHaveLength(2);
+    expect(new Set(sessions.map((session) => session.id)).size).toBe(2);
+    expect(sessions.every((session) => typeof session.id === 'string' && session.id.length > 0)).toBe(true);
+    expect(sessions[0].expiresAt).toBeGreaterThan(nowSeconds());
+    expect(sessions[0].createdAt).toBeGreaterThan(0);
+  });
+
+  test('getSessions: returns an empty list for a user without sessions', async () => {
+    const sessions = await service.getSessions('000000000000000000000000');
+
+    expect(sessions).toEqual([]);
   });
 });

@@ -10,12 +10,12 @@ export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' |
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable<T[P]> };
 /** All built-in and custom scalars, mapped to their actual values */
 export type Scalars = {
-  ID: { input: string; output: string; }
-  String: { input: string; output: string; }
-  Boolean: { input: boolean; output: boolean; }
-  Int: { input: number; output: number; }
-  Float: { input: number; output: number; }
-  JSON: { input: { [key: string]: any }; output: { [key: string]: any }; }
+  ID: { input: string; output: string };
+  String: { input: string; output: string };
+  Boolean: { input: boolean; output: boolean };
+  Int: { input: number; output: number };
+  Float: { input: number; output: number };
+  JSON: { input: { [key: string]: any }; output: { [key: string]: any } };
 };
 
 export type AddMemberInput = {
@@ -45,11 +45,7 @@ export type Assistant = {
   userId: Scalars['String']['output'];
 };
 
-export type AssistantContext =
-  | 'investor_base'
-  | 'popular_pools'
-  | 'product_owner_base'
-  | 'user_portfolio';
+export type AssistantContext = 'investor_base' | 'popular_pools' | 'product_owner_base' | 'user_portfolio';
 
 export type Blog = {
   __typename?: 'Blog';
@@ -64,9 +60,7 @@ export type Blog = {
   updatedAt: Scalars['Float']['output'];
 };
 
-export type BlogParentTypes =
-  | 'business'
-  | 'pool';
+export type BlogParentTypes = 'business' | 'pool';
 
 export type Business = {
   __typename?: 'Business';
@@ -94,13 +88,9 @@ export type Business = {
   updatedAt: Scalars['Float']['output'];
 };
 
-export type BusinessOwnerType =
-  | 'company';
+export type BusinessOwnerType = 'company';
 
-export type BusinessType =
-  | 'franchise'
-  | 'growth'
-  | 'startup';
+export type BusinessType = 'franchise' | 'growth' | 'startup';
 
 export type Company = {
   __typename?: 'Company';
@@ -345,9 +335,7 @@ export type EvaluationDocumentRef = {
   name: Scalars['String']['output'];
 };
 
-export type EvaluationEntityType =
-  | 'business'
-  | 'pool';
+export type EvaluationEntityType = 'business' | 'pool';
 
 export type EvaluationFactor = {
   __typename?: 'EvaluationFactor';
@@ -390,9 +378,7 @@ export type FaqAnswer = {
   updatedAt: Scalars['Float']['output'];
 };
 
-export type FaqParentTypes =
-  | 'business'
-  | 'pool';
+export type FaqParentTypes = 'business' | 'pool';
 
 export type FaqTopic = {
   __typename?: 'FaqTopic';
@@ -418,10 +404,7 @@ export type FaucetRequest = {
   wallet: Scalars['String']['output'];
 };
 
-export type FaucetTokenType =
-  | 'gas'
-  | 'hold'
-  | 'platform';
+export type FaucetTokenType = 'gas' | 'hold' | 'platform';
 
 export type Fees = {
   __typename?: 'Fees';
@@ -477,10 +460,7 @@ export type Gallery = {
   updatedAt: Scalars['Float']['output'];
 };
 
-export type GalleryParentTypes =
-  | 'business'
-  | 'pool'
-  | 'user';
+export type GalleryParentTypes = 'business' | 'pool' | 'user';
 
 export type GetBalancesInput = {
   filter?: InputMaybe<Scalars['JSON']['input']>;
@@ -756,9 +736,7 @@ export type Message = {
   text: Scalars['String']['output'];
 };
 
-export type MessageSender =
-  | 'assistant'
-  | 'user';
+export type MessageSender = 'assistant' | 'user';
 
 export type Mutation = {
   __typename?: 'Mutation';
@@ -828,316 +806,253 @@ export type Mutation = {
   updateTopic: Topic;
 };
 
-
 export type MutationAddMemberArgs = {
   input: AddMemberInput;
 };
-
 
 export type MutationCreateAssistantArgs = {
   input: CreateAssistantInput;
 };
 
-
 export type MutationCreateBlogArgs = {
   input: CreateBlogInput;
 };
-
 
 export type MutationCreateBusinessArgs = {
   input: CreateBusinessInput;
 };
 
-
 export type MutationCreateBusinessWithAiArgs = {
   input: CreateBusinessWithAiInput;
 };
-
 
 export type MutationCreateCompanyArgs = {
   input: CreateCompanyInput;
 };
 
-
 export type MutationCreateFaqAnswerArgs = {
   input: CreateFaqAnswerInput;
 };
-
 
 export type MutationCreateFaqTopicArgs = {
   input: CreateFaqTopicInput;
 };
 
-
 export type MutationCreateFolderArgs = {
   input: CreateFolderInput;
 };
-
 
 export type MutationCreateGalleryArgs = {
   input: CreateGalleryInput;
 };
 
-
 export type MutationCreateMessageArgs = {
   input: CreateMessageInput;
 };
-
 
 export type MutationCreatePoolArgs = {
   input: CreatePoolInput;
 };
 
-
 export type MutationCreatePoolWithAiArgs = {
   input: CreatePoolWithAiInput;
 };
-
 
 export type MutationCreatePostArgs = {
   input: CreatePostInput;
 };
 
-
 export type MutationCreateQuestionArgs = {
   input: CreateQuestionInput;
 };
-
 
 export type MutationCreateQuestionAnswerArgs = {
   input: CreateQuestionAnswerInput;
 };
 
-
 export type MutationCreateReferrerWithdrawTaskArgs = {
   input: CreateReferrerWithdrawTaskInput;
 };
-
 
 export type MutationCreateTopicArgs = {
   input: CreateTopicInput;
 };
 
-
 export type MutationDeleteAssistantArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteBlogArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeleteCompanyArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteDocumentArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeleteFaqAnswerArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteFaqTopicArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeleteFolderArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteGalleryArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeleteImageArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteMessageArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeletePostArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationDeleteQuestionArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationDeleteTopicArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationEditBusinessArgs = {
   input: EditBusinessInput;
 };
 
-
 export type MutationEditPoolArgs = {
   input: EditPoolInput;
 };
-
 
 export type MutationGrantPermissionArgs = {
   input: GrantPermissionInput;
 };
 
-
 export type MutationRegisterReferralArgs = {
   input: RegisterReferralInput;
 };
-
 
 export type MutationRejectBusinessApprovalSignaturesArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationRejectPoolApprovalSignaturesArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationRemoveMemberArgs = {
   input: RemoveMemberInput;
 };
 
-
 export type MutationRequestBusinessApprovalSignaturesArgs = {
   input: RequestBusinessApprovalSignaturesInput;
 };
-
 
 export type MutationRequestGasArgs = {
   input: RequestTokenInput;
 };
 
-
 export type MutationRequestHoldArgs = {
   input: RequestTokenInput;
 };
-
 
 export type MutationRequestPlatformArgs = {
   input: RequestTokenInput;
 };
 
-
 export type MutationRequestPoolApprovalSignaturesArgs = {
   input: RequestPoolApprovalSignaturesInput;
 };
-
 
 export type MutationResetReactionArgs = {
   input: SetReactionInput;
 };
 
-
 export type MutationRevokePermissionArgs = {
   input: RevokePermissionInput;
 };
-
 
 export type MutationSetReactionArgs = {
   input: SetReactionInput;
 };
 
-
 export type MutationToggleQuestionLikeArgs = {
   questionId: Scalars['ID']['input'];
 };
-
 
 export type MutationUpdateAssistantArgs = {
   input: UpdateAssistantInput;
 };
 
-
 export type MutationUpdateBlogArgs = {
   input: UpdateBlogInput;
 };
-
 
 export type MutationUpdateBusinessRiskScoreArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type MutationUpdateCompanyArgs = {
   input: UpdateCompanyInput;
 };
-
 
 export type MutationUpdateDocumentArgs = {
   input: UpdateDocumentInput;
 };
 
-
 export type MutationUpdateFaqAnswerArgs = {
   input: UpdateFaqAnswerInput;
 };
-
 
 export type MutationUpdateFaqTopicArgs = {
   input: UpdateFaqTopicInput;
 };
 
-
 export type MutationUpdateFolderArgs = {
   input: UpdateFolderInput;
 };
-
 
 export type MutationUpdateGalleryArgs = {
   input: UpdateGalleryInput;
 };
 
-
 export type MutationUpdateImageArgs = {
   input: UpdateImageInput;
 };
-
 
 export type MutationUpdateMessageArgs = {
   input: UpdateMessageInput;
 };
 
-
 export type MutationUpdatePoolRiskScoreArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type MutationUpdatePostArgs = {
   input: UpdatePostInput;
 };
 
-
 export type MutationUpdateQuestionAnswerArgs = {
   input: UpdateQuestionAnswerInput;
 };
 
-
 export type MutationUpdateQuestionTextArgs = {
   input: UpdateQuestionTextInput;
 };
-
 
 export type MutationUpdateTopicArgs = {
   input: UpdateTopicInput;
@@ -1171,18 +1086,9 @@ export type PaginationInput = {
   sort?: InputMaybe<SortFieldInput>;
 };
 
-export type ParentType =
-  | 'blog'
-  | 'business'
-  | 'company'
-  | 'document'
-  | 'image'
-  | 'pool'
-  | 'post';
+export type ParentType = 'blog' | 'business' | 'company' | 'document' | 'image' | 'pool' | 'post';
 
-export type ParentTypes =
-  | 'business'
-  | 'pool';
+export type ParentTypes = 'business' | 'pool';
 
 export type Permission = {
   __typename?: 'Permission';
@@ -1386,263 +1292,211 @@ export type Query = {
   getVotes: Array<Vote>;
 };
 
-
 export type QueryGetAssistantArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetBalancesArgs = {
   input: GetBalancesInput;
 };
 
-
 export type QueryGetBlogArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetBlogsArgs = {
   input?: InputMaybe<GetBlogsFilterInput>;
 };
 
-
 export type QueryGetBusinessArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetBusinessesArgs = {
   input: FilterInput;
 };
 
-
 export type QueryGetCompaniesArgs = {
   input?: InputMaybe<GetCompaniesInput>;
 };
-
 
 export type QueryGetCompanyArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type QueryGetDocumentArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type QueryGetDocumentsArgs = {
   input?: InputMaybe<GetDocumentsFilterInput>;
 };
-
 
 export type QueryGetEntityReactionsArgs = {
   parentId: Scalars['String']['input'];
   parentType: Scalars['String']['input'];
 };
 
-
 export type QueryGetEvaluationArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetEvaluationsArgs = {
   input?: InputMaybe<GetEvaluationsInput>;
 };
 
-
 export type QueryGetFaqAnswerArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetFaqAnswersArgs = {
   input?: InputMaybe<GetFaqAnswersFilterInput>;
 };
 
-
 export type QueryGetFaqTopicArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetFaqTopicsArgs = {
   input?: InputMaybe<GetFaqTopicsFilterInput>;
 };
 
-
 export type QueryGetFeesArgs = {
   input?: InputMaybe<GetFeesFilterInput>;
 };
-
 
 export type QueryGetFolderArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type QueryGetFoldersArgs = {
   input?: InputMaybe<GetFoldersFilterInput>;
 };
-
 
 export type QueryGetGalleriesArgs = {
   input?: InputMaybe<GetGalleriesFilterInput>;
 };
 
-
 export type QueryGetGalleryArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetHistoryArgs = {
   pagination?: InputMaybe<PaginationInput>;
 };
 
-
 export type QueryGetImageArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetImagesArgs = {
   input?: InputMaybe<GetImagesFilterInput>;
 };
 
-
 export type QueryGetMessageArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetMessageHistoryArgs = {
   assistantId: Scalars['ID']['input'];
   pagination?: InputMaybe<PaginationInput>;
 };
 
-
 export type QueryGetOhlcPriceDataArgs = {
   input: GetOhlcPriceDataInput;
 };
-
 
 export type QueryGetPoolArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type QueryGetPoolTransactionsArgs = {
   input: GetPoolTransactionsInput;
 };
-
 
 export type QueryGetPoolsArgs = {
   input: FilterInput;
 };
 
-
 export type QueryGetPostArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetPostsArgs = {
   input?: InputMaybe<GetPostsFilterInput>;
 };
 
-
 export type QueryGetProposalsArgs = {
   input?: InputMaybe<GetProposalsFilterInput>;
 };
-
 
 export type QueryGetQuestionArgs = {
   id: Scalars['ID']['input'];
 };
 
-
 export type QueryGetQuestionsArgs = {
   input?: InputMaybe<GetQuestionsFilterInput>;
 };
-
 
 export type QueryGetRawPriceDataArgs = {
   input: GetRawPriceDataInput;
 };
 
-
 export type QueryGetReactionsArgs = {
   input: GetReactionsFilterInput;
 };
-
 
 export type QueryGetReferralsArgs = {
   input?: InputMaybe<GetReferralsFilterInput>;
 };
 
-
 export type QueryGetReferrerClaimHistoryArgs = {
   input?: InputMaybe<GetReferrerClaimHistoryFilterInput>;
 };
-
 
 export type QueryGetReferrerWithdrawsArgs = {
   input?: InputMaybe<GetReferrerWithdrawsFilterInput>;
 };
 
-
 export type QueryGetSignatureTaskArgs = {
   input: GetSignatureTaskInput;
 };
-
 
 export type QueryGetStakingArgs = {
   input?: InputMaybe<GetStakingFilterInput>;
 };
 
-
 export type QueryGetStakingHistoryArgs = {
   input?: InputMaybe<GetStakingHistoryFilterInput>;
 };
-
 
 export type QueryGetTimelockTasksArgs = {
   input?: InputMaybe<GetTimelockTasksFilterInput>;
 };
 
-
 export type QueryGetTopicArgs = {
   id: Scalars['ID']['input'];
 };
-
 
 export type QueryGetTopicsArgs = {
   input?: InputMaybe<GetTopicsFilterInput>;
 };
 
-
 export type QueryGetTransactionsArgs = {
   input: GetTransactionsInput;
 };
-
 
 export type QueryGetTreasuryWithdrawsArgs = {
   input?: InputMaybe<GetTreasuryWithdrawsFilterInput>;
 };
 
-
 export type QueryGetUserAssistantsArgs = {
   pagination?: InputMaybe<PaginationInput>;
 };
 
-
 export type QueryGetVolumeDataArgs = {
   input: GetVolumeDataInput;
 };
-
 
 export type QueryGetVotesArgs = {
   input?: InputMaybe<GetVotesFilterInput>;
@@ -1676,14 +1530,7 @@ export type Reaction = {
   userId: Scalars['String']['output'];
 };
 
-export type ReactionType =
-  | 'angry'
-  | 'dislike'
-  | 'haha'
-  | 'like'
-  | 'love'
-  | 'sad'
-  | 'wow';
+export type ReactionType = 'angry' | 'dislike' | 'haha' | 'like' | 'love' | 'sad' | 'wow';
 
 export type Referral = {
   __typename?: 'Referral';
@@ -1798,9 +1645,7 @@ export type SocialLinkInput = {
   url: Scalars['String']['input'];
 };
 
-export type SortDirection =
-  | 'asc'
-  | 'desc';
+export type SortDirection = 'asc' | 'desc';
 
 export type SortFieldInput = {
   direction: SortDirection;
@@ -1842,11 +1687,9 @@ export type Subscription = {
   transactionUpdates: TransactionEvent;
 };
 
-
 export type SubscriptionPriceUpdatesArgs = {
   poolAddress: Scalars['String']['input'];
 };
-
 
 export type SubscriptionTransactionUpdatesArgs = {
   poolAddress: Scalars['String']['input'];
@@ -2125,21 +1968,21 @@ export type ResolverFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => Promise<TResult> | TResult;
 
 export type SubscriptionSubscribeFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => AsyncIterable<TResult> | Promise<AsyncIterable<TResult>>;
 
 export type SubscriptionResolveFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => TResult | Promise<TResult>;
 
 export interface SubscriptionSubscriberObject<TResult, TKey extends string, TParent, TContext, TArgs> {
@@ -2163,10 +2006,14 @@ export type SubscriptionResolver<TResult, TKey extends string, TParent = {}, TCo
 export type TypeResolveFn<TTypes, TParent = {}, TContext = {}> = (
   parent: TParent,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => Maybe<TTypes> | Promise<Maybe<TTypes>>;
 
-export type IsTypeOfResolverFn<T = {}, TContext = {}> = (obj: T, context: TContext, info: GraphQLResolveInfo) => boolean | Promise<boolean>;
+export type IsTypeOfResolverFn<T = {}, TContext = {}> = (
+  obj: T,
+  context: TContext,
+  info: GraphQLResolveInfo,
+) => boolean | Promise<boolean>;
 
 export type NextResolverFn<T> = () => Promise<T>;
 
@@ -2175,10 +2022,8 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => TResult | Promise<TResult>;
-
-
 
 /** Mapping between all available schema types and the resolvers types */
 export type ResolversTypes = ResolversObject<{
@@ -2515,7 +2360,10 @@ export type ResolversParentTypes = ResolversObject<{
   Vote: Vote;
 }>;
 
-export type AnswerResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Answer'] = ResolversParentTypes['Answer']> = ResolversObject<{
+export type AnswerResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Answer'] = ResolversParentTypes['Answer'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   text?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -2523,12 +2371,19 @@ export type AnswerResolvers<ContextType = GraphQLContext, ParentType extends Res
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ApprovalSignaturesResponseResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ApprovalSignaturesResponse'] = ResolversParentTypes['ApprovalSignaturesResponse']> = ResolversObject<{
+export type ApprovalSignaturesResponseResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['ApprovalSignaturesResponse'] =
+    ResolversParentTypes['ApprovalSignaturesResponse'],
+> = ResolversObject<{
   taskId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AssistantResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Assistant'] = ResolversParentTypes['Assistant']> = ResolversObject<{
+export type AssistantResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Assistant'] = ResolversParentTypes['Assistant'],
+> = ResolversObject<{
   contextPreferences?: Resolver<Array<ResolversTypes['AssistantContext']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2536,7 +2391,10 @@ export type AssistantResolvers<ContextType = GraphQLContext, ParentType extends 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BlogResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Blog'] = ResolversParentTypes['Blog']> = ResolversObject<{
+export type BlogResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Blog'] = ResolversParentTypes['Blog'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2549,7 +2407,10 @@ export type BlogResolvers<ContextType = GraphQLContext, ParentType extends Resol
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BusinessResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Business'] = ResolversParentTypes['Business']> = ResolversObject<{
+export type BusinessResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Business'] = ResolversParentTypes['Business'],
+> = ResolversObject<{
   approvalSignaturesTaskExpired?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   approvalSignaturesTaskId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   businessType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -2575,7 +2436,10 @@ export type BusinessResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CompanyResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Company'] = ResolversParentTypes['Company']> = ResolversObject<{
+export type CompanyResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Company'] = ResolversParentTypes['Company'],
+> = ResolversObject<{
   country?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   description?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2587,7 +2451,10 @@ export type CompanyResolvers<ContextType = GraphQLContext, ParentType extends Re
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CompanyWithDetailsResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CompanyWithDetails'] = ResolversParentTypes['CompanyWithDetails']> = ResolversObject<{
+export type CompanyWithDetailsResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['CompanyWithDetails'] = ResolversParentTypes['CompanyWithDetails'],
+> = ResolversObject<{
   country?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   description?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2600,7 +2467,10 @@ export type CompanyWithDetailsResolvers<ContextType = GraphQLContext, ParentType
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DocumentResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Document'] = ResolversParentTypes['Document']> = ResolversObject<{
+export type DocumentResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Document'] = ResolversParentTypes['Document'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   fileId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2619,13 +2489,19 @@ export type DocumentResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EntityReactionsResponseResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['EntityReactionsResponse'] = ResolversParentTypes['EntityReactionsResponse']> = ResolversObject<{
+export type EntityReactionsResponseResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['EntityReactionsResponse'] = ResolversParentTypes['EntityReactionsResponse'],
+> = ResolversObject<{
   reactions?: Resolver<ResolversTypes['JSON'], ParentType, ContextType>;
   userReactions?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EvaluationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Evaluation'] = ResolversParentTypes['Evaluation']> = ResolversObject<{
+export type EvaluationResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Evaluation'] = ResolversParentTypes['Evaluation'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   entityType?: Resolver<ResolversTypes['EvaluationEntityType'], ParentType, ContextType>;
   evaluatedDocuments?: Resolver<Array<ResolversTypes['EvaluationDocumentRef']>, ParentType, ContextType>;
@@ -2645,27 +2521,39 @@ export type EvaluationResolvers<ContextType = GraphQLContext, ParentType extends
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EvaluationDocumentRefResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['EvaluationDocumentRef'] = ResolversParentTypes['EvaluationDocumentRef']> = ResolversObject<{
+export type EvaluationDocumentRefResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['EvaluationDocumentRef'] = ResolversParentTypes['EvaluationDocumentRef'],
+> = ResolversObject<{
   id?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   mimeType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EvaluationFactorResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['EvaluationFactor'] = ResolversParentTypes['EvaluationFactor']> = ResolversObject<{
+export type EvaluationFactorResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['EvaluationFactor'] = ResolversParentTypes['EvaluationFactor'],
+> = ResolversObject<{
   detail?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   impact?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EvaluationImageRefResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['EvaluationImageRef'] = ResolversParentTypes['EvaluationImageRef']> = ResolversObject<{
+export type EvaluationImageRefResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['EvaluationImageRef'] = ResolversParentTypes['EvaluationImageRef'],
+> = ResolversObject<{
   id?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FaqAnswerResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['FaqAnswer'] = ResolversParentTypes['FaqAnswer']> = ResolversObject<{
+export type FaqAnswerResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['FaqAnswer'] = ResolversParentTypes['FaqAnswer'],
+> = ResolversObject<{
   answer?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2681,7 +2569,10 @@ export type FaqAnswerResolvers<ContextType = GraphQLContext, ParentType extends 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FaqTopicResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['FaqTopic'] = ResolversParentTypes['FaqTopic']> = ResolversObject<{
+export type FaqTopicResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['FaqTopic'] = ResolversParentTypes['FaqTopic'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2694,7 +2585,10 @@ export type FaqTopicResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FaucetRequestResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['FaucetRequest'] = ResolversParentTypes['FaucetRequest']> = ResolversObject<{
+export type FaucetRequestResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['FaucetRequest'] = ResolversParentTypes['FaucetRequest'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -2705,7 +2599,10 @@ export type FaucetRequestResolvers<ContextType = GraphQLContext, ParentType exte
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FeesResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Fees'] = ResolversParentTypes['Fees']> = ResolversObject<{
+export type FeesResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Fees'] = ResolversParentTypes['Fees'],
+> = ResolversObject<{
   buyCommissionAmount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   buyCommissionCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2726,7 +2623,10 @@ export type FeesResolvers<ContextType = GraphQLContext, ParentType extends Resol
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FolderResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Folder'] = ResolversParentTypes['Folder']> = ResolversObject<{
+export type FolderResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Folder'] = ResolversParentTypes['Folder'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2739,7 +2639,10 @@ export type FolderResolvers<ContextType = GraphQLContext, ParentType extends Res
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GalleryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Gallery'] = ResolversParentTypes['Gallery']> = ResolversObject<{
+export type GalleryResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Gallery'] = ResolversParentTypes['Gallery'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2752,12 +2655,18 @@ export type GalleryResolvers<ContextType = GraphQLContext, ParentType extends Re
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type IdResponseResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['IdResponse'] = ResolversParentTypes['IdResponse']> = ResolversObject<{
+export type IdResponseResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['IdResponse'] = ResolversParentTypes['IdResponse'],
+> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ImageResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Image'] = ResolversParentTypes['Image']> = ResolversObject<{
+export type ImageResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Image'] = ResolversParentTypes['Image'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   description?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2777,7 +2686,10 @@ export type ImageResolvers<ContextType = GraphQLContext, ParentType extends Reso
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type IncomingTrancheResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['IncomingTranche'] = ResolversParentTypes['IncomingTranche']> = ResolversObject<{
+export type IncomingTrancheResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['IncomingTranche'] = ResolversParentTypes['IncomingTranche'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   expiredAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   returnedAmount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2788,7 +2700,10 @@ export interface JsonScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes
   name: 'JSON';
 }
 
-export type MemberResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Member'] = ResolversParentTypes['Member']> = ResolversObject<{
+export type MemberResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Member'] = ResolversParentTypes['Member'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2797,7 +2712,10 @@ export type MemberResolvers<ContextType = GraphQLContext, ParentType extends Res
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type MessageResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Message'] = ResolversParentTypes['Message']> = ResolversObject<{
+export type MessageResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Message'] = ResolversParentTypes['Message'],
+> = ResolversObject<{
   assistantId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   sender?: Resolver<ResolversTypes['MessageSender'], ParentType, ContextType>;
@@ -2805,74 +2723,365 @@ export type MessageResolvers<ContextType = GraphQLContext, ParentType extends Re
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
+export type MutationResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation'],
+> = ResolversObject<{
   _?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
-  addMember?: Resolver<ResolversTypes['Member'], ParentType, ContextType, RequireFields<MutationAddMemberArgs, 'input'>>;
-  createAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<MutationCreateAssistantArgs, 'input'>>;
-  createBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<MutationCreateBlogArgs, 'input'>>;
-  createBusiness?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationCreateBusinessArgs, 'input'>>;
-  createBusinessWithAI?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationCreateBusinessWithAiArgs, 'input'>>;
-  createCompany?: Resolver<ResolversTypes['Company'], ParentType, ContextType, RequireFields<MutationCreateCompanyArgs, 'input'>>;
-  createFaqAnswer?: Resolver<ResolversTypes['FaqAnswer'], ParentType, ContextType, RequireFields<MutationCreateFaqAnswerArgs, 'input'>>;
-  createFaqTopic?: Resolver<ResolversTypes['FaqTopic'], ParentType, ContextType, RequireFields<MutationCreateFaqTopicArgs, 'input'>>;
-  createFolder?: Resolver<ResolversTypes['Folder'], ParentType, ContextType, RequireFields<MutationCreateFolderArgs, 'input'>>;
-  createGallery?: Resolver<ResolversTypes['Gallery'], ParentType, ContextType, RequireFields<MutationCreateGalleryArgs, 'input'>>;
-  createMessage?: Resolver<Array<ResolversTypes['Message']>, ParentType, ContextType, RequireFields<MutationCreateMessageArgs, 'input'>>;
-  createPool?: Resolver<ResolversTypes['Pool'], ParentType, ContextType, RequireFields<MutationCreatePoolArgs, 'input'>>;
-  createPoolWithAI?: Resolver<ResolversTypes['Pool'], ParentType, ContextType, RequireFields<MutationCreatePoolWithAiArgs, 'input'>>;
-  createPost?: Resolver<ResolversTypes['Post'], ParentType, ContextType, RequireFields<MutationCreatePostArgs, 'input'>>;
-  createQuestion?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationCreateQuestionArgs, 'input'>>;
-  createQuestionAnswer?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationCreateQuestionAnswerArgs, 'input'>>;
-  createReferrerWithdrawTask?: Resolver<ResolversTypes['ReferrerWithdraw'], ParentType, ContextType, RequireFields<MutationCreateReferrerWithdrawTaskArgs, 'input'>>;
-  createTopic?: Resolver<ResolversTypes['Topic'], ParentType, ContextType, RequireFields<MutationCreateTopicArgs, 'input'>>;
-  deleteAssistant?: Resolver<ResolversTypes['IdResponse'], ParentType, ContextType, RequireFields<MutationDeleteAssistantArgs, 'id'>>;
+  addMember?: Resolver<
+    ResolversTypes['Member'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddMemberArgs, 'input'>
+  >;
+  createAssistant?: Resolver<
+    ResolversTypes['Assistant'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateAssistantArgs, 'input'>
+  >;
+  createBlog?: Resolver<
+    ResolversTypes['Blog'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateBlogArgs, 'input'>
+  >;
+  createBusiness?: Resolver<
+    ResolversTypes['Business'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateBusinessArgs, 'input'>
+  >;
+  createBusinessWithAI?: Resolver<
+    ResolversTypes['Business'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateBusinessWithAiArgs, 'input'>
+  >;
+  createCompany?: Resolver<
+    ResolversTypes['Company'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateCompanyArgs, 'input'>
+  >;
+  createFaqAnswer?: Resolver<
+    ResolversTypes['FaqAnswer'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateFaqAnswerArgs, 'input'>
+  >;
+  createFaqTopic?: Resolver<
+    ResolversTypes['FaqTopic'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateFaqTopicArgs, 'input'>
+  >;
+  createFolder?: Resolver<
+    ResolversTypes['Folder'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateFolderArgs, 'input'>
+  >;
+  createGallery?: Resolver<
+    ResolversTypes['Gallery'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateGalleryArgs, 'input'>
+  >;
+  createMessage?: Resolver<
+    Array<ResolversTypes['Message']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateMessageArgs, 'input'>
+  >;
+  createPool?: Resolver<
+    ResolversTypes['Pool'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreatePoolArgs, 'input'>
+  >;
+  createPoolWithAI?: Resolver<
+    ResolversTypes['Pool'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreatePoolWithAiArgs, 'input'>
+  >;
+  createPost?: Resolver<
+    ResolversTypes['Post'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreatePostArgs, 'input'>
+  >;
+  createQuestion?: Resolver<
+    ResolversTypes['Question'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateQuestionArgs, 'input'>
+  >;
+  createQuestionAnswer?: Resolver<
+    ResolversTypes['Question'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateQuestionAnswerArgs, 'input'>
+  >;
+  createReferrerWithdrawTask?: Resolver<
+    ResolversTypes['ReferrerWithdraw'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateReferrerWithdrawTaskArgs, 'input'>
+  >;
+  createTopic?: Resolver<
+    ResolversTypes['Topic'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateTopicArgs, 'input'>
+  >;
+  deleteAssistant?: Resolver<
+    ResolversTypes['IdResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteAssistantArgs, 'id'>
+  >;
   deleteBlog?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteBlogArgs, 'id'>>;
-  deleteCompany?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteCompanyArgs, 'id'>>;
-  deleteDocument?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteDocumentArgs, 'id'>>;
-  deleteFaqAnswer?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteFaqAnswerArgs, 'id'>>;
-  deleteFaqTopic?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteFaqTopicArgs, 'id'>>;
+  deleteCompany?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteCompanyArgs, 'id'>
+  >;
+  deleteDocument?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteDocumentArgs, 'id'>
+  >;
+  deleteFaqAnswer?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteFaqAnswerArgs, 'id'>
+  >;
+  deleteFaqTopic?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteFaqTopicArgs, 'id'>
+  >;
   deleteFolder?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteFolderArgs, 'id'>>;
-  deleteGallery?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteGalleryArgs, 'id'>>;
+  deleteGallery?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteGalleryArgs, 'id'>
+  >;
   deleteImage?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteImageArgs, 'id'>>;
-  deleteMessage?: Resolver<ResolversTypes['IdResponse'], ParentType, ContextType, RequireFields<MutationDeleteMessageArgs, 'id'>>;
+  deleteMessage?: Resolver<
+    ResolversTypes['IdResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteMessageArgs, 'id'>
+  >;
   deletePost?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeletePostArgs, 'id'>>;
-  deleteQuestion?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteQuestionArgs, 'id'>>;
+  deleteQuestion?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteQuestionArgs, 'id'>
+  >;
   deleteTopic?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationDeleteTopicArgs, 'id'>>;
-  editBusiness?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationEditBusinessArgs, 'input'>>;
+  editBusiness?: Resolver<
+    ResolversTypes['Business'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationEditBusinessArgs, 'input'>
+  >;
   editPool?: Resolver<ResolversTypes['Pool'], ParentType, ContextType, RequireFields<MutationEditPoolArgs, 'input'>>;
-  grantPermission?: Resolver<ResolversTypes['Permission'], ParentType, ContextType, RequireFields<MutationGrantPermissionArgs, 'input'>>;
-  registerReferral?: Resolver<ResolversTypes['Referral'], ParentType, ContextType, RequireFields<MutationRegisterReferralArgs, 'input'>>;
-  rejectBusinessApprovalSignatures?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRejectBusinessApprovalSignaturesArgs, 'id'>>;
-  rejectPoolApprovalSignatures?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRejectPoolApprovalSignaturesArgs, 'id'>>;
-  removeMember?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRemoveMemberArgs, 'input'>>;
-  requestBusinessApprovalSignatures?: Resolver<ResolversTypes['ApprovalSignaturesResponse'], ParentType, ContextType, RequireFields<MutationRequestBusinessApprovalSignaturesArgs, 'input'>>;
-  requestGas?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestGasArgs, 'input'>>;
-  requestHold?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestHoldArgs, 'input'>>;
-  requestPlatform?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestPlatformArgs, 'input'>>;
-  requestPoolApprovalSignatures?: Resolver<ResolversTypes['ApprovalSignaturesResponse'], ParentType, ContextType, RequireFields<MutationRequestPoolApprovalSignaturesArgs, 'input'>>;
-  resetReaction?: Resolver<Maybe<ResolversTypes['Reaction']>, ParentType, ContextType, RequireFields<MutationResetReactionArgs, 'input'>>;
-  revokePermission?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRevokePermissionArgs, 'input'>>;
-  setReaction?: Resolver<ResolversTypes['Reaction'], ParentType, ContextType, RequireFields<MutationSetReactionArgs, 'input'>>;
-  toggleQuestionLike?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationToggleQuestionLikeArgs, 'questionId'>>;
-  updateAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<MutationUpdateAssistantArgs, 'input'>>;
-  updateBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<MutationUpdateBlogArgs, 'input'>>;
-  updateBusinessRiskScore?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<MutationUpdateBusinessRiskScoreArgs, 'id'>>;
-  updateCompany?: Resolver<ResolversTypes['Company'], ParentType, ContextType, RequireFields<MutationUpdateCompanyArgs, 'input'>>;
-  updateDocument?: Resolver<ResolversTypes['Document'], ParentType, ContextType, RequireFields<MutationUpdateDocumentArgs, 'input'>>;
-  updateFaqAnswer?: Resolver<ResolversTypes['FaqAnswer'], ParentType, ContextType, RequireFields<MutationUpdateFaqAnswerArgs, 'input'>>;
-  updateFaqTopic?: Resolver<ResolversTypes['FaqTopic'], ParentType, ContextType, RequireFields<MutationUpdateFaqTopicArgs, 'input'>>;
-  updateFolder?: Resolver<ResolversTypes['Folder'], ParentType, ContextType, RequireFields<MutationUpdateFolderArgs, 'input'>>;
-  updateGallery?: Resolver<ResolversTypes['Gallery'], ParentType, ContextType, RequireFields<MutationUpdateGalleryArgs, 'input'>>;
-  updateImage?: Resolver<ResolversTypes['Image'], ParentType, ContextType, RequireFields<MutationUpdateImageArgs, 'input'>>;
-  updateMessage?: Resolver<ResolversTypes['Message'], ParentType, ContextType, RequireFields<MutationUpdateMessageArgs, 'input'>>;
-  updatePoolRiskScore?: Resolver<ResolversTypes['Pool'], ParentType, ContextType, RequireFields<MutationUpdatePoolRiskScoreArgs, 'id'>>;
-  updatePost?: Resolver<ResolversTypes['Post'], ParentType, ContextType, RequireFields<MutationUpdatePostArgs, 'input'>>;
-  updateQuestionAnswer?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationUpdateQuestionAnswerArgs, 'input'>>;
-  updateQuestionText?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationUpdateQuestionTextArgs, 'input'>>;
-  updateTopic?: Resolver<ResolversTypes['Topic'], ParentType, ContextType, RequireFields<MutationUpdateTopicArgs, 'input'>>;
+  grantPermission?: Resolver<
+    ResolversTypes['Permission'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationGrantPermissionArgs, 'input'>
+  >;
+  registerReferral?: Resolver<
+    ResolversTypes['Referral'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRegisterReferralArgs, 'input'>
+  >;
+  rejectBusinessApprovalSignatures?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRejectBusinessApprovalSignaturesArgs, 'id'>
+  >;
+  rejectPoolApprovalSignatures?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRejectPoolApprovalSignaturesArgs, 'id'>
+  >;
+  removeMember?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRemoveMemberArgs, 'input'>
+  >;
+  requestBusinessApprovalSignatures?: Resolver<
+    ResolversTypes['ApprovalSignaturesResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRequestBusinessApprovalSignaturesArgs, 'input'>
+  >;
+  requestGas?: Resolver<
+    ResolversTypes['FaucetRequest'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRequestGasArgs, 'input'>
+  >;
+  requestHold?: Resolver<
+    ResolversTypes['FaucetRequest'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRequestHoldArgs, 'input'>
+  >;
+  requestPlatform?: Resolver<
+    ResolversTypes['FaucetRequest'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRequestPlatformArgs, 'input'>
+  >;
+  requestPoolApprovalSignatures?: Resolver<
+    ResolversTypes['ApprovalSignaturesResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRequestPoolApprovalSignaturesArgs, 'input'>
+  >;
+  resetReaction?: Resolver<
+    Maybe<ResolversTypes['Reaction']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationResetReactionArgs, 'input'>
+  >;
+  revokePermission?: Resolver<
+    ResolversTypes['ID'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRevokePermissionArgs, 'input'>
+  >;
+  setReaction?: Resolver<
+    ResolversTypes['Reaction'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetReactionArgs, 'input'>
+  >;
+  toggleQuestionLike?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationToggleQuestionLikeArgs, 'questionId'>
+  >;
+  updateAssistant?: Resolver<
+    ResolversTypes['Assistant'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateAssistantArgs, 'input'>
+  >;
+  updateBlog?: Resolver<
+    ResolversTypes['Blog'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateBlogArgs, 'input'>
+  >;
+  updateBusinessRiskScore?: Resolver<
+    ResolversTypes['Business'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateBusinessRiskScoreArgs, 'id'>
+  >;
+  updateCompany?: Resolver<
+    ResolversTypes['Company'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateCompanyArgs, 'input'>
+  >;
+  updateDocument?: Resolver<
+    ResolversTypes['Document'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateDocumentArgs, 'input'>
+  >;
+  updateFaqAnswer?: Resolver<
+    ResolversTypes['FaqAnswer'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateFaqAnswerArgs, 'input'>
+  >;
+  updateFaqTopic?: Resolver<
+    ResolversTypes['FaqTopic'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateFaqTopicArgs, 'input'>
+  >;
+  updateFolder?: Resolver<
+    ResolversTypes['Folder'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateFolderArgs, 'input'>
+  >;
+  updateGallery?: Resolver<
+    ResolversTypes['Gallery'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateGalleryArgs, 'input'>
+  >;
+  updateImage?: Resolver<
+    ResolversTypes['Image'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateImageArgs, 'input'>
+  >;
+  updateMessage?: Resolver<
+    ResolversTypes['Message'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateMessageArgs, 'input'>
+  >;
+  updatePoolRiskScore?: Resolver<
+    ResolversTypes['Pool'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdatePoolRiskScoreArgs, 'id'>
+  >;
+  updatePost?: Resolver<
+    ResolversTypes['Post'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdatePostArgs, 'input'>
+  >;
+  updateQuestionAnswer?: Resolver<
+    ResolversTypes['Question'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateQuestionAnswerArgs, 'input'>
+  >;
+  updateQuestionText?: Resolver<
+    ResolversTypes['Question'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateQuestionTextArgs, 'input'>
+  >;
+  updateTopic?: Resolver<
+    ResolversTypes['Topic'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateTopicArgs, 'input'>
+  >;
 }>;
 
-export type OhlcDataResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['OhlcData'] = ResolversParentTypes['OhlcData']> = ResolversObject<{
+export type OhlcDataResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['OhlcData'] = ResolversParentTypes['OhlcData'],
+> = ResolversObject<{
   close?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   high?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   low?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -2881,14 +3090,20 @@ export type OhlcDataResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type OutgoingTrancheResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['OutgoingTranche'] = ResolversParentTypes['OutgoingTranche']> = ResolversObject<{
+export type OutgoingTrancheResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['OutgoingTranche'] = ResolversParentTypes['OutgoingTranche'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   executedAmount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   timestamp?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PermissionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Permission'] = ResolversParentTypes['Permission']> = ResolversObject<{
+export type PermissionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Permission'] = ResolversParentTypes['Permission'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   entity?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -2897,7 +3112,10 @@ export type PermissionResolvers<ContextType = GraphQLContext, ParentType extends
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PoolResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Pool'] = ResolversParentTypes['Pool']> = ResolversObject<{
+export type PoolResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Pool'] = ResolversParentTypes['Pool'],
+> = ResolversObject<{
   allowEntryBurn?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   approvalSignaturesTaskExpired?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   approvalSignaturesTaskId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -2955,7 +3173,10 @@ export type PoolResolvers<ContextType = GraphQLContext, ParentType extends Resol
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PoolTransactionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PoolTransaction'] = ResolversParentTypes['PoolTransaction']> = ResolversObject<{
+export type PoolTransactionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['PoolTransaction'] = ResolversParentTypes['PoolTransaction'],
+> = ResolversObject<{
   bonusAmount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   bonusFee?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -2971,7 +3192,10 @@ export type PoolTransactionResolvers<ContextType = GraphQLContext, ParentType ex
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PostResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Post'] = ResolversParentTypes['Post']> = ResolversObject<{
+export type PostResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Post'] = ResolversParentTypes['Post'],
+> = ResolversObject<{
   blogId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   content?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -2988,7 +3212,10 @@ export type PostResolvers<ContextType = GraphQLContext, ParentType extends Resol
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PriceDataResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PriceData'] = ResolversParentTypes['PriceData']> = ResolversObject<{
+export type PriceDataResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['PriceData'] = ResolversParentTypes['PriceData'],
+> = ResolversObject<{
   blockNumber?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3002,7 +3229,10 @@ export type PriceDataResolvers<ContextType = GraphQLContext, ParentType extends 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PriceUpdateEventResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PriceUpdateEvent'] = ResolversParentTypes['PriceUpdateEvent']> = ResolversObject<{
+export type PriceUpdateEventResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['PriceUpdateEvent'] = ResolversParentTypes['PriceUpdateEvent'],
+> = ResolversObject<{
   poolAddress?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   price?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   realHoldReserve?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3012,7 +3242,10 @@ export type PriceUpdateEventResolvers<ContextType = GraphQLContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ProposalResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Proposal'] = ResolversParentTypes['Proposal']> = ResolversObject<{
+export type ProposalResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Proposal'] = ResolversParentTypes['Proposal'],
+> = ResolversObject<{
   canceller?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -3032,24 +3265,87 @@ export type ProposalResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
+export type QueryResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query'],
+> = ResolversObject<{
   _?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
-  getAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<QueryGetAssistantArgs, 'id'>>;
-  getBalances?: Resolver<Array<ResolversTypes['TokenBalance']>, ParentType, ContextType, RequireFields<QueryGetBalancesArgs, 'input'>>;
+  getAssistant?: Resolver<
+    ResolversTypes['Assistant'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetAssistantArgs, 'id'>
+  >;
+  getBalances?: Resolver<
+    Array<ResolversTypes['TokenBalance']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetBalancesArgs, 'input'>
+  >;
   getBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<QueryGetBlogArgs, 'id'>>;
   getBlogs?: Resolver<Array<ResolversTypes['Blog']>, ParentType, ContextType, Partial<QueryGetBlogsArgs>>;
-  getBusiness?: Resolver<ResolversTypes['Business'], ParentType, ContextType, RequireFields<QueryGetBusinessArgs, 'id'>>;
-  getBusinesses?: Resolver<Array<ResolversTypes['Business']>, ParentType, ContextType, RequireFields<QueryGetBusinessesArgs, 'input'>>;
+  getBusiness?: Resolver<
+    ResolversTypes['Business'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetBusinessArgs, 'id'>
+  >;
+  getBusinesses?: Resolver<
+    Array<ResolversTypes['Business']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetBusinessesArgs, 'input'>
+  >;
   getCompanies?: Resolver<Array<ResolversTypes['Company']>, ParentType, ContextType, Partial<QueryGetCompaniesArgs>>;
-  getCompany?: Resolver<ResolversTypes['CompanyWithDetails'], ParentType, ContextType, RequireFields<QueryGetCompanyArgs, 'id'>>;
-  getDocument?: Resolver<ResolversTypes['Document'], ParentType, ContextType, RequireFields<QueryGetDocumentArgs, 'id'>>;
+  getCompany?: Resolver<
+    ResolversTypes['CompanyWithDetails'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetCompanyArgs, 'id'>
+  >;
+  getDocument?: Resolver<
+    ResolversTypes['Document'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetDocumentArgs, 'id'>
+  >;
   getDocuments?: Resolver<Array<ResolversTypes['Document']>, ParentType, ContextType, Partial<QueryGetDocumentsArgs>>;
-  getEntityReactions?: Resolver<ResolversTypes['EntityReactionsResponse'], ParentType, ContextType, RequireFields<QueryGetEntityReactionsArgs, 'parentId' | 'parentType'>>;
-  getEvaluation?: Resolver<ResolversTypes['Evaluation'], ParentType, ContextType, RequireFields<QueryGetEvaluationArgs, 'id'>>;
-  getEvaluations?: Resolver<Array<ResolversTypes['Evaluation']>, ParentType, ContextType, Partial<QueryGetEvaluationsArgs>>;
-  getFaqAnswer?: Resolver<ResolversTypes['FaqAnswer'], ParentType, ContextType, RequireFields<QueryGetFaqAnswerArgs, 'id'>>;
-  getFaqAnswers?: Resolver<Array<ResolversTypes['FaqAnswer']>, ParentType, ContextType, Partial<QueryGetFaqAnswersArgs>>;
-  getFaqTopic?: Resolver<ResolversTypes['FaqTopic'], ParentType, ContextType, RequireFields<QueryGetFaqTopicArgs, 'id'>>;
+  getEntityReactions?: Resolver<
+    ResolversTypes['EntityReactionsResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetEntityReactionsArgs, 'parentId' | 'parentType'>
+  >;
+  getEvaluation?: Resolver<
+    ResolversTypes['Evaluation'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetEvaluationArgs, 'id'>
+  >;
+  getEvaluations?: Resolver<
+    Array<ResolversTypes['Evaluation']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetEvaluationsArgs>
+  >;
+  getFaqAnswer?: Resolver<
+    ResolversTypes['FaqAnswer'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetFaqAnswerArgs, 'id'>
+  >;
+  getFaqAnswers?: Resolver<
+    Array<ResolversTypes['FaqAnswer']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetFaqAnswersArgs>
+  >;
+  getFaqTopic?: Resolver<
+    ResolversTypes['FaqTopic'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetFaqTopicArgs, 'id'>
+  >;
   getFaqTopics?: Resolver<Array<ResolversTypes['FaqTopic']>, ParentType, ContextType, Partial<QueryGetFaqTopicsArgs>>;
   getFees?: Resolver<Array<ResolversTypes['Fees']>, ParentType, ContextType, Partial<QueryGetFeesArgs>>;
   getFolder?: Resolver<ResolversTypes['Folder'], ParentType, ContextType, RequireFields<QueryGetFolderArgs, 'id'>>;
@@ -3060,36 +3356,119 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   getImage?: Resolver<ResolversTypes['Image'], ParentType, ContextType, RequireFields<QueryGetImageArgs, 'id'>>;
   getImages?: Resolver<Array<ResolversTypes['Image']>, ParentType, ContextType, Partial<QueryGetImagesArgs>>;
   getMessage?: Resolver<ResolversTypes['Message'], ParentType, ContextType, RequireFields<QueryGetMessageArgs, 'id'>>;
-  getMessageHistory?: Resolver<Array<ResolversTypes['Message']>, ParentType, ContextType, RequireFields<QueryGetMessageHistoryArgs, 'assistantId'>>;
-  getOhlcPriceData?: Resolver<Array<ResolversTypes['OhlcData']>, ParentType, ContextType, RequireFields<QueryGetOhlcPriceDataArgs, 'input'>>;
+  getMessageHistory?: Resolver<
+    Array<ResolversTypes['Message']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetMessageHistoryArgs, 'assistantId'>
+  >;
+  getOhlcPriceData?: Resolver<
+    Array<ResolversTypes['OhlcData']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetOhlcPriceDataArgs, 'input'>
+  >;
   getPool?: Resolver<ResolversTypes['Pool'], ParentType, ContextType, RequireFields<QueryGetPoolArgs, 'id'>>;
-  getPoolTransactions?: Resolver<Array<ResolversTypes['PoolTransaction']>, ParentType, ContextType, RequireFields<QueryGetPoolTransactionsArgs, 'input'>>;
-  getPools?: Resolver<Array<ResolversTypes['Pool']>, ParentType, ContextType, RequireFields<QueryGetPoolsArgs, 'input'>>;
+  getPoolTransactions?: Resolver<
+    Array<ResolversTypes['PoolTransaction']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetPoolTransactionsArgs, 'input'>
+  >;
+  getPools?: Resolver<
+    Array<ResolversTypes['Pool']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetPoolsArgs, 'input'>
+  >;
   getPost?: Resolver<ResolversTypes['Post'], ParentType, ContextType, RequireFields<QueryGetPostArgs, 'id'>>;
   getPosts?: Resolver<Array<ResolversTypes['Post']>, ParentType, ContextType, Partial<QueryGetPostsArgs>>;
   getProposals?: Resolver<Array<ResolversTypes['Proposal']>, ParentType, ContextType, Partial<QueryGetProposalsArgs>>;
-  getQuestion?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<QueryGetQuestionArgs, 'id'>>;
+  getQuestion?: Resolver<
+    ResolversTypes['Question'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetQuestionArgs, 'id'>
+  >;
   getQuestions?: Resolver<Array<ResolversTypes['Question']>, ParentType, ContextType, Partial<QueryGetQuestionsArgs>>;
-  getRawPriceData?: Resolver<Array<ResolversTypes['PriceData']>, ParentType, ContextType, RequireFields<QueryGetRawPriceDataArgs, 'input'>>;
-  getReactions?: Resolver<Array<ResolversTypes['Reaction']>, ParentType, ContextType, RequireFields<QueryGetReactionsArgs, 'input'>>;
+  getRawPriceData?: Resolver<
+    Array<ResolversTypes['PriceData']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetRawPriceDataArgs, 'input'>
+  >;
+  getReactions?: Resolver<
+    Array<ResolversTypes['Reaction']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetReactionsArgs, 'input'>
+  >;
   getReferrals?: Resolver<Array<ResolversTypes['Referral']>, ParentType, ContextType, Partial<QueryGetReferralsArgs>>;
-  getReferrerClaimHistory?: Resolver<Array<ResolversTypes['ReferrerClaimHistory']>, ParentType, ContextType, Partial<QueryGetReferrerClaimHistoryArgs>>;
-  getReferrerWithdraws?: Resolver<Array<ResolversTypes['ReferrerWithdraw']>, ParentType, ContextType, Partial<QueryGetReferrerWithdrawsArgs>>;
-  getSignatureTask?: Resolver<ResolversTypes['SignatureTask'], ParentType, ContextType, RequireFields<QueryGetSignatureTaskArgs, 'input'>>;
+  getReferrerClaimHistory?: Resolver<
+    Array<ResolversTypes['ReferrerClaimHistory']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetReferrerClaimHistoryArgs>
+  >;
+  getReferrerWithdraws?: Resolver<
+    Array<ResolversTypes['ReferrerWithdraw']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetReferrerWithdrawsArgs>
+  >;
+  getSignatureTask?: Resolver<
+    ResolversTypes['SignatureTask'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetSignatureTaskArgs, 'input'>
+  >;
   getStaking?: Resolver<Array<ResolversTypes['Staking']>, ParentType, ContextType, Partial<QueryGetStakingArgs>>;
-  getStakingHistory?: Resolver<Array<ResolversTypes['StakingHistory']>, ParentType, ContextType, Partial<QueryGetStakingHistoryArgs>>;
-  getTimelockTasks?: Resolver<Array<ResolversTypes['TimelockTask']>, ParentType, ContextType, Partial<QueryGetTimelockTasksArgs>>;
+  getStakingHistory?: Resolver<
+    Array<ResolversTypes['StakingHistory']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetStakingHistoryArgs>
+  >;
+  getTimelockTasks?: Resolver<
+    Array<ResolversTypes['TimelockTask']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetTimelockTasksArgs>
+  >;
   getTopic?: Resolver<ResolversTypes['Topic'], ParentType, ContextType, RequireFields<QueryGetTopicArgs, 'id'>>;
   getTopics?: Resolver<Array<ResolversTypes['Topic']>, ParentType, ContextType, Partial<QueryGetTopicsArgs>>;
-  getTransactions?: Resolver<Array<ResolversTypes['Transaction']>, ParentType, ContextType, RequireFields<QueryGetTransactionsArgs, 'input'>>;
-  getTreasuryWithdraws?: Resolver<Array<ResolversTypes['TreasuryWithdraw']>, ParentType, ContextType, Partial<QueryGetTreasuryWithdrawsArgs>>;
+  getTransactions?: Resolver<
+    Array<ResolversTypes['Transaction']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetTransactionsArgs, 'input'>
+  >;
+  getTreasuryWithdraws?: Resolver<
+    Array<ResolversTypes['TreasuryWithdraw']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetTreasuryWithdrawsArgs>
+  >;
   getUnlockTime?: Resolver<ResolversTypes['UnlockTimeResponse'], ParentType, ContextType>;
-  getUserAssistants?: Resolver<Array<ResolversTypes['Assistant']>, ParentType, ContextType, Partial<QueryGetUserAssistantsArgs>>;
-  getVolumeData?: Resolver<Array<ResolversTypes['VolumeData']>, ParentType, ContextType, RequireFields<QueryGetVolumeDataArgs, 'input'>>;
+  getUserAssistants?: Resolver<
+    Array<ResolversTypes['Assistant']>,
+    ParentType,
+    ContextType,
+    Partial<QueryGetUserAssistantsArgs>
+  >;
+  getVolumeData?: Resolver<
+    Array<ResolversTypes['VolumeData']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGetVolumeDataArgs, 'input'>
+  >;
   getVotes?: Resolver<Array<ResolversTypes['Vote']>, ParentType, ContextType, Partial<QueryGetVotesArgs>>;
 }>;
 
-export type QuestionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Question'] = ResolversParentTypes['Question']> = ResolversObject<{
+export type QuestionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Question'] = ResolversParentTypes['Question'],
+> = ResolversObject<{
   answer?: Resolver<Maybe<ResolversTypes['Answer']>, ParentType, ContextType>;
   answered?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -3106,7 +3485,10 @@ export type QuestionResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ReactionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Reaction'] = ResolversParentTypes['Reaction']> = ResolversObject<{
+export type ReactionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Reaction'] = ResolversParentTypes['Reaction'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   parentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3117,7 +3499,10 @@ export type ReactionResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ReferralResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Referral'] = ResolversParentTypes['Referral']> = ResolversObject<{
+export type ReferralResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Referral'] = ResolversParentTypes['Referral'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   referrerId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -3128,7 +3513,10 @@ export type ReferralResolvers<ContextType = GraphQLContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ReferrerClaimHistoryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ReferrerClaimHistory'] = ResolversParentTypes['ReferrerClaimHistory']> = ResolversObject<{
+export type ReferrerClaimHistoryResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['ReferrerClaimHistory'] = ResolversParentTypes['ReferrerClaimHistory'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   blockNumber?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3144,7 +3532,10 @@ export type ReferrerClaimHistoryResolvers<ContextType = GraphQLContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ReferrerWithdrawResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ReferrerWithdraw'] = ResolversParentTypes['ReferrerWithdraw']> = ResolversObject<{
+export type ReferrerWithdrawResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['ReferrerWithdraw'] = ResolversParentTypes['ReferrerWithdraw'],
+> = ResolversObject<{
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -3159,13 +3550,19 @@ export type ReferrerWithdrawResolvers<ContextType = GraphQLContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SignatureResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Signature'] = ResolversParentTypes['Signature']> = ResolversObject<{
+export type SignatureResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Signature'] = ResolversParentTypes['Signature'],
+> = ResolversObject<{
   signature?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   signer?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SignatureTaskResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['SignatureTask'] = ResolversParentTypes['SignatureTask']> = ResolversObject<{
+export type SignatureTaskResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['SignatureTask'] = ResolversParentTypes['SignatureTask'],
+> = ResolversObject<{
   completed?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   expired?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   hash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3177,13 +3574,19 @@ export type SignatureTaskResolvers<ContextType = GraphQLContext, ParentType exte
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SocialLinkResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['SocialLink'] = ResolversParentTypes['SocialLink']> = ResolversObject<{
+export type SocialLinkResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['SocialLink'] = ResolversParentTypes['SocialLink'],
+> = ResolversObject<{
   type?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   url?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type StakingResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Staking'] = ResolversParentTypes['Staking']> = ResolversObject<{
+export type StakingResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Staking'] = ResolversParentTypes['Staking'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -3195,7 +3598,10 @@ export type StakingResolvers<ContextType = GraphQLContext, ParentType extends Re
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type StakingHistoryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['StakingHistory'] = ResolversParentTypes['StakingHistory']> = ResolversObject<{
+export type StakingHistoryResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['StakingHistory'] = ResolversParentTypes['StakingHistory'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   blockNumber?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3210,14 +3616,32 @@ export type StakingHistoryResolvers<ContextType = GraphQLContext, ParentType ext
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SubscriptionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription']> = ResolversObject<{
-  _?: SubscriptionResolver<Maybe<ResolversTypes['Boolean']>, "_", ParentType, ContextType>;
-  poolDeployed?: SubscriptionResolver<ResolversTypes['Pool'], "poolDeployed", ParentType, ContextType>;
-  priceUpdates?: SubscriptionResolver<ResolversTypes['PriceUpdateEvent'], "priceUpdates", ParentType, ContextType, RequireFields<SubscriptionPriceUpdatesArgs, 'poolAddress'>>;
-  transactionUpdates?: SubscriptionResolver<ResolversTypes['TransactionEvent'], "transactionUpdates", ParentType, ContextType, RequireFields<SubscriptionTransactionUpdatesArgs, 'poolAddress'>>;
+export type SubscriptionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription'],
+> = ResolversObject<{
+  _?: SubscriptionResolver<Maybe<ResolversTypes['Boolean']>, '_', ParentType, ContextType>;
+  poolDeployed?: SubscriptionResolver<ResolversTypes['Pool'], 'poolDeployed', ParentType, ContextType>;
+  priceUpdates?: SubscriptionResolver<
+    ResolversTypes['PriceUpdateEvent'],
+    'priceUpdates',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionPriceUpdatesArgs, 'poolAddress'>
+  >;
+  transactionUpdates?: SubscriptionResolver<
+    ResolversTypes['TransactionEvent'],
+    'transactionUpdates',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionTransactionUpdatesArgs, 'poolAddress'>
+  >;
 }>;
 
-export type TimelockTaskResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TimelockTask'] = ResolversParentTypes['TimelockTask']> = ResolversObject<{
+export type TimelockTaskResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['TimelockTask'] = ResolversParentTypes['TimelockTask'],
+> = ResolversObject<{
   blockNumber?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   cancelled?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3234,7 +3658,10 @@ export type TimelockTaskResolvers<ContextType = GraphQLContext, ParentType exten
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type TokenBalanceResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TokenBalance'] = ResolversParentTypes['TokenBalance']> = ResolversObject<{
+export type TokenBalanceResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['TokenBalance'] = ResolversParentTypes['TokenBalance'],
+> = ResolversObject<{
   balance?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -3248,7 +3675,10 @@ export type TokenBalanceResolvers<ContextType = GraphQLContext, ParentType exten
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type TopicResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Topic'] = ResolversParentTypes['Topic']> = ResolversObject<{
+export type TopicResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Topic'] = ResolversParentTypes['Topic'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   creator?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3261,7 +3691,10 @@ export type TopicResolvers<ContextType = GraphQLContext, ParentType extends Reso
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type TransactionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Transaction'] = ResolversParentTypes['Transaction']> = ResolversObject<{
+export type TransactionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Transaction'] = ResolversParentTypes['Transaction'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   blockNumber?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3278,7 +3711,10 @@ export type TransactionResolvers<ContextType = GraphQLContext, ParentType extend
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type TransactionEventResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TransactionEvent'] = ResolversParentTypes['TransactionEvent']> = ResolversObject<{
+export type TransactionEventResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['TransactionEvent'] = ResolversParentTypes['TransactionEvent'],
+> = ResolversObject<{
   bonusAmount?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   bonusFee?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   holdAmount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -3291,7 +3727,10 @@ export type TransactionEventResolvers<ContextType = GraphQLContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type TreasuryWithdrawResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TreasuryWithdraw'] = ResolversParentTypes['TreasuryWithdraw']> = ResolversObject<{
+export type TreasuryWithdrawResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['TreasuryWithdraw'] = ResolversParentTypes['TreasuryWithdraw'],
+> = ResolversObject<{
   amount?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -3305,21 +3744,30 @@ export type TreasuryWithdrawResolvers<ContextType = GraphQLContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UnlockTimeResponseResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['UnlockTimeResponse'] = ResolversParentTypes['UnlockTimeResponse']> = ResolversObject<{
+export type UnlockTimeResponseResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['UnlockTimeResponse'] = ResolversParentTypes['UnlockTimeResponse'],
+> = ResolversObject<{
   gasUnlockTime?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   holdUnlockTime?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   platformUnlockTime?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserPermissionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['UserPermission'] = ResolversParentTypes['UserPermission']> = ResolversObject<{
+export type UserPermissionResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['UserPermission'] = ResolversParentTypes['UserPermission'],
+> = ResolversObject<{
   entity?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   permission?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserWithPermissionsResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['UserWithPermissions'] = ResolversParentTypes['UserWithPermissions']> = ResolversObject<{
+export type UserWithPermissionsResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['UserWithPermissions'] = ResolversParentTypes['UserWithPermissions'],
+> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   permissions?: Resolver<Array<ResolversTypes['UserPermission']>, ParentType, ContextType>;
@@ -3327,14 +3775,20 @@ export type UserWithPermissionsResolvers<ContextType = GraphQLContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type VolumeDataResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['VolumeData'] = ResolversParentTypes['VolumeData']> = ResolversObject<{
+export type VolumeDataResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['VolumeData'] = ResolversParentTypes['VolumeData'],
+> = ResolversObject<{
   burnVolume?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   mintVolume?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   timestamp?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type VoteResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Vote'] = ResolversParentTypes['Vote']> = ResolversObject<{
+export type VoteResolvers<
+  ContextType = GraphQLContext,
+  ParentType extends ResolversParentTypes['Vote'] = ResolversParentTypes['Vote'],
+> = ResolversObject<{
   blockNumber?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   chainId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
@@ -3411,4 +3865,3 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   VolumeData?: VolumeDataResolvers<ContextType>;
   Vote?: VoteResolvers<ContextType>;
 }>;
-

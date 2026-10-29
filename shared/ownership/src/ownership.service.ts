@@ -12,7 +12,6 @@ type CompanyClient = ReturnType<typeof createEdenTreatyClient<CompanyApp>>;
 type AuthClient = ReturnType<typeof createEdenTreatyClient<AuthApp>>;
 type Company = NonNullable<Awaited<ReturnType<CompanyClient['getCompany']['post']>>['data']>;
 
-
 export class OwnershipService {
   constructor(
     private readonly redis: Redis,
@@ -81,7 +80,11 @@ export class OwnershipService {
   @LogDecorator({
     args: (a) => ({ userId: a[0].user.id, ownerId: a[0].ownerId, ownerType: a[0].ownerType }),
   })
-  async getOwnerWallet(params: { user: { id: string; wallet: string }; ownerId: string; ownerType: string }): Promise<string> {
+  async getOwnerWallet(params: {
+    user: { id: string; wallet: string };
+    ownerId: string;
+    ownerType: string;
+  }): Promise<string> {
     setSpanAttributes({
       userId: params.user.id,
       wallet: params.user.wallet,

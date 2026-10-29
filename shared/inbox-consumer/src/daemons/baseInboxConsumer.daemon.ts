@@ -5,7 +5,6 @@ import { metrics } from '@shared/monitoring/src/metrics';
 import type { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 import type { InboxConsumerService } from '../services/inboxConsumer.service';
 
-
 export abstract class BaseInboxConsumerDaemon {
   private readonly consumerTags = new Map<string, string>();
   private readonly processingChains = new Map<string, Promise<void>>();
@@ -135,7 +134,7 @@ export abstract class BaseInboxConsumerDaemon {
         const givingUp = attempt >= maxAttempts;
         logger.error(
           `Inbox consumer "${queueName}": attempt ${attempt}${Number.isFinite(maxAttempts) ? `/${maxAttempts}` : ''} failed` +
-          `${givingUp ? '; handing the message to the retry queue' : `; retrying in ${delayMs}ms`}`,
+            `${givingUp ? '; handing the message to the retry queue' : `; retrying in ${delayMs}ms`}`,
           error,
         );
 
@@ -149,7 +148,7 @@ export abstract class BaseInboxConsumerDaemon {
     metrics.counter('inbox_consumer_deferred_total', { queue: queueName });
     logger.error(
       `Inbox consumer "${queueName}": attempts exhausted (${attempt}) — the message goes to the retry queue; ` +
-      `last error: ${lastError}`,
+        `last error: ${lastError}`,
     );
 
     const parkAfterCycles = this.rabbitClient.getQueueParkAfterCycles(queueName);
@@ -249,7 +248,7 @@ export abstract class BaseInboxConsumerDaemon {
     } catch {
       logger.error(
         `Inbox consumer "${queueName}": payload is not valid JSON ` +
-        `(routingKey "${routingKey}", messageId "${message.properties.messageId ?? '-'}", body: ${raw.slice(0, 200)})`,
+          `(routingKey "${routingKey}", messageId "${message.properties.messageId ?? '-'}", body: ${raw.slice(0, 200)})`,
       );
 
       throw new Error(`Inbox consumer "${queueName}": payload is not valid JSON`);

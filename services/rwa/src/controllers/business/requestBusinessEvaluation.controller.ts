@@ -5,6 +5,7 @@ import {
   requestBusinessEvaluationResponse,
 } from '../../models/validation/business.validation';
 
+// Private endpoint
 export const requestBusinessEvaluationController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestBusinessEvaluationController' }).use(servicesPlugin).post(
     '/requestBusinessEvaluation',

@@ -1,7 +1,10 @@
 import { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 
 export class RabbitMQClient extends BaseRabbitMQClient {
-  constructor(uri: string, private readonly chainId: string) {
+  constructor(
+    uri: string,
+    private readonly chainId: string,
+  ) {
     super(uri, 'blockchain-scanner');
   }
 

@@ -11,7 +11,9 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
     uploadDocumentController(servicesPlugin),
   );
 
-  const uploadImageCtrl = withTraceSync('upload.init.controllers.upload_image', () => uploadImageController(servicesPlugin));
+  const uploadImageCtrl = withTraceSync('upload.init.controllers.upload_image', () =>
+    uploadImageController(servicesPlugin),
+  );
 
   const uploadPoolImageCtrl = withTraceSync('upload.init.controllers.upload_pool_image', () =>
     uploadPoolImageController(servicesPlugin),

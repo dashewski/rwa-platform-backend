@@ -1,7 +1,10 @@
 import { BaseRabbitMQClient } from '@shared/rabbitmq/src/baseRabbitmq.client';
 
 export class RabbitMQClient extends BaseRabbitMQClient {
-  constructor(uri: string, private readonly chainIds: string[]) {
+  constructor(
+    uri: string,
+    private readonly chainIds: string[],
+  ) {
     super(uri, 'charts');
   }
 
@@ -33,11 +36,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
             deferAfterAttempts: Number.POSITIVE_INFINITY,
             parkAfterCycles: Number.POSITIVE_INFINITY,
             bindings: {
-              [this.getBlockchainEventsExchange(chainId)]: [
-                'Pool_ReservesUpdated',
-                'Pool_RwaMinted',
-                'Pool_RwaBurned',
-              ],
+              [this.getBlockchainEventsExchange(chainId)]: ['Pool_ReservesUpdated', 'Pool_RwaMinted', 'Pool_RwaBurned'],
             },
           },
         ]),

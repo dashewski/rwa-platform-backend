@@ -4,11 +4,7 @@ import type { InboxConsumerService } from '@shared/inbox-consumer';
 import type { PortfolioService } from '../services/portfolio.service';
 
 export class InboxConsumerDaemon extends BaseInboxConsumerDaemon {
-  constructor(
-    rabbitClient: RabbitMQClient,
-    consumerService: InboxConsumerService,
-    portfolioService: PortfolioService,
-  ) {
+  constructor(rabbitClient: RabbitMQClient, consumerService: InboxConsumerService, portfolioService: PortfolioService) {
     super(
       rabbitClient,
       consumerService,

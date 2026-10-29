@@ -35,7 +35,8 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { taskId: 'task-1' } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.signersManagerClient.getSignatureTask.post).toHaveBeenCalledWith({ taskId: 'task-1' });
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -51,7 +52,12 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
 
       await expect(
-        getSignatureTask!(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext, INFO),
+        getSignatureTask!(
+          null as never,
+          { input: { taskId: 'task-1' } } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
       expect(fake.clients.signersManagerClient.getSignatureTask.post).toHaveBeenCalledTimes(0);
@@ -65,7 +71,12 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       );
 
       await expect(
-        getSignatureTask!(null as never, { input: { taskId: 'missing' } } as never, fake as unknown as GraphQLContext, INFO),
+        getSignatureTask!(
+          null as never,
+          { input: { taskId: 'missing' } } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -79,7 +90,12 @@ describe('signers-manager resolvers (unit, fake clients/services)', () => {
       });
 
       await expect(
-        getSignatureTask!(null as never, { input: { taskId: 'task-1' } } as never, fake as unknown as GraphQLContext, INFO),
+        getSignatureTask!(
+          null as never,
+          { input: { taskId: 'task-1' } } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       // The task was fetched before the ownership check ran.

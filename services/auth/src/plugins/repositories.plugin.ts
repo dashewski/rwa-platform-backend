@@ -8,10 +8,7 @@ import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 export const createRepositoriesPlugin = async (mongoUri: string) => {
   const userRepository = withTraceSync('auth.init.repositories.user', () => new UserRepository());
 
-  const sessionRepository = withTraceSync(
-    'auth.init.repositories.session',
-    () => new SessionRepository(),
-  );
+  const sessionRepository = withTraceSync('auth.init.repositories.session', () => new SessionRepository());
 
   const challengeRepository = withTraceSync('auth.init.repositories.challenge', () => new ChallengeRepository());
 

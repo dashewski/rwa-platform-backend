@@ -132,7 +132,7 @@ export class SignaturesService {
     const task = await this.signatureTaskRepository.findById(taskId);
 
     const signatures = await this.signatureRepository.findByTaskId(taskId);
-    const completed = task.requiredSignatures <= signatures.length
+    const completed = task.requiredSignatures <= signatures.length;
 
     return {
       id: task._id.toString(),

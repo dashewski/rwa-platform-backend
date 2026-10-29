@@ -4,7 +4,10 @@ import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createClientsPlugin = async (rabbitMqUri: string, chainIds: string[]) => {
-  const rabbitMQClient = withTraceSync('portfolio.init.clients.rabbitmq', () => new RabbitMQClient(rabbitMqUri, chainIds));
+  const rabbitMQClient = withTraceSync(
+    'portfolio.init.clients.rabbitmq',
+    () => new RabbitMQClient(rabbitMqUri, chainIds),
+  );
 
   await withTraceAsync('portfolio.init.clients.rabbitmq_connect', async () => {
     logger.info('Initializing RabbitMQ client');

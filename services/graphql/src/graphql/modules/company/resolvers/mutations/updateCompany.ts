@@ -17,7 +17,7 @@ export const updateCompany: MutationResolvers['updateCompany'] = async (
   services.validation.validateCountry(input.updateData.country);
   services.validation.validateSocials(input.updateData.socials as any);
 
-  const company = await services.ownership.getCompany({ id: input.id, });
+  const company = await services.ownership.getCompany({ id: input.id });
 
   // Check if current user is the owner
   if (company.ownerId !== user.id) {

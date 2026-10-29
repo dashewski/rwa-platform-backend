@@ -111,7 +111,7 @@ export const yogaServer = createYoga({
         loyaltyClient,
         daoClient,
         aiEvaluatorClient,
-            },
+      },
       services: {
         ownership: ownershipService,
         parent: parentService,

@@ -5,22 +5,24 @@ import { uploadImageRequest, uploadImageResponse } from '../models/validation/up
 import type { ServicesPlugin } from '../plugins/services.plugin';
 
 // Public endpoint
-export const uploadImageController = (servicesPlugin: ServicesPlugin) => new Elysia({ name: 'UploadImageController' }).use(servicesPlugin)
-  .onError(ErrorHandlerPlugin)
-  .post(
-    '/createImage',
-    async ({ request, body, sessionsJwt, uploadService }) => {
-      const token = sessionsJwt.parseToken(request.headers.get('Authorization'));
-      const user = sessionsJwt.resolveUser(token);
+export const uploadImageController = (servicesPlugin: ServicesPlugin) =>
+  new Elysia({ name: 'UploadImageController' })
+    .use(servicesPlugin)
+    .onError(ErrorHandlerPlugin)
+    .post(
+      '/createImage',
+      async ({ request, body, sessionsJwt, uploadService }) => {
+        const token = sessionsJwt.parseToken(request.headers.get('Authorization'));
+        const user = sessionsJwt.resolveUser(token);
 
-      if (!user) {
-        throw new AppError({ message: 'Authentication required', statusCode: 401, code: 'UNAUTHORIZED' });
-      }
+        if (!user) {
+          throw new AppError({ message: 'Authentication required', statusCode: 401, code: 'UNAUTHORIZED' });
+        }
 
-      return await uploadService.uploadImage(user.userId, body);
-    },
-    {
-      body: uploadImageRequest,
-      response: uploadImageResponse,
-    },
-  );
+        return await uploadService.uploadImage(user.userId, body);
+      },
+      {
+        body: uploadImageRequest,
+        response: uploadImageResponse,
+      },
+    );

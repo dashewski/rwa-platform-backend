@@ -4,19 +4,17 @@ import { getTokenMetadataResponse } from '../../models/validation/token.validati
 
 // Public endpoint
 export const getTokenMetadataController = (servicesPlugin: ServicesPlugin) => {
-  return new Elysia({ name: 'GetTokenMetadataController' })
-    .use(servicesPlugin)
-    .get(
-      '/api/rwa/metadata/:rwaAddress/:tokenId',
-      async ({ params: { rwaAddress, tokenId }, tokenService }) => {
-        return await tokenService.getTokenMetadata({ rwaAddress, tokenId });
-      },
-      {
-        params: t.Object({
-          rwaAddress: t.String({ minLength: 1 }),
-          tokenId: t.String({ minLength: 1 }),
-        }),
-        response: getTokenMetadataResponse,
-      },
-    );
+  return new Elysia({ name: 'GetTokenMetadataController' }).use(servicesPlugin).get(
+    '/api/rwa/metadata/:rwaAddress/:tokenId',
+    async ({ params: { rwaAddress, tokenId }, tokenService }) => {
+      return await tokenService.getTokenMetadata({ rwaAddress, tokenId });
+    },
+    {
+      params: t.Object({
+        rwaAddress: t.String({ minLength: 1 }),
+        tokenId: t.String({ minLength: 1 }),
+      }),
+      response: getTokenMetadataResponse,
+    },
+  );
 };

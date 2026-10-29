@@ -44,6 +44,7 @@ export const createServicesPlugin = (
   const plugin = withTraceSync('auth.init.services.plugin', () =>
     new Elysia({ name: 'Services' })
       .use(repositoriesPlugin)
+      .decorate('sessionsJwt', sessionsJwt)
       .decorate('authService', authService),
   );
 

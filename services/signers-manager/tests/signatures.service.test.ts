@@ -157,9 +157,10 @@ describe('SignaturesService (unit, fake repositories and outbox)', () => {
     // retry may race with the deadline and the contract decides for real.
     const task = await service.createTask({ ...TASK, expired: EXPIRED_PAST });
 
-    await expect(
-      addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 }),
-    ).rejects.toMatchObject({ statusCode: 410, code: 'EXPIRED' });
+    await expect(addSignature({ taskId: task.id, signer: SIGNER_1, signature: SIGNATURE_1 })).rejects.toMatchObject({
+      statusCode: 410,
+      code: 'EXPIRED',
+    });
 
     expect(signatures.create).toHaveBeenCalledTimes(0);
   });

@@ -11,6 +11,6 @@ export class InboxConsumerMessageRepository {
 
   @TraceDecorator()
   async exists(messageId: string): Promise<boolean> {
-    return await this.model.exists({ messageId }) !== null;
+    return (await this.model.exists({ messageId })) !== null;
   }
 }

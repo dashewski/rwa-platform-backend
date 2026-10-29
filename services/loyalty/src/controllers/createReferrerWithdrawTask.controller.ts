@@ -5,6 +5,7 @@ import {
   createReferrerWithdrawTaskResponse,
 } from '../models/validation/loyalty.validation';
 
+// Private endpoint
 export const createReferrerWithdrawTaskController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'CreateReferrerWithdrawTaskController' }).use(servicesPlugin).post(
     '/createReferrerWithdrawTask',

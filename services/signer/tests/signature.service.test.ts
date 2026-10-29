@@ -91,14 +91,10 @@ describe('SignatureService (unit, fake outbox)', () => {
   test('an expired task is rejected before any signing and nothing is queued', async () => {
     const hash = ethers.keccak256(ethers.toUtf8Bytes('payload'));
 
-    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toThrow(
-      'Task expired',
-    );
+    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toThrow('Task expired');
 
     expect(outbox.state.calls).toEqual([]);
-    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toBeInstanceOf(
-      AppError,
-    );
+    await expect(signHash({ hash, taskId: 'task-1', expired: nowSeconds() - 1 })).rejects.toBeInstanceOf(AppError);
   });
 
   test('a task that expires exactly now is still signed (boundary: expired < now)', async () => {

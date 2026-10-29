@@ -5,6 +5,7 @@ import { createRefreshController } from '../controllers/refresh.controller';
 import { createGetUserController } from '../controllers/getUser.controller';
 import { createLogoutController } from '../controllers/logout.controller';
 import { createLogoutAllController } from '../controllers/logoutAll.controller';
+import { createGetSessionsController } from '../controllers/getSessions.controller';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 import type { ServicesPlugin } from './services.plugin';
 
@@ -25,12 +26,14 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
     createGetUserController(servicesPlugin),
   );
 
-  const logoutController = withTraceSync('auth.init.controllers.logout', () =>
-    createLogoutController(servicesPlugin),
-  );
+  const logoutController = withTraceSync('auth.init.controllers.logout', () => createLogoutController(servicesPlugin));
 
   const logoutAllController = withTraceSync('auth.init.controllers.logout_all', () =>
     createLogoutAllController(servicesPlugin),
+  );
+
+  const getSessionsController = withTraceSync('auth.init.controllers.get_sessions', () =>
+    createGetSessionsController(servicesPlugin),
   );
 
   const plugin = withTraceSync('auth.init.controllers.plugin', () =>
@@ -40,7 +43,8 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
       .use(refreshController)
       .use(getUserController)
       .use(logoutController)
-      .use(logoutAllController),
+      .use(logoutAllController)
+      .use(getSessionsController),
   );
 
   return plugin;

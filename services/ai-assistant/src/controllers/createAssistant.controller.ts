@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { createAssistantRequest, createAssistantResponse } from '../models/validation/assistant.validation';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 
+// Private endpoint
 export const createAssistantController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'CreateAssistantController' }).use(servicesPlugin).post(
     '/createAssistant',

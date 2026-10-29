@@ -30,12 +30,7 @@ const outbox = new OutboxPublisherDaemon({} as never, client);
 const config = (outbox as unknown as { exchangesConfig: Record<string, ExchangeConfig> }).exchangesConfig;
 
 /** Events the EventEmitter contract declares but no consumer binds today. */
-const UNCONSUMED_EVENTS = [
-  'Initialized',
-  'PlatformToken_Transfer',
-  'ReferralTreasury_EmergencyWithdrawn',
-  'Upgraded',
-];
+const UNCONSUMED_EVENTS = ['Initialized', 'PlatformToken_Transfer', 'ReferralTreasury_EmergencyWithdrawn', 'Upgraded'];
 
 describe('blockchain-scanner RabbitMQ topology', () => {
   test('declares the blockchain events exchange with the unrouted quarantine flag', () => {
@@ -70,9 +65,15 @@ describe('blockchain-scanner RabbitMQ topology', () => {
       EventEmitterABI.abi.filter((item) => item.type === 'event').map((item) => item.name as string),
     );
     const consumed = new Set<string>([
-      ...new RwaClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.rwa'].bindings['blockchain.97.events'],
-      ...new ChartsClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.charts'].bindings['blockchain.97.events'],
-      ...new DaoClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.dao'].bindings['blockchain.97.events'],
+      ...new RwaClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.rwa'].bindings[
+        'blockchain.97.events'
+      ],
+      ...new ChartsClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.charts'].bindings[
+        'blockchain.97.events'
+      ],
+      ...new DaoClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.dao'].bindings[
+        'blockchain.97.events'
+      ],
       ...new LoyaltyClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.loyalty'].bindings[
         'blockchain.97.events'
       ],
@@ -85,13 +86,17 @@ describe('blockchain-scanner RabbitMQ topology', () => {
   });
 
   test('the ABI declares exactly four events with no consumer — they land in the quarantine queue', () => {
-    const declared = EventEmitterABI.abi
-      .filter((item) => item.type === 'event')
-      .map((item) => item.name as string);
+    const declared = EventEmitterABI.abi.filter((item) => item.type === 'event').map((item) => item.name as string);
     const consumed = new Set<string>([
-      ...new RwaClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.rwa'].bindings['blockchain.97.events'],
-      ...new ChartsClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.charts'].bindings['blockchain.97.events'],
-      ...new DaoClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.dao'].bindings['blockchain.97.events'],
+      ...new RwaClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.rwa'].bindings[
+        'blockchain.97.events'
+      ],
+      ...new ChartsClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.charts'].bindings[
+        'blockchain.97.events'
+      ],
+      ...new DaoClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.dao'].bindings[
+        'blockchain.97.events'
+      ],
       ...new LoyaltyClient(uri, ['97']).getTopologyDefinition().queues['blockchain.97.events.loyalty'].bindings[
         'blockchain.97.events'
       ],

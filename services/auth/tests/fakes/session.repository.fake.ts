@@ -44,6 +44,10 @@ export function createFakeSessionRepository() {
       return store.get(sessionKey) ?? null;
     }),
 
+    findByUserId: mock(async (userId: string) => {
+      return [...store.values()].filter((doc) => doc.userId === userId).sort((a, b) => b.createdAt - a.createdAt);
+    }),
+
     rotate: mock(async (sessionKey: string, jti: string, newJti: string, expiresAt: number) => {
       const doc = store.get(sessionKey);
 

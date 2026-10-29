@@ -5,6 +5,7 @@ import {
   requestBusinessApprovalSignaturesResponse,
 } from '../../models/validation/business.validation';
 
+// Private endpoint
 export const requestBusinessApprovalSignaturesController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'RequestBusinessApprovalSignaturesController' }).use(servicesPlugin).post(
     '/requestBusinessApprovalSignatures',

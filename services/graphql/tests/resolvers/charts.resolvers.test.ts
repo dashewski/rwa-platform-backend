@@ -144,7 +144,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { poolAddress: '0xpool-1', startTime: 1, endTime: 2, limit: 10, offset: 0 } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.chartsClient.getRawPriceData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -167,7 +168,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { poolAddress: '0xpool-1' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get raw price data' });
     });
   });
@@ -181,7 +183,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { poolAddress: '0xpool-1', interval: '1h', startTime: 1, endTime: 2, limit: 24 } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.chartsClient.getOhlcPriceData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -204,7 +207,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { poolAddress: '0xpool-1', interval: '1h' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get OHLC price data' });
     });
   });
@@ -218,7 +222,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { poolAddress: '0xpool-1', interval: '1d', startTime: 1, endTime: 2, limit: 30 } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.chartsClient.getVolumeData.post).toHaveBeenCalledWith({
         poolAddress: '0xpool-1',
@@ -241,7 +246,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { poolAddress: '0xpool-1', interval: '1d' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get volume data' });
     });
   });
@@ -257,7 +263,12 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
       };
       fake.clients.chartsClient.getPoolTransactions.post.mockImplementation(async () => edenOk([TRANSACTION]));
 
-      const result = await getPoolTransactions!(null as never, { input } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getPoolTransactions!(
+        null as never,
+        { input } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledWith({
@@ -277,7 +288,8 @@ describe('gateway charts resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: {} } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.chartsClient.getPoolTransactions.post).toHaveBeenCalledWith({
         filter: {},

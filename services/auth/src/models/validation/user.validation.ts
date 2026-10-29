@@ -81,3 +81,13 @@ export const logoutResponse = t.Object({
   revokedCount: t.Number(),
 });
 
+/*
+ * Get sessions
+ */
+export const getSessionsResponse = t.Array(
+  t.Object({
+    id: t.String(),
+    createdAt: t.Number(),
+    expiresAt: t.Number(),
+  }),
+);

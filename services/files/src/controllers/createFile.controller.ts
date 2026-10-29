@@ -3,6 +3,7 @@ import { createFileRequest, createFileResponse } from '../models/validation/file
 import type { ServicesPlugin } from '../plugins/services.plugin';
 import { AppError } from '@shared/errors/app-errors';
 
+// Private endpoint
 export const createFileController = (servicesPlugin: ServicesPlugin, maxFileSize: number) => {
   return new Elysia({ name: 'CreateFileController' }).use(servicesPlugin).post(
     '/createFile',

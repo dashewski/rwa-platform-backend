@@ -5,6 +5,7 @@ import {
   updateQuestionAnswerResponse,
 } from '../../models/validation/questions.validation';
 
+// Private endpoint
 export const updateQuestionAnswerController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'UpdateQuestionAnswerController' }).use(servicesPlugin).post(
     '/updateQuestionAnswer',

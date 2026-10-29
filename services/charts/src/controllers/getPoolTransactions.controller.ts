@@ -5,6 +5,7 @@ import {
   getPoolTransactionsResponse,
 } from '../models/validation/poolTransaction.validation';
 
+// Private endpoint
 export const getPoolTransactionsController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'GetPoolTransactionsController' }).use(servicesPlugin).post(
     '/getPoolTransactions',

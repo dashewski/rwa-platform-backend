@@ -103,6 +103,12 @@ server {
         include /etc/nginx/snippets/proxy-headers.conf;
     }
 
+    location = /api/auth/sessions {
+        include /etc/nginx/snippets/proxy-tracing.conf;
+        proxy_pass http://auth_upstream/sessions;
+        include /etc/nginx/snippets/proxy-headers.conf;
+    }
+
     location = /api/upload/createDocument {
         include /etc/nginx/snippets/proxy-tracing.conf;
         client_max_body_size ${DOCUMENTS_MAX_FILE_SIZE};

@@ -21,10 +21,7 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.authClient,
       ),
   );
-  const sessionsJwt = withTraceSync(
-    'upload.init.services.user_resolver',
-    () => new SessionsJwt(jwtSecret),
-  );
+  const sessionsJwt = withTraceSync('upload.init.services.user_resolver', () => new SessionsJwt(jwtSecret));
 
   const uploadService = withTraceSync(
     'upload.init.services.upload',

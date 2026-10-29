@@ -211,7 +211,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: CREATE_BLOG_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'parent-1', 'user-1');
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -264,7 +265,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledTimes(0);
@@ -304,7 +306,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'missing', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -323,7 +326,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.updateBlog.post).toHaveBeenCalledTimes(0);
@@ -339,7 +343,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'blog-1', updateData: { name: 'Renamed' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 
@@ -414,7 +419,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
       null as never,
       { input: CREATE_POST_INPUT } as never,
       fake as unknown as GraphQLContext,
-    INFO);
+      INFO,
+    );
 
     expect(fake.clients.blogClient.getBlog.post).toHaveBeenCalledWith({ id: 'blog-1' });
     expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -482,7 +488,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
 
     expect(fake.clients.blogClient.getPost.post).toHaveBeenCalledTimes(0);
@@ -520,7 +527,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'missing', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
 
     expect(fake.clients.blogClient.updatePost.post).toHaveBeenCalledTimes(0);
@@ -538,7 +546,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
     expect(fake.clients.blogClient.updatePost.post).toHaveBeenCalledTimes(0);
@@ -554,7 +563,8 @@ describe('gateway blog resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { id: 'post-1', updateData: { title: 'Edited' } } } as never,
         fake as unknown as GraphQLContext,
-      INFO),
+        INFO,
+      ),
     ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
   });
 

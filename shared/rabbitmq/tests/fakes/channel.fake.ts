@@ -7,7 +7,6 @@
  * the broker interaction off the channel instead of mocking each method.
  */
 
-
 export type PublishedMessage = {
   exchange: string;
   routingKey: string;
@@ -156,10 +155,7 @@ export class FakeChannel {
   }
 
   /** Emits the broker's `basic.return` for an unroutable message. */
-  emitReturn(message: {
-    properties: { messageId?: string };
-    fields: { routingKey: string; exchange: string };
-  }): void {
+  emitReturn(message: { properties: { messageId?: string }; fields: { routingKey: string; exchange: string } }): void {
     this.emit('return', message);
   }
 

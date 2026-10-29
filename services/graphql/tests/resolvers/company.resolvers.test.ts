@@ -94,7 +94,12 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
       fake.services.ownership.getCompany.mockImplementation(async () => COMPANY);
 
-      const result = await getCompany!(null as never, { id: 'company-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getCompany!(
+        null as never,
+        { id: 'company-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.services.ownership.getCompany).toHaveBeenCalledWith({ id: 'company-1' });
       expect(result).toEqual(COMPANY);
@@ -102,7 +107,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps an upstream failure to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext();
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
         getCompany!(null as never, { id: 'company-1' } as never, fake as unknown as GraphQLContext, INFO),
@@ -146,7 +153,9 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
       fake.clients.companyClient.getCompanies.post.mockImplementation(async () => edenError(500));
 
-      await expect(getCompanies!(null as never, {} as never, fake as unknown as GraphQLContext, INFO)).rejects.toMatchObject({
+      await expect(
+        getCompanies!(null as never, {} as never, fake as unknown as GraphQLContext, INFO),
+      ).rejects.toMatchObject({
         statusCode: 502,
         code: 'BAD_GATEWAY',
         message: 'Failed to get companies',
@@ -159,7 +168,12 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
 
       await expect(
-        createCompany!(null as never, { input: CREATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        createCompany!(
+          null as never,
+          { input: CREATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.services.validation.validateCountry).not.toHaveBeenCalled();
@@ -176,7 +190,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: CREATE_COMPANY_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.validation.validateCountry).toHaveBeenCalledWith('US');
       expect(fake.services.validation.validateSocials).toHaveBeenCalledWith(SOCIALS);
@@ -225,7 +240,12 @@ describe('company resolvers (unit, fake context)', () => {
       });
 
       await expect(
-        createCompany!(null as never, { input: CREATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        createCompany!(
+          null as never,
+          { input: CREATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
 
       expect(fake.services.validation.validateSocials).not.toHaveBeenCalled();
@@ -237,7 +257,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.clients.companyClient.createCompany.post.mockImplementation(async () => edenError(500));
 
       await expect(
-        createCompany!(null as never, { input: CREATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        createCompany!(
+          null as never,
+          { input: CREATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to create company' });
     });
   });
@@ -247,7 +272,12 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
 
       await expect(
-        updateCompany!(null as never, { input: UPDATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        updateCompany!(
+          null as never,
+          { input: UPDATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.services.ownership.getCompany).not.toHaveBeenCalled();
@@ -264,7 +294,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: UPDATE_COMPANY_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.validation.validateCountry).toHaveBeenCalledWith('US');
       expect(fake.services.validation.validateSocials).toHaveBeenCalledWith(SOCIALS);
@@ -296,7 +327,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.services.ownership.getCompany.mockImplementation(async () => ({ ...COMPANY, ownerId: 'user-2' }));
 
       await expect(
-        updateCompany!(null as never, { input: UPDATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        updateCompany!(
+          null as never,
+          { input: UPDATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
@@ -311,10 +347,17 @@ describe('company resolvers (unit, fake context)', () => {
       // NOTE: src uses code UPSTREAM_ERROR here while deleteCompany/removeMember
       // map the same failure to BAD_GATEWAY — mirrored faithfully.
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
-        updateCompany!(null as never, { input: UPDATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        updateCompany!(
+          null as never,
+          { input: UPDATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to get company data' });
     });
 
@@ -324,7 +367,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.clients.companyClient.updateCompany.post.mockImplementation(async () => edenError(500));
 
       await expect(
-        updateCompany!(null as never, { input: UPDATE_COMPANY_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        updateCompany!(
+          null as never,
+          { input: UPDATE_COMPANY_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to update company' });
 
       expect(fake.services.ownership.resetCompanyCache).not.toHaveBeenCalled();
@@ -352,7 +400,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { id: 'company-1' } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.companyClient.deleteCompany.post).toHaveBeenCalledWith({ id: 'company-1' });
       expect(fake.services.ownership.resetCompanyCache).toHaveBeenCalledWith('company-1');
@@ -377,7 +426,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps a failed company lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
         deleteCompany!(null as never, { id: 'company-1' } as never, fake as unknown as GraphQLContext, INFO),
@@ -418,7 +469,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: ADD_MEMBER_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.ownership.getCompany).toHaveBeenCalledWith({ id: 'company-1' });
       expect(fake.clients.companyClient.addMember.post).toHaveBeenCalledWith({
@@ -450,7 +502,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps a failed company lookup to 502 UPSTREAM_ERROR (as in src)', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
         addMember!(null as never, { input: ADD_MEMBER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
@@ -490,7 +544,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: REMOVE_MEMBER_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       // src forwards only the member id to the client; companyId is used for the cache reset.
       expect(fake.clients.companyClient.removeMember.post).toHaveBeenCalledWith({ id: 'member-1' });
@@ -522,7 +577,8 @@ describe('company resolvers (unit, fake context)', () => {
           null as never,
           { input: { id: 'member-999', companyId: 'company-1' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
@@ -534,7 +590,9 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps a failed company lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
         removeMember!(null as never, { input: REMOVE_MEMBER_INPUT } as never, fake as unknown as GraphQLContext, INFO),
@@ -559,7 +617,12 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
 
       await expect(
-        grantPermission!(null as never, { input: GRANT_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        grantPermission!(
+          null as never,
+          { input: GRANT_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.companyClient.grantPermission.post).not.toHaveBeenCalled();
@@ -574,7 +637,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: GRANT_PERMISSION_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.clients.companyClient.grantPermission.post).toHaveBeenCalledWith({
         companyId: 'company-1',
@@ -592,7 +656,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.services.ownership.getCompany.mockImplementation(async () => ({ ...COMPANY, ownerId: 'user-2' }));
 
       await expect(
-        grantPermission!(null as never, { input: GRANT_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        grantPermission!(
+          null as never,
+          { input: GRANT_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
@@ -604,10 +673,17 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps a failed company lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
-        grantPermission!(null as never, { input: GRANT_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        grantPermission!(
+          null as never,
+          { input: GRANT_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to get company data' });
     });
 
@@ -617,7 +693,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.clients.companyClient.grantPermission.post.mockImplementation(async () => edenError(500));
 
       await expect(
-        grantPermission!(null as never, { input: GRANT_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        grantPermission!(
+          null as never,
+          { input: GRANT_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to grant permission' });
 
       expect(fake.services.ownership.resetCompanyCache).not.toHaveBeenCalled();
@@ -629,7 +710,12 @@ describe('company resolvers (unit, fake context)', () => {
       const fake = createFakeContext();
 
       await expect(
-        revokePermission!(null as never, { input: REVOKE_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        revokePermission!(
+          null as never,
+          { input: REVOKE_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.companyClient.revokePermission.post).not.toHaveBeenCalled();
@@ -644,7 +730,8 @@ describe('company resolvers (unit, fake context)', () => {
         null as never,
         { input: REVOKE_PERMISSION_INPUT } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       // src forwards only the permission id to the client; companyId feeds the cache reset.
       expect(fake.clients.companyClient.revokePermission.post).toHaveBeenCalledWith({ id: 'perm-1' });
@@ -657,7 +744,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.services.ownership.getCompany.mockImplementation(async () => ({ ...COMPANY, ownerId: 'user-2' }));
 
       await expect(
-        revokePermission!(null as never, { input: REVOKE_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        revokePermission!(
+          null as never,
+          { input: REVOKE_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
@@ -676,7 +768,8 @@ describe('company resolvers (unit, fake context)', () => {
           null as never,
           { input: { id: 'perm-999', companyId: 'company-1' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({
         statusCode: 403,
         code: 'FORBIDDEN',
@@ -688,10 +781,17 @@ describe('company resolvers (unit, fake context)', () => {
 
     test('maps a failed company lookup to 502 BAD_GATEWAY', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      fake.services.ownership.getCompany.mockImplementation(async () => { throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' }); });
+      fake.services.ownership.getCompany.mockImplementation(async () => {
+        throw new AppError({ message: 'Failed to get company data', statusCode: 502, code: 'UPSTREAM_ERROR' });
+      });
 
       await expect(
-        revokePermission!(null as never, { input: REVOKE_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        revokePermission!(
+          null as never,
+          { input: REVOKE_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to get company data' });
     });
 
@@ -701,7 +801,12 @@ describe('company resolvers (unit, fake context)', () => {
       fake.clients.companyClient.revokePermission.post.mockImplementation(async () => edenError(500));
 
       await expect(
-        revokePermission!(null as never, { input: REVOKE_PERMISSION_INPUT } as never, fake as unknown as GraphQLContext, INFO),
+        revokePermission!(
+          null as never,
+          { input: REVOKE_PERMISSION_INPUT } as never,
+          fake as unknown as GraphQLContext,
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to revoke permission' });
 
       expect(fake.services.ownership.resetCompanyCache).not.toHaveBeenCalled();

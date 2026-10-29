@@ -27,7 +27,7 @@ export class AuthService {
     private readonly cookieMaxAge: number,
     private readonly cookieSecure: boolean,
     private readonly cookiePath: string,
-  ) { }
+  ) {}
 
   async createChallenge(wallet: string) {
     const nonce = crypto.randomBytes(32).toString('hex');
@@ -256,17 +256,11 @@ We prioritize the security of your assets and personal data. To ensure secure ac
     };
   }
 
-
-
-
   @TraceDecorator()
   private generateTokens(wallet: string, userId: string, sessionKey: string, jti: string) {
     return {
       accessToken: this.sessionsJwt.signAccessToken({ userId, wallet }, this.accessTokenExpiry),
-      refreshToken: this.sessionsJwt.signRefreshToken(
-        { userId, wallet, sessionKey, jti },
-        this.refreshTokenExpiry,
-      ),
+      refreshToken: this.sessionsJwt.signRefreshToken({ userId, wallet, sessionKey, jti }, this.refreshTokenExpiry),
     };
   }
 
@@ -277,9 +271,10 @@ We prioritize the security of your assets and personal data. To ensure secure ac
     } catch (error) {
       // Malformed/expired tokens and foreign token types share the public auth error.
       throw new AppError({
-        message: error instanceof AppError && error.message === 'Invalid token type'
-          ? 'Invalid token type'
-          : 'Invalid refresh token',
+        message:
+          error instanceof AppError && error.message === 'Invalid token type'
+            ? 'Invalid token type'
+            : 'Invalid refresh token',
         statusCode: 401,
         code: 'AUTHENTICATION_ERROR',
       });
@@ -301,6 +296,19 @@ We prioritize the security of your assets and personal data. To ensure secure ac
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  @TraceDecorator()
+  async getSessions(userId: string) {
+    setSpanAttributes({ userId });
+
+    const sessions = await this.sessionRepository.findByUserId(userId);
+
+    return sessions.map((session) => ({
+      id: session.sessionKey,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+    }));
   }
 
   @TraceDecorator()

@@ -61,7 +61,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
         edenOk({ ...DOCUMENT, internalField: 'must not leak' }),
       );
 
-      const result = await getDocument!(null as never, { id: 'doc-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getDocument!(
+        null as never,
+        { id: 'doc-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.documentsClient.getDocument.post).toHaveBeenCalledTimes(1);
       expect(fake.clients.documentsClient.getDocument.post).toHaveBeenCalledWith({ id: 'doc-1' });
@@ -107,7 +112,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.documentsClient.getDocuments.post.mockImplementation(async () => edenOk([]));
 
-      const result = await getDocuments!(null as never, { input: {} } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getDocuments!(
+        null as never,
+        { input: {} } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.documentsClient.getDocuments.post).toHaveBeenCalledWith({
         filter: {},
@@ -135,7 +145,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       const fake = createFakeContext();
       fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenOk(FOLDER));
 
-      const result = await getFolder!(null as never, { id: 'folder-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await getFolder!(
+        null as never,
+        { id: 'folder-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.documentsClient.getFolder.post).toHaveBeenCalledWith({ id: 'folder-1' });
       expect(result).toEqual(FOLDER);
@@ -234,7 +249,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'doc-1', updateData: { name: 'renamed.pdf' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.documentsClient.getDocument.post).toHaveBeenCalledTimes(0);
@@ -257,7 +273,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'doc-1', updateData: { name: 'renamed.pdf' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.documentsClient.updateDocument.post).toHaveBeenCalledTimes(0);
@@ -274,7 +291,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'missing', updateData: { name: 'x' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get document data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -293,7 +311,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'doc-1', updateData: { name: 'renamed.pdf' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to update document' });
     });
   });
@@ -304,7 +323,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       fake.clients.documentsClient.getDocument.post.mockImplementation(async () => edenOk(DOCUMENT));
       fake.clients.documentsClient.deleteDocument.post.mockImplementation(async () => edenOk({ id: 'doc-1' }));
 
-      const result = await deleteDocument!(null as never, { id: 'doc-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await deleteDocument!(
+        null as never,
+        { id: 'doc-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,
@@ -366,7 +390,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       );
       fake.clients.documentsClient.deleteDocument.post.mockImplementation(async () => edenOk({ id: 'doc-1' }));
 
-      const result = await deleteDocument!(null as never, { id: 'doc-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await deleteDocument!(
+        null as never,
+        { id: 'doc-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.clients.documentsClient.deleteDocument.post).toHaveBeenCalledWith({ id: 'doc-1' });
       expect(result).toBe('doc-1');
@@ -387,7 +416,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
         null as never,
         { input: { name: 'Contracts', parentId: 'business-1', type: 'business' } } as never,
         fake as unknown as GraphQLContext,
-      INFO);
+        INFO,
+      );
 
       expect(fake.services.parent.getParentInfo).toHaveBeenCalledWith('business', 'business-1', fakeUser.id);
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
@@ -415,7 +445,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Contracts', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.services.parent.getParentInfo).toHaveBeenCalledTimes(0);
@@ -438,7 +469,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Contracts', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
 
       expect(fake.clients.documentsClient.createFolder.post).toHaveBeenCalledTimes(0);
@@ -460,7 +492,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Contracts', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to create folder' });
     });
 
@@ -478,7 +511,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { name: 'Contracts', parentId: 'business-1', type: 'business' } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR', message: 'Failed to get business data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -519,7 +553,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'folder-1', updateData: { name: 'Renamed' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED', message: 'Authentication required' });
 
       expect(fake.clients.documentsClient.getFolder.post).toHaveBeenCalledTimes(0);
@@ -537,7 +572,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'missing', updateData: { name: 'Renamed' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to get folder data' });
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledTimes(0);
@@ -556,7 +592,8 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
           null as never,
           { input: { id: 'folder-1', updateData: { name: 'Renamed' } } } as never,
           fake as unknown as GraphQLContext,
-        INFO),
+          INFO,
+        ),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY', message: 'Failed to update folder' });
     });
   });
@@ -567,7 +604,12 @@ describe('gateway documents resolvers (unit, fake clients/services)', () => {
       fake.clients.documentsClient.getFolder.post.mockImplementation(async () => edenOk(FOLDER));
       fake.clients.documentsClient.deleteFolder.post.mockImplementation(async () => edenOk({ id: 'folder-1' }));
 
-      const result = await deleteFolder!(null as never, { id: 'folder-1' } as never, fake as unknown as GraphQLContext, INFO);
+      const result = await deleteFolder!(
+        null as never,
+        { id: 'folder-1' } as never,
+        fake as unknown as GraphQLContext,
+        INFO,
+      );
 
       expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
         userId: fakeUser.id,

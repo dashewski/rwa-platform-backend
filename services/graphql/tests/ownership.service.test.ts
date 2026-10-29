@@ -156,7 +156,12 @@ describe('OwnershipService (unit, fake redis/company/auth clients)', () => {
   });
 
   test('getCompany: caches a successful lookup for 5 minutes', async () => {
-    await service.checkOwnership({ userId: 'owner-1', ownerId: 'company-1', ownerType: 'company', permission: 'content' });
+    await service.checkOwnership({
+      userId: 'owner-1',
+      ownerId: 'company-1',
+      ownerType: 'company',
+      permission: 'content',
+    });
 
     expect(redis.setex).toHaveBeenCalledWith('company:company-1', 300, JSON.stringify(COMPANY));
   });
@@ -164,7 +169,12 @@ describe('OwnershipService (unit, fake redis/company/auth clients)', () => {
   test('getCompany: reads the cached value instead of calling the client', async () => {
     redis.get.mockImplementation(async () => JSON.stringify(COMPANY));
 
-    await service.checkOwnership({ userId: 'owner-1', ownerId: 'company-1', ownerType: 'company', permission: 'content' });
+    await service.checkOwnership({
+      userId: 'owner-1',
+      ownerId: 'company-1',
+      ownerType: 'company',
+      permission: 'content',
+    });
 
     expect(companyClient.getCompany.post).toHaveBeenCalledTimes(0);
   });

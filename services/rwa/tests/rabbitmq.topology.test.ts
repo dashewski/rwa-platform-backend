@@ -20,7 +20,9 @@ type RoutingEntry = { prefetch: number; isSync: boolean; handlers: Record<string
 const client = new RabbitMQClient('amqp://guest:guest@localhost:5672', ['97']);
 const topology = client.getTopologyDefinition();
 const daemon = new InboxConsumerDaemon(client as never, {} as never, {} as never, {} as never);
-const routing: Record<string, { prefetch: number; isSync: boolean; handlers: Record<string, unknown> }> = (daemon as unknown as { eventRouting: Record<string, RoutingEntry> }).eventRouting;
+const routing: Record<string, { prefetch: number; isSync: boolean; handlers: Record<string, unknown> }> = (
+  daemon as unknown as { eventRouting: Record<string, RoutingEntry> }
+).eventRouting;
 
 describe('rwa RabbitMQ topology', () => {
   test('declares exactly the two queues it consumes', () => {

@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { getMessageRequest, getMessageResponse } from '../models/validation/message.validation';
 import type { ServicesPlugin } from '../plugins/services.plugin';
 
+// Private endpoint
 export const getMessageController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'GetMessageController' }).use(servicesPlugin).post(
     '/getMessage',
