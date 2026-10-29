@@ -1,0 +1,56 @@
+scalar JSON
+
+# Token balance type
+type TokenBalance {
+  id: String!
+  owner: String!
+  tokenAddress: String!
+  tokenId: String!
+  poolAddress: String!
+  chainId: String!
+  balance: Int!
+  lastUpdateBlock: Int!
+  createdAt: Int!
+  updatedAt: Int!
+}
+
+# Transaction type
+type Transaction {
+  id: String!
+  from: String!
+  to: String!
+  tokenAddress: String!
+  tokenId: String!
+  poolAddress: String!
+  chainId: String!
+  transactionHash: String!
+  logIndex: Int!
+  blockNumber: Int!
+  amount: Int!
+  createdAt: Int!
+  updatedAt: Int!
+}
+
+# Get balances input
+input GetBalancesInput {
+  filter: JSON
+  sort: JSON
+  limit: Int
+  offset: Int
+}
+
+# Get transactions input
+input GetTransactionsInput {
+  filter: JSON
+  sort: JSON
+  limit: Int
+  offset: Int
+}
+
+extend type Query {
+  # Get balances
+  getBalances(input: GetBalancesInput!): [TokenBalance!]!
+
+  # Get transactions
+  getTransactions(input: GetTransactionsInput!): [Transaction!]!
+}
