@@ -8,13 +8,11 @@ import { poolDeployed } from './subscriptions/poolDeployed';
 
 import { createBusiness } from './mutations/business/createBusiness';
 import { editBusiness } from './mutations/business/editBusiness';
-import { updateBusinessRiskScore } from './mutations/business/updateBusinessRiskScore';
 import { requestBusinessApprovalSignatures } from './mutations/business/requestBusinessApprovalSignatures';
 import { rejectBusinessApprovalSignatures } from './mutations/business/rejectBusinessApprovalSignatures';
 
 import { createPool } from './mutations/pool/createPool';
 import { editPool } from './mutations/pool/editPool';
-import { updatePoolRiskScore } from './mutations/pool/updatePoolRiskScore';
 import { requestPoolApprovalSignatures } from './mutations/pool/requestPoolApprovalSignatures';
 import { rejectPoolApprovalSignatures } from './mutations/pool/rejectPoolApprovalSignatures';
 import { createBusinessWithAI } from './mutations/business/createBusinessWithAI';
@@ -31,13 +29,11 @@ export const rwaResolvers: Resolvers = {
     createBusiness,
     createBusinessWithAI,
     editBusiness,
-    updateBusinessRiskScore,
     requestBusinessApprovalSignatures,
     rejectBusinessApprovalSignatures,
     createPool,
     createPoolWithAI,
     editPool,
-    updatePoolRiskScore,
     requestPoolApprovalSignatures,
     rejectPoolApprovalSignatures,
   },

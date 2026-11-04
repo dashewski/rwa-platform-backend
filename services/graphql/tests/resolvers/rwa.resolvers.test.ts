@@ -21,14 +21,12 @@ import { getPools } from '../../src/graphql/modules/rwa/resolvers/queries/getPoo
 import { createBusiness } from '../../src/graphql/modules/rwa/resolvers/mutations/business/createBusiness';
 import { createBusinessWithAI } from '../../src/graphql/modules/rwa/resolvers/mutations/business/createBusinessWithAI';
 import { editBusiness } from '../../src/graphql/modules/rwa/resolvers/mutations/business/editBusiness';
-import { updateBusinessRiskScore } from '../../src/graphql/modules/rwa/resolvers/mutations/business/updateBusinessRiskScore';
 import { requestBusinessApprovalSignatures } from '../../src/graphql/modules/rwa/resolvers/mutations/business/requestBusinessApprovalSignatures';
 import { rejectBusinessApprovalSignatures } from '../../src/graphql/modules/rwa/resolvers/mutations/business/rejectBusinessApprovalSignatures';
 
 import { createPool } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/createPool';
 import { createPoolWithAI } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/createPoolWithAI';
 import { editPool } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/editPool';
-import { updatePoolRiskScore } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/updatePoolRiskScore';
 import { requestPoolApprovalSignatures } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/requestPoolApprovalSignatures';
 import { rejectPoolApprovalSignatures } from '../../src/graphql/modules/rwa/resolvers/mutations/pool/rejectPoolApprovalSignatures';
 
@@ -581,68 +579,6 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
     });
   });
 
-  describe('Mutation.updateBusinessRiskScore', () => {
-    test('rejects an anonymous caller with 401 UNAUTHORIZED and calls nothing', async () => {
-      const fake = createFakeContext();
-
-      await expect(
-        updateBusinessRiskScore!(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
-
-      expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledTimes(0);
-      expect(fake.clients.rwaClient.requestBusinessEvaluation.post).toHaveBeenCalledTimes(0);
-    });
-
-    test('fetches the business, checks ownership and returns the refreshed evaluation', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
-      const evaluated = { ...BUSINESS, riskScore: 42 };
-      fake.clients.rwaClient.requestBusinessEvaluation.post.mockImplementation(async () => edenOk(evaluated));
-
-      const result = await updateBusinessRiskScore!(
-        null as never,
-        { id: 'business-1' } as never,
-        fake as unknown as GraphQLContext,
-        INFO,
-      );
-
-      expect(fake.clients.rwaClient.getBusiness.post).toHaveBeenCalledWith({ id: 'business-1' });
-      expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
-        userId: fakeUser.id,
-        ownerId: 'owner-1',
-        ownerType: 'company',
-        permission: 'content',
-      });
-      expect(fake.clients.rwaClient.requestBusinessEvaluation.post).toHaveBeenCalledWith({ id: 'business-1' });
-      expect(result).toEqual(evaluated);
-    });
-
-    test('maps a failed business fetch to 502 BAD_GATEWAY', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
-        edenError(404, 'NOT_FOUND', 'no business'),
-      );
-
-      await expect(
-        updateBusinessRiskScore!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
-
-      expect(fake.clients.rwaClient.requestBusinessEvaluation.post).toHaveBeenCalledTimes(0);
-    });
-
-    test('maps a failed evaluation request to 502 BAD_GATEWAY', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
-      fake.clients.rwaClient.requestBusinessEvaluation.post.mockImplementation(async () =>
-        edenError(503, 'UNAVAILABLE', 'evaluator down'),
-      );
-
-      await expect(
-        updateBusinessRiskScore!(null as never, { id: 'business-1' } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
-    });
-  });
-
   describe('Mutation.requestBusinessApprovalSignatures', () => {
     test('rejects an anonymous caller with 401 UNAUTHORIZED and calls nothing', async () => {
       const fake = createFakeContext();
@@ -1076,66 +1012,6 @@ describe('rwa resolvers (unit, fake clients/services)', () => {
 
       await expect(
         editPool!(null as never, { input: EDIT_POOL_INPUT } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
-    });
-  });
-
-  describe('Mutation.updatePoolRiskScore', () => {
-    test('rejects an anonymous caller with 401 UNAUTHORIZED and calls nothing', async () => {
-      const fake = createFakeContext();
-
-      await expect(
-        updatePoolRiskScore!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 401, code: 'UNAUTHORIZED' });
-
-      expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledTimes(0);
-      expect(fake.clients.rwaClient.requestPoolEvaluation.post).toHaveBeenCalledTimes(0);
-    });
-
-    test('fetches the pool, checks ownership and returns the refreshed evaluation', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
-      const evaluated = { ...POOL, riskScore: 7 };
-      fake.clients.rwaClient.requestPoolEvaluation.post.mockImplementation(async () => edenOk(evaluated));
-
-      const result = await updatePoolRiskScore!(
-        null as never,
-        { id: 'pool-1' } as never,
-        fake as unknown as GraphQLContext,
-        INFO,
-      );
-
-      expect(fake.clients.rwaClient.getPool.post).toHaveBeenCalledWith({ id: 'pool-1' });
-      expect(fake.services.ownership.checkOwnership).toHaveBeenCalledWith({
-        userId: fakeUser.id,
-        ownerId: 'owner-1',
-        ownerType: 'company',
-        permission: 'content',
-      });
-      expect(fake.clients.rwaClient.requestPoolEvaluation.post).toHaveBeenCalledWith({ id: 'pool-1' });
-      expect(result).toEqual(evaluated);
-    });
-
-    test('maps a failed pool fetch to 502 BAD_GATEWAY', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenError(404, 'NOT_FOUND', 'no pool'));
-
-      await expect(
-        updatePoolRiskScore!(null as never, { id: 'missing' } as never, fake as unknown as GraphQLContext, INFO),
-      ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
-
-      expect(fake.clients.rwaClient.requestPoolEvaluation.post).toHaveBeenCalledTimes(0);
-    });
-
-    test('maps a failed evaluation request to 502 BAD_GATEWAY', async () => {
-      const fake = createFakeContext({ user: fakeUser });
-      fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
-      fake.clients.rwaClient.requestPoolEvaluation.post.mockImplementation(async () =>
-        edenError(503, 'UNAVAILABLE', 'evaluator down'),
-      );
-
-      await expect(
-        updatePoolRiskScore!(null as never, { id: 'pool-1' } as never, fake as unknown as GraphQLContext, INFO),
       ).rejects.toMatchObject({ statusCode: 502, code: 'BAD_GATEWAY' });
     });
   });

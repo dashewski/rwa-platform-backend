@@ -27,7 +27,6 @@ type Business {
   fileId: String
   approvalSignaturesTaskId: String
   approvalSignaturesTaskExpired: Float
-  riskScoreEvaluationProcess: Boolean!
   country: String
   businessType: String
   socials: [SocialLink!]!
@@ -106,7 +105,6 @@ type Pool {
   approvalSignaturesTaskExpired: Float
 
   # Evaluation
-  riskScoreEvaluationProcess: Boolean!
 
   # Timestamps
   createdAt: Float!
@@ -265,7 +263,6 @@ extend type Mutation {
   createBusinessWithAI(input: CreateBusinessWithAIInput!): Business!
   createBusiness(input: CreateBusinessInput!): Business!
   editBusiness(input: EditBusinessInput!): Business!
-  updateBusinessRiskScore(id: ID!): Business!
   requestBusinessApprovalSignatures(input: RequestBusinessApprovalSignaturesInput!): ApprovalSignaturesResponse!
   rejectBusinessApprovalSignatures(id: ID!): Boolean!
 
@@ -273,7 +270,6 @@ extend type Mutation {
   createPoolWithAI(input: CreatePoolWithAIInput!): Pool!
   createPool(input: CreatePoolInput!): Pool!
   editPool(input: EditPoolInput!): Pool!
-  updatePoolRiskScore(id: ID!): Pool!
   requestPoolApprovalSignatures(input: RequestPoolApprovalSignaturesInput!): ApprovalSignaturesResponse!
   rejectPoolApprovalSignatures(id: ID!): Boolean!
 }

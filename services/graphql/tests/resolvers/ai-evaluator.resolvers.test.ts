@@ -17,6 +17,8 @@ import { edenError, edenOk } from '../fakes/clients.fake';
 import { getEvaluations } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluations';
 import { getEvaluation } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluation';
 import type { Evaluation } from '../../src/graphql/generated/types';
+import { updateBusinessRiskScore } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/updateBusinessRiskScore';
+import { updatePoolRiskScore } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/updatePoolRiskScore';
 
 const INFO = {} as GraphQLResolveInfo;
 const asContext = (fake: FakeContext) => fake as unknown as GraphQLContext;
@@ -28,10 +30,9 @@ const EVALUATION: Evaluation = {
   grandParentId: 'company-1',
   ownerId: 'owner-1',
   ownerType: 'business',
-  riskScore: 42,
-  factors: [{ name: 'team', impact: 'low', detail: 'experienced founders' }],
-  evaluatedDocuments: [],
-  evaluatedImages: [],
+  risk: { score: 42, pros: [], cons: [] },
+  summary: 'summary text',
+  sources: [],
   modelUsed: 'gpt-x',
   createdAt: 1700000000,
   updatedAt: 1700000001,
@@ -41,7 +42,7 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
   describe('getEvaluations', () => {
     test('forwards filter/sort/pagination and returns the evaluations', async () => {
       const fake = createFakeContext({ user: fakeUser });
-      const evaluations = [EVALUATION, { ...EVALUATION, id: 'eval-2', riskScore: 10 }];
+      const evaluations = [EVALUATION, { ...EVALUATION, id: 'eval-2', risk: { score: 10, pros: [], cons: [] } }];
       fake.clients.aiEvaluatorClient.getEvaluations.post.mockImplementation(async () => edenOk(evaluations));
 
       const input = {
@@ -149,5 +150,76 @@ describe('ai-evaluator resolvers (unit, fake clients)', () => {
         code: 'BAD_GATEWAY',
       });
     });
+  });
+});
+
+describe('risk score mutations (unit, fake clients)', () => {
+  const POOL = { id: 'pool-1', ownerId: 'owner-1', ownerType: 'business', poolAddress: '0xpool' };
+  const BUSINESS = { id: 'business-1', ownerId: 'owner-1', ownerType: 'business', tokenAddress: '0xtoken' };
+
+  test('updatePoolRiskScore queues an evaluation for a deployed pool', async () => {
+    const fake = createFakeContext({ user: fakeUser });
+    fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
+    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'eval-1' }));
+
+    const result = await updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO);
+
+    expect(result).toBe('eval-1');
+    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledWith({
+      entityType: 'pool',
+      entityId: 'pool-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+    });
+  });
+
+  test('updatePoolRiskScore rejects a pool that is not deployed', async () => {
+    const fake = createFakeContext({ user: fakeUser });
+    fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk({ ...POOL, poolAddress: undefined }));
+
+    const error: any = await Promise.resolve(
+      updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO),
+    ).catch((thrown) => thrown);
+
+    expect(error.statusCode).toBe(409);
+    expect(error.code).toBe('NOT_DEPLOYED');
+    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledTimes(0);
+  });
+
+  test('updateBusinessRiskScore queues an evaluation for a deployed business', async () => {
+    const fake = createFakeContext({ user: fakeUser });
+    fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
+    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'eval-2' }));
+
+    const result = await updateBusinessRiskScore!(null as never, { id: 'business-1' }, asContext(fake), INFO);
+
+    expect(result).toBe('eval-2');
+  });
+
+  test('updateBusinessRiskScore rejects a business that is not deployed', async () => {
+    const fake = createFakeContext({ user: fakeUser });
+    fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
+      edenOk({ ...BUSINESS, tokenAddress: undefined }),
+    );
+
+    const error: any = await Promise.resolve(
+      updateBusinessRiskScore!(null as never, { id: 'business-1' }, asContext(fake), INFO),
+    ).catch((thrown) => thrown);
+
+    expect(error.statusCode).toBe(409);
+    expect(error.code).toBe('NOT_DEPLOYED');
+    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledTimes(0);
+  });
+
+  test('both mutations require an authenticated user', async () => {
+    const fake = createFakeContext({ user: null });
+    fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
+
+    const error: any = await Promise.resolve(
+      updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO),
+    ).catch((thrown) => thrown);
+
+    expect(error.statusCode).toBe(401);
+    expect(error.code).toBe('UNAUTHORIZED');
   });
 });

@@ -1,5 +1,5 @@
 import { AppError } from '@shared/errors/app-errors';
-import type { MutationResolvers } from '../../../../../generated/types';
+import type { MutationResolvers } from '../../../../generated/types';
 
 export const updatePoolRiskScore: MutationResolvers['updatePoolRiskScore'] = async (
   _parent,
@@ -35,8 +35,19 @@ export const updatePoolRiskScore: MutationResolvers['updatePoolRiskScore'] = asy
     permission: 'content',
   });
 
-  const response = await clients.rwaClient.requestPoolEvaluation.post({
-    id,
+  if (!pool.poolAddress) {
+    throw new AppError({
+      message: 'Pool is not deployed yet',
+      statusCode: 409,
+      code: 'NOT_DEPLOYED',
+    });
+  }
+
+  const response = await clients.aiEvaluatorClient.evaluate.post({
+    entityType: 'pool',
+    entityId: id,
+    ownerId: pool.ownerId,
+    ownerType: pool.ownerType,
   });
 
   if (response.error) {
@@ -47,5 +58,5 @@ export const updatePoolRiskScore: MutationResolvers['updatePoolRiskScore'] = asy
     });
   }
 
-  return response.data;
+  return response.data.evaluationId;
 };

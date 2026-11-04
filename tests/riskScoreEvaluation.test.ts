@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeAll } from "bun:test";
 import { ethers, JsonRpcProvider } from "ethers";
-import { TESTNET_RPC } from "./utils/config";
+import { FACTORY_ADDRESS, HOLD_TOKEN_ADDRESS, TESTNET_RPC } from "./utils/config";
 import { makeGraphQLRequest } from "./utils/graphql/makeGraphQLRequest";
 import { authenticate } from "./utils/authenticate";
 import { CREATE_COMPANY } from "./utils/graphql/schema/company";
@@ -8,7 +8,10 @@ import {
   CREATE_BUSINESS,
   GET_BUSINESS,
   UPDATE_BUSINESS_RISK_SCORE,
+  REQUEST_BUSINESS_APPROVAL_SIGNATURES,
 } from "./utils/graphql/schema/rwa";
+import { GET_SIGNATURE_TASK } from "./utils/graphql/schema/signers-manager";
+import { requestHold, requestGas } from "./utils/requestTokens";
 import { GET_EVALUATIONS } from "./utils/graphql/schema/ai-evaluator";
 import { SET_REACTION } from "./utils/graphql/schema/reactions";
 import { CREATE_TOPIC, CREATE_QUESTION, CREATE_QUESTION_ANSWER } from "./utils/graphql/schema/questions";
@@ -21,6 +24,105 @@ import { makeRestRequest } from "./utils/makeRestRequest";
 async function readDemoFile(subdir: string, fileName: string, mimeType: string): Promise<File> {
   const buf = await Bun.file(import.meta.dir + "/utils/demo_files/" + subdir + "/" + fileName).arrayBuffer();
   return new File([buf], fileName, { type: mimeType });
+}
+
+
+/**
+ * Evaluation is allowed only for deployed entities, so every business has to be
+ * deployed on-chain before it can be scored: request signatures, wait for the
+ * signing task, deploy through the factory, wait until RWA_Deployed lands in the
+ * backend and tokenAddress is stored.
+ */
+async function deployBusiness(params: {
+  businessId: string;
+  companyId: string;
+  wallet: ethers.HDNodeWallet | ethers.Wallet;
+  accessToken: string;
+}) {
+  const { businessId, companyId, wallet, accessToken } = params;
+
+  const sigResult = await makeGraphQLRequest(
+    REQUEST_BUSINESS_APPROVAL_SIGNATURES,
+    {
+      input: {
+        id: businessId,
+        ownerWallet: wallet.address,
+        deployerWallet: wallet.address,
+        createRWAFee: '100',
+      },
+    },
+    accessToken,
+  );
+
+  expect(sigResult.errors).toBeUndefined();
+
+  const taskId = sigResult.data.requestBusinessApprovalSignatures.taskId;
+
+  await new Promise((resolve) => setTimeout(resolve, 30_000));
+
+  const taskResult = await makeGraphQLRequest(GET_SIGNATURE_TASK, { input: { taskId } }, accessToken);
+  expect(taskResult.errors).toBeUndefined();
+  expect(taskResult.data.getSignatureTask.completed).toBe(true);
+
+  await requestHold(accessToken, 500);
+  await requestGas(accessToken, 0.0035);
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+
+  const holdToken = new ethers.Contract(
+    HOLD_TOKEN_ADDRESS,
+    ['function approve(address spender, uint256 amount) public returns (bool)'],
+    wallet,
+  );
+
+  const approveTx = await holdToken.approve(FACTORY_ADDRESS, ethers.MaxUint256);
+  await approveTx.wait();
+
+  const signatures = taskResult.data.getSignatureTask.signatures;
+  const signers = signatures.map((signature: any) => ethers.getAddress(signature.signer));
+  const signatureValues = signatures.map((signature: any) => signature.signature);
+  const expired = taskResult.data.getSignatureTask.expired;
+
+  const factory = new ethers.Contract(
+    FACTORY_ADDRESS,
+    [
+      'function deployRWA(uint256 createRWAFee, string calldata entityId, string calldata entityOwnerId, string calldata entityOwnerType, address owner, address[] calldata signers, bytes[] calldata signatures, uint256 expired)',
+    ],
+    wallet,
+  );
+
+  const deployTx = await factory.deployRWA(
+    '100',
+    businessId,
+    companyId,
+    'company',
+    wallet.address,
+    signers,
+    signatureValues,
+    expired,
+    { gasLimit: 1200000, gasPrice: 1000000000 },
+  );
+  await deployTx.wait(20);
+
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+
+  const updatedBusiness = await makeGraphQLRequest(GET_BUSINESS, { id: businessId }, accessToken);
+  expect(updatedBusiness.data.getBusiness.tokenAddress).toBeDefined();
+  expect(updatedBusiness.data.getBusiness.tokenAddress).not.toBeNull();
+}
+
+async function waitForRiskScore(params: { businessId: string; accessToken: string }) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    const poll = await makeGraphQLRequest(GET_BUSINESS, { id: params.businessId }, params.accessToken);
+    const riskScore = poll.data.getBusiness.riskScore;
+
+    if (typeof riskScore === 'number') {
+      return riskScore;
+    }
+  }
+
+  throw new Error('riskScore did not appear within 120s');
 }
 
 // ── Tests ────────────────────────────────────────────
@@ -128,15 +230,15 @@ describe("Risk Score Evaluation", () => {
     );
     expect(imgRes.error).toBeUndefined();
 
+    // ── Deploy first: evaluation is allowed only for deployed businesses ──
+    await deployBusiness({ businessId, companyId, wallet, accessToken });
+
     // ── Evaluate ──
     const result = await makeGraphQLRequest(UPDATE_BUSINESS_RISK_SCORE, { id: businessId }, accessToken);
     expect(result.errors).toBeUndefined();
-    expect(result.data.updateBusinessRiskScore.riskScoreEvaluationProcess).toBe(true);
+    expect(typeof result.data.updateBusinessRiskScore).toBe('string');
 
-    await new Promise((r) => setTimeout(r, 30_000));
-
-    const scoreRes = await makeGraphQLRequest(GET_BUSINESS, { id: businessId }, accessToken);
-    const riskScore = scoreRes.data.getBusiness.riskScore;
+    const riskScore = await waitForRiskScore({ businessId, accessToken });
     console.log(`\n  [GOOD BUSINESS - Coffee Shop]  riskScore = ${riskScore}\n`);
 
     expect(riskScore).toBeGreaterThanOrEqual(1);
@@ -149,9 +251,9 @@ describe("Risk Score Evaluation", () => {
       accessToken,
     );
     const evaluation = evalsRes.data.getEvaluations[0];
-    expect(evaluation.riskScore).toBe(riskScore);
-    expect(evaluation.reasoning?.length).toBeGreaterThan(0);
-    expect(evaluation.factors?.length).toBeGreaterThan(0);
+    expect(evaluation.risk.score).toBe(riskScore);
+    expect(evaluation.summary.length).toBeGreaterThan(0);
+    expect(evaluation.risk.pros.length + evaluation.risk.cons.length).toBeGreaterThan(0);
   });
 
   test("bad business (crypto pyramid) → high risk score", async () => {
@@ -249,15 +351,15 @@ describe("Risk Score Evaluation", () => {
     );
     expect(imgRes.error).toBeUndefined();
 
+    // ── Deploy first: evaluation is allowed only for deployed businesses ──
+    await deployBusiness({ businessId, companyId, wallet, accessToken });
+
     // ── Evaluate ──
     const result = await makeGraphQLRequest(UPDATE_BUSINESS_RISK_SCORE, { id: businessId }, accessToken);
     expect(result.errors).toBeUndefined();
-    expect(result.data.updateBusinessRiskScore.riskScoreEvaluationProcess).toBe(true);
+    expect(typeof result.data.updateBusinessRiskScore).toBe('string');
 
-    await new Promise((r) => setTimeout(r, 30_000));
-
-    const scoreRes = await makeGraphQLRequest(GET_BUSINESS, { id: businessId }, accessToken);
-    const riskScore = scoreRes.data.getBusiness.riskScore;
+    const riskScore = await waitForRiskScore({ businessId, accessToken });
     console.log(`\n  [BAD BUSINESS - Crypto Pyramid]  riskScore = ${riskScore}\n`);
 
     expect(riskScore).toBeGreaterThanOrEqual(1);
@@ -270,8 +372,8 @@ describe("Risk Score Evaluation", () => {
       accessToken,
     );
     const evaluation = evalsRes.data.getEvaluations[0];
-    expect(evaluation.riskScore).toBe(riskScore);
-    expect(evaluation.reasoning?.length).toBeGreaterThan(0);
-    expect(evaluation.factors?.length).toBeGreaterThan(0);
+    expect(evaluation.risk.score).toBe(riskScore);
+    expect(evaluation.summary.length).toBeGreaterThan(0);
+    expect(evaluation.risk.pros.length + evaluation.risk.cons.length).toBeGreaterThan(0);
   });
 });

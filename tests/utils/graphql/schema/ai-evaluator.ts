@@ -7,23 +7,17 @@ export const GET_EVALUATION = `
       grandParentId
       ownerId
       ownerType
-      riskScore
-      reasoning
-      factors {
-        name
-        impact
-        detail
-      }
-      stage1Response
-      stage2Response
-      evaluatedDocuments {
+      summary
+      sources {
+        type
         id
         name
         mimeType
       }
-      evaluatedImages {
-        id
-        name
+      risk {
+        score
+        pros
+        cons
       }
       modelUsed
       createdAt
@@ -38,23 +32,17 @@ export const GET_EVALUATIONS = `
       id
       entityType
       parentId
-      riskScore
-      reasoning
-      factors {
-        name
-        impact
-        detail
-      }
-      stage1Response
-      stage2Response
-      evaluatedDocuments {
+      summary
+      sources {
+        type
         id
         name
         mimeType
       }
-      evaluatedImages {
-        id
-        name
+      risk {
+        score
+        pros
+        cons
       }
       modelUsed
       createdAt

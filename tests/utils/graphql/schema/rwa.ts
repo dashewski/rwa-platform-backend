@@ -18,7 +18,6 @@ export const GET_BUSINESS = gql`
       imageUrl
       approvalSignaturesTaskId
       approvalSignaturesTaskExpired
-      riskScoreEvaluationProcess
       country
       businessType
       socials {
@@ -49,7 +48,6 @@ export const GET_BUSINESSES = gql`
       imageUrl
       approvalSignaturesTaskId
       approvalSignaturesTaskExpired
-      riskScoreEvaluationProcess
       country
       businessType
       socials {
@@ -156,11 +154,7 @@ export const EDIT_BUSINESS = gql`
 
 export const UPDATE_BUSINESS_RISK_SCORE = gql`
   mutation UpdateBusinessRiskScore($id: ID!) {
-    updateBusinessRiskScore(id: $id) {
-      id
-      riskScoreEvaluationProcess
-      updatedAt
-    }
+    updateBusinessRiskScore(id: $id)
   }
 `;
 
@@ -192,7 +186,6 @@ export const GET_POOL = gql`
       chainId
       tags
       riskScore
-      riskScoreEvaluationProcess
 
       # Contract Addresses
       rwaAddress
@@ -278,7 +271,6 @@ export const GET_POOLS = gql`
       chainId
       tags
       riskScore
-      riskScoreEvaluationProcess
 
       # Contract Addresses
       rwaAddress
@@ -603,11 +595,7 @@ export const EDIT_POOL = gql`
 
 export const UPDATE_POOL_RISK_SCORE = gql`
   mutation UpdatePoolRiskScore($id: ID!) {
-    updatePoolRiskScore(id: $id) {
-      id
-      riskScoreEvaluationProcess
-      updatedAt
-    }
+    updatePoolRiskScore(id: $id)
   }
 `;
 

@@ -1,5 +1,5 @@
 import { AppError } from '@shared/errors/app-errors';
-import type { MutationResolvers } from '../../../../../generated/types';
+import type { MutationResolvers } from '../../../../generated/types';
 
 export const updateBusinessRiskScore: MutationResolvers['updateBusinessRiskScore'] = async (
   _parent,
@@ -35,8 +35,19 @@ export const updateBusinessRiskScore: MutationResolvers['updateBusinessRiskScore
     permission: 'content',
   });
 
-  const response = await clients.rwaClient.requestBusinessEvaluation.post({
-    id,
+  if (!business.tokenAddress) {
+    throw new AppError({
+      message: 'Business is not deployed yet',
+      statusCode: 409,
+      code: 'NOT_DEPLOYED',
+    });
+  }
+
+  const response = await clients.aiEvaluatorClient.evaluate.post({
+    entityType: 'business',
+    entityId: id,
+    ownerId: business.ownerId,
+    ownerType: business.ownerType,
   });
 
   if (response.error) {
@@ -47,5 +58,5 @@ export const updateBusinessRiskScore: MutationResolvers['updateBusinessRiskScore
     });
   }
 
-  return response.data;
+  return response.data.evaluationId;
 };

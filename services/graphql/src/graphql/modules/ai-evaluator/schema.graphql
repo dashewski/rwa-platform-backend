@@ -3,21 +3,17 @@ enum EvaluationEntityType {
   pool
 }
 
-type EvaluationFactor {
-  name: String!
-  impact: String!
-  detail: String!
-}
-
-type EvaluationDocumentRef {
+type EvaluationSource {
+  type: String!
   id: String!
   name: String!
   mimeType: String!
 }
 
-type EvaluationImageRef {
-  id: String!
-  name: String!
+type EvaluationRisk {
+  score: Int
+  pros: [String!]!
+  cons: [String!]!
 }
 
 type Evaluation {
@@ -27,13 +23,9 @@ type Evaluation {
   grandParentId: String!
   ownerId: String!
   ownerType: String!
-  riskScore: Int
-  reasoning: String
-  factors: [EvaluationFactor!]!
-  stage1Response: String
-  stage2Response: String
-  evaluatedDocuments: [EvaluationDocumentRef!]!
-  evaluatedImages: [EvaluationImageRef!]!
+  risk: EvaluationRisk!
+  summary: String!
+  sources: [EvaluationSource!]!
   modelUsed: String
   createdAt: Float!
   updatedAt: Float!
@@ -61,4 +53,9 @@ input GetEvaluationsInput {
 extend type Query {
   getEvaluation(id: ID!): Evaluation!
   getEvaluations(input: GetEvaluationsInput): [Evaluation!]!
+}
+
+extend type Mutation {
+  updateBusinessRiskScore(id: ID!): ID!
+  updatePoolRiskScore(id: ID!): ID!
 }
