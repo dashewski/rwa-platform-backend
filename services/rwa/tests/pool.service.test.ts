@@ -273,7 +273,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     expect(pool.paused).toBe(false);
     expect(pool.outgoingTranches).toEqual([]);
     expect(pool.incomingTranches).toEqual([]);
-    expect(pool.riskScoreEvaluationProcess).toBe(false);
   });
 
   test('createPool: the DTO is plain JSON - string id, no raw _id leak', async () => {
@@ -479,61 +478,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     });
   });
 
-  test('requestEvaluation: flags the pool and publishes an evaluatePool request', async () => {
-    const created = await service.createPool(POOL);
-
-    const result = await service.requestEvaluation({ id: created.id });
-
-    expect(pools.updatePool).toHaveBeenCalledWith(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: expect.any(Number),
-    });
-    expect(outbox.publish).toHaveBeenCalledWith(
-      EVALUATION_EXCHANGE,
-      'evaluatePool',
-      { poolId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      expect.stringMatching(new RegExp(`^${created.id}:\\d+$`)),
-    );
-    expect(result.riskScoreEvaluationProcess).toBe(true);
-  });
-
-  test('requestEvaluation: rejects a fresh in-progress evaluation with 403 NOT_ALLOWED', async () => {
-    const created = await service.createPool(POOL);
-    await pools.updatePool(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: Math.floor(Date.now() / 1000),
-    });
-
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
-      statusCode: 403,
-      code: 'NOT_ALLOWED',
-      message: 'Evaluation already in progress',
-    });
-
-    expect(outbox.publish).toHaveBeenCalledTimes(0);
-  });
-
-  test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
-    const created = await service.createPool(POOL);
-    await pools.updatePool(created.id, {
-      riskScoreEvaluationProcess: true,
-      // Beyond the 1 hour stale window the service applies.
-      riskScoreEvaluationStartedAt: Math.floor(Date.now() / 1000) - 2 * 60 * 60,
-    });
-
-    const result = await service.requestEvaluation({ id: created.id });
-
-    expect(outbox.publish).toHaveBeenCalledTimes(1);
-    expect(result.riskScoreEvaluationProcess).toBe(true);
-  });
-
-  test('requestEvaluation: a failed publish propagates and the flags are not committed', async () => {
-    const created = await service.createPool(POOL);
-    outbox.publish.mockRejectedValueOnce(new Error('outbox is unavailable'));
-
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toThrow('outbox is unavailable');
-  });
-
   test('setRiskScore: accepts the 1..100 boundaries and clears the evaluation flags', async () => {
     const created = await service.createPool(POOL);
     await pools.updatePool(created.id, { riskScoreEvaluationProcess: true, riskScoreEvaluationStartedAt: 123 });
@@ -544,8 +488,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       expect(result.riskScore).toBe(riskScore);
       expect(pools.updatePool).toHaveBeenLastCalledWith(created.id, {
         riskScore,
-        riskScoreEvaluationProcess: false,
-        riskScoreEvaluationStartedAt: 0,
       });
     }
   });
@@ -577,8 +519,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
 
     expect(pools.updatePool).toHaveBeenLastCalledWith(created.id, {
       riskScore: 77,
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
     });
     expect(result.riskScore).toBe(77);
   });

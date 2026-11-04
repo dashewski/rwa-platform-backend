@@ -28,7 +28,6 @@ export const businessSchema = t.Object({
   fileId: t.Optional(t.String()),
   approvalSignaturesTaskId: t.Optional(t.String()),
   approvalSignaturesTaskExpired: t.Optional(t.Number()),
-  riskScoreEvaluationProcess: t.Boolean(),
   country: t.Optional(t.String()),
   businessType: t.Optional(businessTypeSchema),
   socials: t.Array(socialLinkSchema),
@@ -67,9 +66,6 @@ export const editBusinessRequest = t.Object({
   ),
 });
 export const editBusinessResponse = businessSchema;
-
-export const requestBusinessEvaluationRequest = t.Pick(businessSchema, ['id']);
-export const requestBusinessEvaluationResponse = businessSchema;
 
 /*
  * Request Approval Signatures

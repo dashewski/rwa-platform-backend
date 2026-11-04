@@ -83,7 +83,6 @@ export const poolSchema = t.Object({
   approvalSignaturesTaskExpired: t.Optional(t.Number()),
 
   // Evaluation
-  riskScoreEvaluationProcess: t.Boolean(),
 
   // Timestamps
   createdAt: t.Number(),
@@ -158,9 +157,6 @@ export const editPoolRequest = t.Object({
   ),
 });
 export const editPoolResponse = poolSchema;
-
-export const requestPoolEvaluationRequest = t.Pick(poolSchema, ['id']);
-export const requestPoolEvaluationResponse = poolSchema;
 
 export const requestPoolApprovalSignaturesRequest = t.Object({
   id: t.String(),

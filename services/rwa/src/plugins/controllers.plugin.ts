@@ -5,7 +5,6 @@ import { getTokenMetadataController } from '../controllers/token/getTokenMetadat
 import { editBusinessController } from '../controllers/business/editBusiness.controller';
 import { requestBusinessApprovalSignaturesController } from '../controllers/business/requestBusinessApprovalSignatures.controller';
 import { rejectBusinessApprovalSignaturesController } from '../controllers/business/rejectBusinessApprovalSignatures.controller';
-import { requestBusinessEvaluationController } from '../controllers/business/requestBusinessEvaluation.controller';
 import { getBusinessController } from '../controllers/business/getBusiness.controller';
 import { getBusinessesController } from '../controllers/business/getBusinesses.controller';
 import { createBusinessWithAIController } from '../controllers/business/createBusinessWithAI.controller';
@@ -14,7 +13,6 @@ import { createPoolController } from '../controllers/pool/createPool.controller'
 import { editPoolController } from '../controllers/pool/editPool.controller';
 import { requestPoolApprovalSignaturesController } from '../controllers/pool/requestPoolApprovalSignatures.controller';
 import { rejectPoolApprovalSignaturesController } from '../controllers/pool/rejectPoolApprovalSignatures.controller';
-import { requestPoolEvaluationController } from '../controllers/pool/requestPoolEvaluation.controller';
 import { getPoolController } from '../controllers/pool/getPool.controller';
 import { getPoolsController } from '../controllers/pool/getPools.controller';
 import { createPoolWithAIController } from '../controllers/pool/createPoolWithAI.controller';
@@ -30,10 +28,6 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
 
   const editBusinessCtrl = withTraceSync('rwa.init.controllers.edit_business', () =>
     editBusinessController(servicesPlugin),
-  );
-
-  const requestBusinessEvaluationCtrl = withTraceSync('rwa.init.controllers.request_business_evaluation', () =>
-    requestBusinessEvaluationController(servicesPlugin),
   );
 
   const requestBusinessApprovalSignaturesCtrl = withTraceSync(
@@ -61,10 +55,6 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
   const createPoolCtrl = withTraceSync('rwa.init.controllers.create_pool', () => createPoolController(servicesPlugin));
 
   const editPoolCtrl = withTraceSync('rwa.init.controllers.edit_pool', () => editPoolController(servicesPlugin));
-
-  const requestPoolEvaluationCtrl = withTraceSync('rwa.init.controllers.request_pool_evaluation', () =>
-    requestPoolEvaluationController(servicesPlugin),
-  );
 
   const requestPoolApprovalSignaturesCtrl = withTraceSync('rwa.init.controllers.request_pool_approval_signatures', () =>
     requestPoolApprovalSignaturesController(servicesPlugin),
@@ -99,7 +89,6 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
       // Business controllers
       .use(createBusinessCtrl)
       .use(editBusinessCtrl)
-      .use(requestBusinessEvaluationCtrl)
       .use(requestBusinessApprovalSignaturesCtrl)
       .use(rejectBusinessApprovalSignaturesCtrl)
       .use(getBusinessCtrl)
@@ -108,7 +97,6 @@ export const createControllersPlugin = (servicesPlugin: ServicesPlugin) => {
       // Pool controllers
       .use(createPoolCtrl)
       .use(editPoolCtrl)
-      .use(requestPoolEvaluationCtrl)
       .use(requestPoolApprovalSignaturesCtrl)
       .use(rejectPoolApprovalSignaturesCtrl)
       .use(getPoolCtrl)

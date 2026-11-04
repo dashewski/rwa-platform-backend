@@ -21,7 +21,6 @@
       "production"
     ],
     "riskScore": 95,
-    "riskScoreEvaluationProcess": false,
     "rwaAddress": "0xFc0A9e6EB04E3af97258b7FDB3f5100D98f705F9",
     "poolAddress": "0xD18D9b202f34aEB01222a1506a66D8820b0AAc9B",
     "holdToken": "0x1c0e214bB702572E5582085d6E25c39A2B13510d",

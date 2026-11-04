@@ -275,49 +275,6 @@ Response format:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ id: a[0].id }),
-  })
-  async requestEvaluation({ id }: { id: string }) {
-    setSpanAttributes({ entityId: id, entityType: 'business' });
-    const business = await this.businessRepository.findById(id);
-
-    const now = Math.floor(Date.now() / 1000);
-
-    // An evaluation stuck "in progress" is only respected for a limited time:
-    // if its request or result was lost somewhere down the chain, the flag
-    // goes stale and the user can request a fresh evaluation.
-    const startedAt = Number(business.riskScoreEvaluationStartedAt || 0);
-    const isStale = !startedAt || now - startedAt >= EVALUATION_STALE_AFTER_SECONDS;
-
-    if (business.riskScoreEvaluationProcess && !isStale) {
-      throw new AppError({
-        message: 'Evaluation already in progress',
-        statusCode: 403,
-        code: 'NOT_ALLOWED',
-      });
-    }
-
-    await mongoose.connection.transaction(async () => {
-      await this.businessRepository.updateBusiness(id, {
-        riskScoreEvaluationProcess: true,
-        riskScoreEvaluationStartedAt: now,
-      });
-
-      await this.outboxPublisher.publish(
-        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
-        'evaluateBusiness',
-        { businessId: id, ownerId: business.ownerId, ownerType: business.ownerType },
-        `${id}:${now}`,
-      );
-    });
-
-    const updated = await this.businessRepository.findById(id);
-    return this.mapBusiness(updated);
-  }
-
-  @TraceDecorator()
-  @MetricsDecorator()
-  @LogDecorator({
     args: (a) => ({ id: a[0].id, riskScore: a[0].riskScore }),
   })
   async setRiskScore({ id, riskScore }: { id: string; riskScore: number }) {
@@ -332,8 +289,6 @@ Response format:
 
     const updated = await this.businessRepository.updateBusiness(id, {
       riskScore,
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
     });
 
     return this.mapBusiness(updated);
@@ -557,7 +512,6 @@ Response format:
       fileId: business.fileId ?? undefined,
       approvalSignaturesTaskId: business.approvalSignaturesTaskId ?? undefined,
       approvalSignaturesTaskExpired: business.approvalSignaturesTaskExpired ?? undefined,
-      riskScoreEvaluationProcess: business.riskScoreEvaluationProcess,
       country: business.country ?? undefined,
       businessType: business.businessType ?? undefined,
       socials: business.socials ?? [],

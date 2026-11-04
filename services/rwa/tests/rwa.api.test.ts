@@ -193,22 +193,6 @@ describe('rwa HTTP layer (component, fake repositories and clients)', () => {
     expect(fetched.body.name).toBe('Renamed');
   });
 
-  test('requestBusinessEvaluation: asks the evaluator and flags the evaluation after the reply', async () => {
-    const created = await post(app, '/createBusiness', BUSINESS);
-
-    const response = await post(app, '/requestBusinessEvaluation', { id: created.body.id });
-
-    expect(response.status).toBe(200);
-    expect(response.body.riskScoreEvaluationProcess).toBe(true);
-    expect(outbox.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        exchange: 'evaluation',
-        routingKey: 'evaluateBusiness',
-        payload: { businessId: created.body.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      }),
-    );
-  });
-
   test('requestBusinessApprovalSignatures: returns the task id, a second call is rejected', async () => {
     const created = await post(app, '/createBusiness', BUSINESS);
     const payload = {

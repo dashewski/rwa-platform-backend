@@ -317,39 +317,6 @@ describe("RWA Flow", () => {
       expect(result.data.editBusiness.socials[2].type).toBe("webpage");
     });
 
-    test("should update business risk score", async () => {
-      const result = await makeGraphQLRequest(
-        UPDATE_BUSINESS_RISK_SCORE,
-        {
-          id: businessId,
-        },
-        accessToken
-      );
-
-      expect(result.errors).toBeUndefined();
-      expect(result.data.updateBusinessRiskScore).toBeDefined();
-      expect(result.data.updateBusinessRiskScore.id).toBe(businessId);
-
-      // Wait for async evaluation to complete — poll until riskScore appears
-      // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s
-      let riskScore: number | undefined;
-      for (let i = 0; i < 40; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const riskPoll = await makeGraphQLRequest(
-          GET_BUSINESS,
-          { id: businessId },
-          accessToken
-        );
-        riskScore = riskPoll.data.getBusiness.riskScore;
-        if (typeof riskScore === 'number') break;
-      }
-
-      expect(riskScore).toBeDefined();
-      expect(riskScore).toBeGreaterThanOrEqual(1);
-      expect(riskScore).toBeLessThanOrEqual(100);
-    });
-
-
     test("should deploy business contract", async () => {
       // Request signatures
       const sigResult = await makeGraphQLRequest(
@@ -467,6 +434,38 @@ describe("RWA Flow", () => {
 
       tokenAddress = updatedBusiness.data.getBusiness.tokenAddress
     });
+
+    test("should update business risk score", async () => {
+      const result = await makeGraphQLRequest(
+        UPDATE_BUSINESS_RISK_SCORE,
+        {
+          id: businessId,
+        },
+        accessToken
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(typeof result.data.updateBusinessRiskScore).toBe('string');
+
+      // Wait for async evaluation to complete — poll until riskScore appears
+      // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s
+      let riskScore: number | undefined;
+      for (let i = 0; i < 40; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const riskPoll = await makeGraphQLRequest(
+          GET_BUSINESS,
+          { id: businessId },
+          accessToken
+        );
+        riskScore = riskPoll.data.getBusiness.riskScore;
+        if (typeof riskScore === 'number') break;
+      }
+
+      expect(riskScore).toBeDefined();
+      expect(riskScore).toBeGreaterThanOrEqual(1);
+      expect(riskScore).toBeLessThanOrEqual(100);
+    });
+
 
     test("should upload business image", async () => {
       const file = makePngFile("business.png");
@@ -709,39 +708,6 @@ describe("RWA Flow", () => {
       expect(result.data.editPool.allowEntryBurn).toBe(true);
     });
 
-    test("should update pool risk score", async () => {
-      const result = await makeGraphQLRequest(
-        UPDATE_POOL_RISK_SCORE,
-        {
-          id: poolId,
-        },
-        accessToken
-      );
-
-      expect(result.errors).toBeUndefined();
-      expect(result.data.updatePoolRiskScore).toBeDefined();
-      expect(result.data.updatePoolRiskScore.id).toBe(poolId);
-
-      // Wait for async evaluation to complete — poll until riskScore appears
-      // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s
-      let riskScore: number | undefined;
-      for (let i = 0; i < 40; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const riskPoll = await makeGraphQLRequest(
-          GET_POOL,
-          { id: poolId },
-          accessToken
-        );
-        riskScore = riskPoll.data.getPool.riskScore;
-        if (typeof riskScore === 'number') break;
-      }
-
-      console.log('riskScore', riskScore)
-      expect(riskScore).toBeDefined();
-      expect(riskScore).toBeGreaterThanOrEqual(1);
-      expect(riskScore).toBeLessThanOrEqual(100);
-    });
-
     test("should deploy pool contract", async () => {
       // Request signatures
       const sigResult = await makeGraphQLRequest(
@@ -856,6 +822,38 @@ describe("RWA Flow", () => {
       expect(updatedPool.data.getPool.poolAddress).not.toBeNull();
       expect(updatedPool.data.getPool.poolAddress).not.toBe("");
     });
+    test("should update pool risk score", async () => {
+      const result = await makeGraphQLRequest(
+        UPDATE_POOL_RISK_SCORE,
+        {
+          id: poolId,
+        },
+        accessToken
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(typeof result.data.updatePoolRiskScore).toBe('string');
+
+      // Wait for async evaluation to complete — poll until riskScore appears
+      // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s
+      let riskScore: number | undefined;
+      for (let i = 0; i < 40; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const riskPoll = await makeGraphQLRequest(
+          GET_POOL,
+          { id: poolId },
+          accessToken
+        );
+        riskScore = riskPoll.data.getPool.riskScore;
+        if (typeof riskScore === 'number') break;
+      }
+
+      console.log('riskScore', riskScore)
+      expect(riskScore).toBeDefined();
+      expect(riskScore).toBeGreaterThanOrEqual(1);
+      expect(riskScore).toBeLessThanOrEqual(100);
+    });
+
   });
 
   describe("Token Metadata", () => {

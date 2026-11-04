@@ -260,16 +260,6 @@ const poolSchemaDefinition = {
   },
 
   // Evaluation
-  riskScoreEvaluationProcess: {
-    type: Boolean,
-    default: false,
-  },
-  riskScoreEvaluationStartedAt: {
-    type: Number,
-    default: 0,
-  },
-
-  // Timestamps
   createdAt: {
     type: Number,
     default: () => Math.floor(Date.now() / 1000),

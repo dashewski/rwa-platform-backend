@@ -240,49 +240,6 @@ Example response:
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
-    args: (a) => ({ id: a[0].id }),
-  })
-  async requestEvaluation({ id }: { id: string }) {
-    setSpanAttributes({ entityId: id, entityType: 'pool' });
-    const pool = await this.poolRepository.findById(id);
-
-    const now = Math.floor(Date.now() / 1000);
-
-    // An evaluation stuck "in progress" is only respected for a limited time:
-    // if its request or result was lost somewhere down the chain, the flag
-    // goes stale and the user can request a fresh evaluation.
-    const startedAt = Number(pool.riskScoreEvaluationStartedAt || 0);
-    const isStale = !startedAt || now - startedAt >= EVALUATION_STALE_AFTER_SECONDS;
-
-    if (pool.riskScoreEvaluationProcess && !isStale) {
-      throw new AppError({
-        message: 'Evaluation already in progress',
-        statusCode: 403,
-        code: 'NOT_ALLOWED',
-      });
-    }
-
-    await mongoose.connection.transaction(async () => {
-      await this.poolRepository.updatePool(id, {
-        riskScoreEvaluationProcess: true,
-        riskScoreEvaluationStartedAt: now,
-      });
-
-      await this.outboxPublisher.publish(
-        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
-        'evaluatePool',
-        { poolId: id, ownerId: pool.ownerId, ownerType: pool.ownerType },
-        `${id}:${now}`,
-      );
-    });
-
-    const updated = await this.poolRepository.findById(id);
-    return this.mapPool(updated);
-  }
-
-  @TraceDecorator()
-  @MetricsDecorator()
-  @LogDecorator({
     args: (a) => ({ id: a[0].id, riskScore: a[0].riskScore }),
   })
   async setRiskScore({ id, riskScore }: { id: string; riskScore: number }) {
@@ -297,8 +254,6 @@ Example response:
 
     const updated = await this.poolRepository.updatePool(id, {
       riskScore,
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
     });
     return this.mapPool(updated);
   }
@@ -667,7 +622,6 @@ Example response:
       riskScore: pool.riskScore ?? undefined,
       approvalSignaturesTaskId: pool.approvalSignaturesTaskId ?? undefined,
       approvalSignaturesTaskExpired: pool.approvalSignaturesTaskExpired ?? undefined,
-      riskScoreEvaluationProcess: pool.riskScoreEvaluationProcess,
       createdAt: pool.createdAt,
       updatedAt: pool.updatedAt,
     };

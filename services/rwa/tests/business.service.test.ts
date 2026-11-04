@@ -116,7 +116,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     expect(business.id).toHaveLength(24); // Mongo ObjectId hex
     expect(typeof business.createdAt).toBe('number');
     expect(business).not.toHaveProperty('_id');
-    expect(business.riskScoreEvaluationProcess).toBe(false);
     expect(business.socials).toEqual([]);
     expect(business.imageUrl).toBeUndefined();
   });
@@ -278,66 +277,9 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
     });
   });
 
-  test('requestEvaluation: flags the business and publishes an evaluateBusiness request', async () => {
-    const created = await service.createBusiness(BUSINESS);
-
-    const result = await service.requestEvaluation({ id: created.id });
-
-    expect(businesses.updateBusiness).toHaveBeenCalledWith(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: expect.any(Number),
-    });
-    expect(outbox.publish).toHaveBeenCalledWith(
-      EVALUATION_EXCHANGE,
-      'evaluateBusiness',
-      { businessId: created.id, ownerId: OWNER_ID, ownerType: OWNER_TYPE },
-      expect.stringMatching(new RegExp(`^${created.id}:\\d+$`)),
-    );
-    expect(result.riskScoreEvaluationProcess).toBe(true);
-  });
-
-  test('requestEvaluation: rejects a fresh in-progress evaluation with 403 NOT_ALLOWED', async () => {
-    const created = await service.createBusiness(BUSINESS);
-    await businesses.updateBusiness(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: Math.floor(Date.now() / 1000),
-    });
-
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toMatchObject({
-      statusCode: 403,
-      code: 'NOT_ALLOWED',
-      message: 'Evaluation already in progress',
-    });
-
-    expect(outbox.publish).toHaveBeenCalledTimes(0);
-  });
-
-  test('requestEvaluation: allows a new request once the in-progress flag is stale', async () => {
-    const created = await service.createBusiness(BUSINESS);
-    await businesses.updateBusiness(created.id, {
-      riskScoreEvaluationProcess: true,
-      // Beyond the 1 hour stale window the service applies.
-      riskScoreEvaluationStartedAt: Math.floor(Date.now() / 1000) - 2 * 60 * 60,
-    });
-
-    const result = await service.requestEvaluation({ id: created.id });
-
-    expect(outbox.publish).toHaveBeenCalledTimes(1);
-    expect(result.riskScoreEvaluationProcess).toBe(true);
-  });
-
-  test('requestEvaluation: a failed publish propagates and the flags are not committed', async () => {
-    const created = await service.createBusiness(BUSINESS);
-    outbox.publish.mockRejectedValueOnce(new Error('outbox is unavailable'));
-
-    await expect(service.requestEvaluation({ id: created.id })).rejects.toThrow('outbox is unavailable');
-  });
-
   test('setRiskScore: accepts the 1..100 boundaries and clears the evaluation flags', async () => {
     const created = await service.createBusiness(BUSINESS);
     await businesses.updateBusiness(created.id, {
-      riskScoreEvaluationProcess: true,
-      riskScoreEvaluationStartedAt: 123,
     });
 
     for (const riskScore of [1, 100]) {
@@ -346,8 +288,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
       expect(result.riskScore).toBe(riskScore);
       expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
         riskScore,
-        riskScoreEvaluationProcess: false,
-        riskScoreEvaluationStartedAt: 0,
       });
     }
   });
@@ -379,8 +319,6 @@ describe('BusinessService (unit, fake repositories and clients)', () => {
 
     expect(businesses.updateBusiness).toHaveBeenLastCalledWith(created.id, {
       riskScore: 77,
-      riskScoreEvaluationProcess: false,
-      riskScoreEvaluationStartedAt: 0,
     });
     expect(result.riskScore).toBe(77);
   });
