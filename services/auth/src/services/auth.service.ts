@@ -360,15 +360,25 @@ We prioritize the security of your assets and personal data. To ensure secure ac
       return null;
     }
 
+    const values: string[] = [];
+
     for (const part of cookieHeader.split(';')) {
       const [key, ...value] = part.trim().split('=');
 
       if (key === this.cookieName) {
-        return decodeURIComponent(value.join('='));
+        values.push(decodeURIComponent(value.join('=')));
       }
     }
 
-    return null;
+    if (values.length > 1) {
+      throw new AppError({
+        message: 'Multiple refresh cookies',
+        statusCode: 401,
+        code: 'MULTIPLE_COOKIES',
+      });
+    }
+
+    return values[0] ?? null;
   }
 
   private setRefreshCookie(headers: Record<string, unknown>, token: string) {

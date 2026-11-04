@@ -318,6 +318,18 @@ describe('AuthService (unit, fake repositories)', () => {
     });
   });
 
+  test('refresh: rejects a request that carries two refresh cookies', async () => {
+    await expect(
+      service.refresh(signedHeaders(), `${COOKIE_NAME}=token-a; ${COOKIE_NAME}=tossed-token`),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'MULTIPLE_COOKIES',
+      message: 'Multiple refresh cookies',
+    });
+
+    expect(sessions.findBySessionKey).toHaveBeenCalledTimes(0);
+  });
+
   test('refresh: rejects an access token presented as a refresh cookie', async () => {
     const wallet = ethers.Wallet.createRandom();
     const { result } = await login(wallet);
