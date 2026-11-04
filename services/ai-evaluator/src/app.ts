@@ -22,6 +22,7 @@ export async function createApp(
   portfolioServiceUrl: string,
   rabbitMqUri: string,
   maxFilesPerRequest: number,
+  cooldownSeconds: number,
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'ai-evaluator.init.repositories_plugin',
@@ -41,7 +42,7 @@ export async function createApp(
   );
 
   const servicesPlugin = withTraceSync('ai-evaluator.init.services_plugin', () =>
-    createServicesPlugin(repositoriesPlugin, clientsPlugin, openRouterModel, maxFilesPerRequest),
+    createServicesPlugin(repositoriesPlugin, clientsPlugin, openRouterModel, maxFilesPerRequest, cooldownSeconds),
   );
 
   const controllersPlugin = withTraceSync('ai-evaluator.init.controllers_plugin', () =>

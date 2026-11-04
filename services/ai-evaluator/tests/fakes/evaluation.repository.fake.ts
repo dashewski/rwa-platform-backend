@@ -11,23 +11,18 @@ import { Types } from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 
 export type FakeEntityType = 'pool' | 'business';
-export type FakeEvaluationStatus = 'pending' | 'completed' | 'failed';
 
-export type FakeEvaluationFactor = {
-  name: string;
-  impact: string;
-  detail: string;
-};
-
-export type FakeEvaluatedDocument = {
+export type FakeEvaluationSource = {
+  type: string;
   id: string;
   name: string;
   mimeType: string;
 };
 
-export type FakeEvaluatedImage = {
-  id: string;
-  name: string;
+export type FakeEvaluationRisk = {
+  score?: number;
+  pros: string[];
+  cons: string[];
 };
 
 export type FakeEvaluationDoc = {
@@ -37,14 +32,9 @@ export type FakeEvaluationDoc = {
   grandParentId: string;
   ownerId: string;
   ownerType: string;
-  status: FakeEvaluationStatus;
-  riskScore?: number;
-  reasoning?: string;
-  factors: FakeEvaluationFactor[];
-  stage1Response?: string;
-  stage2Response?: string;
-  evaluatedDocuments: FakeEvaluatedDocument[];
-  evaluatedImages: FakeEvaluatedImage[];
+  risk: FakeEvaluationRisk;
+  summary: string;
+  sources: FakeEvaluationSource[];
   modelUsed?: string;
   createdAt: number;
   updatedAt: number;
@@ -52,7 +42,9 @@ export type FakeEvaluationDoc = {
 
 /** Same shape the real repository accepts: everything but the mongo-managed fields. */
 export type CreateEvaluationInput = Partial<Omit<FakeEvaluationDoc, '_id' | 'createdAt' | 'updatedAt'>> &
-  Pick<FakeEvaluationDoc, 'entityType' | 'parentId' | 'grandParentId' | 'ownerId' | 'ownerType'>;
+  Pick<FakeEvaluationDoc, 'entityType' | 'parentId' | 'grandParentId' | 'ownerId' | 'ownerType'> & {
+    _id?: Types.ObjectId;
+  };
 
 function matchesFilter(doc: Record<string, unknown>, filter: Record<string, unknown>): boolean {
   // Equality matching is enough for the filters used by tests ({ parentId }, { entityType }, ...).
@@ -72,11 +64,10 @@ export function createFakeEvaluationRepository() {
       const now = Math.floor(Date.now() / 1000);
       const doc: FakeEvaluationDoc = {
         ...data,
-        _id: new Types.ObjectId(),
-        status: data.status ?? 'pending',
-        factors: data.factors ?? [],
-        evaluatedDocuments: data.evaluatedDocuments ?? [],
-        evaluatedImages: data.evaluatedImages ?? [],
+        _id: data._id ?? new Types.ObjectId(),
+        risk: data.risk ?? { pros: [], cons: [] },
+        summary: data.summary ?? '',
+        sources: data.sources ?? [],
         createdAt: now,
         updatedAt: now,
       };

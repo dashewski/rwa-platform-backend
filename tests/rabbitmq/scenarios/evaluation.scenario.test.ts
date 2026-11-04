@@ -37,7 +37,10 @@ import { InboxConsumerMessageEntity } from '@shared/inbox-consumer/src/models/en
 import { OutboxPublisherService } from '@shared/outbox-publisher/src/services/outboxPublisher.service';
 import { OutboxPublisherMessageRepository } from '@shared/outbox-publisher/src/repositories/outboxPublisherMessage.repository';
 import { OutboxPublisherMessageEntity } from '@shared/outbox-publisher/src/models/entity/outboxPublisherMessage.entity';
+import { EvaluationJobService } from '@services/ai-evaluator/src/services/evaluationJob.service';
 import { RiskEvaluationService } from '../../../services/ai-evaluator/src/services/riskEvaluation.service';
+import { EvaluationJobRepository } from '../../../services/ai-evaluator/src/repositories/evaluationJob.repository';
+import { EvaluationJobEntity } from '../../../services/ai-evaluator/src/models/entity/evaluationJob.entity';
 import { EvaluationRepository } from '../../../services/ai-evaluator/src/repositories/evaluation.repository';
 import { EvaluationEntity } from '../../../services/ai-evaluator/src/models/entity/evaluation.entity';
 import { RabbitMQClient as AiEvaluatorClient } from '../../../services/ai-evaluator/src/clients/rabbitmq.client';
@@ -75,6 +78,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
   let raw: { connection: ChannelModel; channel: ConfirmChannel };
   let outbox: OutboxPublisherService<AiEvaluatorClient>;
   let risk: RiskEvaluationService;
+  let jobs: EvaluationJobService;
   let evaluationId: string;
   let published: { evaluationId: string; entityType: string; entityId: string; riskScore: number };
 
@@ -112,10 +116,17 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
       eden.reactionsClient as never,
       eden.questionsClient as never,
       eden.portfolioClient as never,
-      outbox,
       'test/model',
       20,
       false,
+    );
+
+    jobs = new EvaluationJobService(
+      new EvaluationRepository(),
+      new EvaluationJobRepository(),
+      risk,
+      outbox,
+      0,
     );
   });
 
@@ -142,15 +153,19 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
     eden.reactionsClient.getEntityReactions.setDefaultResponse(edenOk({ reactions: {} }));
     eden.questionsClient.getQuestions.setDefaultResponse(edenOk([]));
 
-    // no documents and no images were primed, so stage 1 (file selection) is
-    // skipped and the only completion is the risk score itself
-    openRouter.queueJsonResponse({ riskScore: 42, reasoning: 'looks fine', factors: [] });
+    // no documents and no images were primed, so the pipeline runs two completions:
+    // the project summary and the risk score itself
+    openRouter.queueResponse('Acme is an energy business in Germany.');
+    openRouter.queueJsonResponse({ score: 42, pros: ['clear business'], cons: ['no documents'] });
 
-    await risk.evaluateBusiness({ businessId: BUSINESS_ID, ...OWNER }, async () => undefined);
+    const startedEvaluationId = await jobs.start({ entityType: 'business', entityId: BUSINESS_ID, ...OWNER });
+
+    await jobs.processNext();
 
     const evaluations = await EvaluationEntity.find({ parentId: BUSINESS_ID }).lean();
     expect(evaluations).toHaveLength(1);
-    expect(evaluations[0].riskScore).toBe(42);
+    expect(evaluations[0].risk?.score).toBe(42);
+    expect(evaluations[0]._id.toString()).toBe(startedEvaluationId);
     evaluationId = evaluations[0]._id.toString();
 
     const rows = await OutboxPublisherMessageEntity.find({ exchange: EXCHANGE }).lean();

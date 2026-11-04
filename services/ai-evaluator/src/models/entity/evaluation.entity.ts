@@ -28,45 +28,32 @@ const evaluationSchemaDefinition = {
     required: true,
     trim: true,
   },
-  riskScore: {
-    type: Number,
-    min: 1,
-    max: 100,
+  risk: {
+    score: {
+      type: Number,
+      min: 1,
+      max: 100,
+    },
+    pros: {
+      type: [String],
+      default: [],
+    },
+    cons: {
+      type: [String],
+      default: [],
+    },
   },
-  reasoning: {
+  summary: {
     type: String,
+    required: true,
   },
-  factors: {
+  sources: {
     type: [
       {
-        name: { type: String, required: true },
-        impact: { type: String, required: true },
-        detail: { type: String, required: true },
-      },
-    ],
-    default: [],
-  },
-  stage1Response: {
-    type: String,
-  },
-  stage2Response: {
-    type: String,
-  },
-  evaluatedDocuments: {
-    type: [
-      {
+        type: { type: String, required: true },
         id: { type: String, required: true },
         name: { type: String, required: true },
         mimeType: { type: String, required: true },
-      },
-    ],
-    default: [],
-  },
-  evaluatedImages: {
-    type: [
-      {
-        id: { type: String, required: true },
-        name: { type: String, required: true },
       },
     ],
     default: [],

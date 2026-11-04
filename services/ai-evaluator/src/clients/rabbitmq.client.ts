@@ -9,10 +9,6 @@ export class RabbitMQClient extends BaseRabbitMQClient {
     return 'evaluation';
   }
 
-  getEvaluationRequestsQueue() {
-    return 'evaluation.requests';
-  }
-
   getTopologyDefinition() {
     return {
       exchanges: {
@@ -22,16 +18,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
           allowUnrouted: false,
         },
       },
-      queues: {
-        [this.getEvaluationRequestsQueue()]: {
-          options: { durable: true },
-          deferAfterAttempts: 3,
-          parkAfterCycles: 3,
-          bindings: {
-            [this.getEvaluationExchange()]: ['evaluatePool', 'evaluateBusiness'],
-          },
-        },
-      },
+      queues: {},
     };
   }
 }

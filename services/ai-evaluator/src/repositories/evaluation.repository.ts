@@ -1,5 +1,5 @@
 import { AppError } from '@shared/errors/app-errors';
-import type { FilterQuery, SortOrder } from 'mongoose';
+import type { FilterQuery, SortOrder, Types } from 'mongoose';
 import { EvaluationEntity } from '../models/entity/evaluation.entity';
 import type { IEvaluationEntity } from '../models/entity/evaluation.entity';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
@@ -8,7 +8,7 @@ export class EvaluationRepository {
   constructor(private readonly model = EvaluationEntity) {}
 
   @TraceDecorator()
-  async create(data: Omit<IEvaluationEntity, '_id' | 'createdAt' | 'updatedAt'>) {
+  async create(data: Omit<IEvaluationEntity, '_id' | 'createdAt' | 'updatedAt'> & { _id?: Types.ObjectId }) {
     const doc = await this.model.create(data);
     return doc.toObject();
   }

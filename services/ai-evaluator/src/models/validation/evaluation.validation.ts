@@ -8,28 +8,18 @@ export const evaluationSchema = t.Object({
   grandParentId: t.String(),
   ownerId: t.String(),
   ownerType: t.String(),
-  riskScore: t.Optional(t.Number()),
-  reasoning: t.Optional(t.String()),
-  factors: t.Array(
+  risk: t.Object({
+    score: t.Optional(t.Number()),
+    pros: t.Array(t.String()),
+    cons: t.Array(t.String()),
+  }),
+  summary: t.String(),
+  sources: t.Array(
     t.Object({
-      name: t.String(),
-      impact: t.String(),
-      detail: t.String(),
-    }),
-  ),
-  stage1Response: t.Optional(t.String()),
-  stage2Response: t.Optional(t.String()),
-  evaluatedDocuments: t.Array(
-    t.Object({
+      type: t.String(),
       id: t.String(),
       name: t.String(),
       mimeType: t.String(),
-    }),
-  ),
-  evaluatedImages: t.Array(
-    t.Object({
-      id: t.String(),
-      name: t.String(),
     }),
   ),
   modelUsed: t.Optional(t.String()),

@@ -20,6 +20,10 @@ import {
   type CreateEvaluationInput,
   type FakeEvaluationRepository,
 } from './fakes/evaluation.repository.fake';
+import {
+  createFakeEvaluationJobRepository,
+  type FakeEvaluationJobRepository,
+} from './fakes/evaluationJob.repository.fake';
 import { createFakeEdenClients } from './fakes/eden.clients.fake';
 import { createFakeOpenRouterClient } from './fakes/openrouter.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
@@ -29,9 +33,14 @@ const MODEL = 'test/model';
 /** Well-formed (hex, 24 chars) but absent id: the repository casts ids before querying. */
 const UNKNOWN_ID = '64b7f8f0f1f2f3f4f5f6f7a8';
 
-function buildApp(evaluationRepository: FakeEvaluationRepository) {
+function buildApp(
+  evaluationRepository: FakeEvaluationRepository,
+  evaluationJobRepository: FakeEvaluationJobRepository,
+  cooldownSeconds = 0,
+) {
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('evaluationRepository', evaluationRepository)
+    .decorate('evaluationJobRepository', evaluationJobRepository)
     .decorate('inboxConsumerMessageRepository', {
       runOnce: mock(async (_messageId: string, handler: () => Promise<unknown>) => handler()),
     })
@@ -59,6 +68,7 @@ function buildApp(evaluationRepository: FakeEvaluationRepository) {
     clientsPlugin as unknown as ClientsPlugin,
     MODEL,
     20,
+    cooldownSeconds,
   );
 
   return new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
@@ -80,11 +90,13 @@ async function post(app: App, path: string, body: unknown) {
 
 describe('ai-evaluator HTTP layer (component, fake repository and clients)', () => {
   let evaluationRepository: FakeEvaluationRepository;
+  let evaluationJobRepository: FakeEvaluationJobRepository;
   let app: App;
 
   beforeEach(() => {
     evaluationRepository = createFakeEvaluationRepository();
-    app = buildApp(evaluationRepository);
+    evaluationJobRepository = createFakeEvaluationJobRepository();
+    app = buildApp(evaluationRepository, evaluationJobRepository);
   });
 
   /** Seeds a document through the repository fake so ids and timestamps come from the same store. */
@@ -95,13 +107,9 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       grandParentId: 'business-1',
       ownerId: 'owner-1',
       ownerType: 'business',
-      riskScore: 42,
-      reasoning: 'Low risk',
-      factors: [{ name: 'Revenue', impact: 'positive', detail: 'Paying customers' }],
-      stage1Response: '{"requestedDocuments":["doc-1"]}',
-      stage2Response: '{"riskScore":42}',
-      evaluatedDocuments: [{ id: 'doc-1', name: 'Pitch deck.pdf', mimeType: 'application/pdf' }],
-      evaluatedImages: [{ id: 'img-1', name: 'Storefront.jpg' }],
+      summary: 'Acme Renewables operates a solar farm.',
+      risk: { score: 42, pros: ['Long-term contract'], cons: ['No audit'] },
+      sources: [{ type: 'document', id: 'doc-1', name: 'Pitch deck.pdf', mimeType: 'application/pdf' }],
       modelUsed: MODEL,
       ...input,
     });
@@ -120,13 +128,9 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       grandParentId: 'business-1',
       ownerId: 'owner-1',
       ownerType: 'business',
-      riskScore: 42,
-      reasoning: 'Low risk',
-      factors: [{ name: 'Revenue', impact: 'positive', detail: 'Paying customers' }],
-      stage1Response: '{"requestedDocuments":["doc-1"]}',
-      stage2Response: '{"riskScore":42}',
-      evaluatedDocuments: [{ id: 'doc-1', name: 'Pitch deck.pdf', mimeType: 'application/pdf' }],
-      evaluatedImages: [{ id: 'img-1', name: 'Storefront.jpg' }],
+      summary: 'Acme Renewables operates a solar farm.',
+      risk: { score: 42, pros: ['Long-term contract'], cons: ['No audit'] },
+      sources: [{ type: 'document', id: 'doc-1', name: 'Pitch deck.pdf', mimeType: 'application/pdf' }],
       modelUsed: MODEL,
       createdAt: seeded.createdAt,
       updatedAt: seeded.updatedAt,
@@ -136,25 +140,15 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
 
   test('getEvaluation: an evaluation without result fields maps its optional fields away', async () => {
     const seeded = await seedEvaluation({
-      riskScore: undefined,
-      reasoning: undefined,
-      stage1Response: undefined,
-      stage2Response: undefined,
+      risk: { pros: [], cons: [] },
       modelUsed: undefined,
-      factors: [],
-      evaluatedDocuments: [],
-      evaluatedImages: [],
     });
 
     const response = await post(app, '/getEvaluation', { id: seeded._id.toString() });
 
     expect(response.status).toBe(200);
-    expect(response.body.riskScore).toBeUndefined();
-    expect(response.body.reasoning).toBeUndefined();
     expect(response.body.modelUsed).toBeUndefined();
-    expect(response.body.factors).toEqual([]);
-    expect(response.body.evaluatedDocuments).toEqual([]);
-    expect(response.body.evaluatedImages).toEqual([]);
+    expect(response.body.risk).toEqual({ pros: [], cons: [] });
   });
 
   test('getEvaluation: an unknown id maps to 404 NOT_FOUND', async () => {
@@ -174,9 +168,9 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
   });
 
   test('getEvaluations: returns every evaluation matching the filter', async () => {
-    const first = await seedEvaluation({ parentId: 'pool-1', riskScore: 10 });
-    const second = await seedEvaluation({ parentId: 'pool-1', riskScore: 20 });
-    const third = await seedEvaluation({ parentId: 'pool-2', riskScore: 90 });
+    const first = await seedEvaluation({ parentId: 'pool-1', risk: { score: 10, pros: [], cons: [] } });
+    const second = await seedEvaluation({ parentId: 'pool-1', risk: { score: 20, pros: [], cons: [] } });
+    const third = await seedEvaluation({ parentId: 'pool-2', risk: { score: 90, pros: [], cons: [] } });
 
     const response = await post(app, '/getEvaluations', { filter: { parentId: 'pool-1' } });
 
@@ -191,9 +185,9 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
   });
 
   test('getEvaluations: sort and pagination are forwarded to the repository', async () => {
-    await seedEvaluation({ parentId: 'pool-1', riskScore: 10 });
-    const second = await seedEvaluation({ parentId: 'pool-1', riskScore: 20 });
-    const third = await seedEvaluation({ parentId: 'pool-1', riskScore: 30 });
+    await seedEvaluation({ parentId: 'pool-1', risk: { score: 10, pros: [], cons: [] } });
+    const second = await seedEvaluation({ parentId: 'pool-1', risk: { score: 20, pros: [], cons: [] } });
+    const third = await seedEvaluation({ parentId: 'pool-1', risk: { score: 30, pros: [], cons: [] } });
 
     const response = await post(app, '/getEvaluations', {
       filter: { parentId: 'pool-1' },
@@ -241,5 +235,45 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
 
     expect(response.status).not.toBe(200);
     expect(evaluationRepository.findAll).toHaveBeenCalledTimes(0);
+  });
+
+  test('evaluate: answers with the evaluation id and leaves a pending job', async () => {
+    const response = await post(app, '/evaluate', {
+      entityType: 'pool',
+      entityId: 'pool-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+    });
+
+    expect(response.status).toBe(200);
+
+    const job = [...evaluationJobRepository.store.values()][0];
+
+    expect(response.body).toEqual({ evaluationId: String(job.evaluationId) });
+    expect(job).toMatchObject({ status: 'pending', entityId: 'pool-1', attempts: 0 });
+  });
+
+  test('evaluate: rejects the request when the cooldown is active', async () => {
+    await evaluationRepository.create({
+      entityType: 'pool',
+      parentId: 'pool-1',
+      grandParentId: 'business-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+      summary: 'previous',
+      risk: { score: 10, pros: [], cons: [] },
+    });
+
+    const appWithCooldown = buildApp(evaluationRepository, evaluationJobRepository, 86_400);
+
+    const response = await post(appWithCooldown, '/evaluate', {
+      entityType: 'pool',
+      entityId: 'pool-1',
+      ownerId: 'owner-1',
+      ownerType: 'business',
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.body).toMatchObject({ error: { code: 'EVALUATION_COOLDOWN' } });
   });
 });

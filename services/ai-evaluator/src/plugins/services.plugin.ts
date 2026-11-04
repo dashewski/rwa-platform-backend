@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
 import { RiskEvaluationService } from '../services/riskEvaluation.service';
+import { EvaluationJobService } from '../services/evaluationJob.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
 import { InboxConsumerService } from '@shared/inbox-consumer';
@@ -11,6 +12,7 @@ export const createServicesPlugin = (
   clientsPlugin: ClientsPlugin,
   openRouterModel: string,
   maxFilesPerRequest: number,
+  cooldownSeconds: number,
 ) => {
   const outboxPublisherService = withTraceSync(
     'ai-evaluator.init.services.outbox_publisher',
@@ -38,9 +40,20 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.reactionsClient,
         clientsPlugin.decorator.questionsClient,
         clientsPlugin.decorator.portfolioClient,
-        outboxPublisherService,
         openRouterModel,
         maxFilesPerRequest,
+      ),
+  );
+
+  const evaluationJobService = withTraceSync(
+    'ai-evaluator.init.services.evaluation_job',
+    () =>
+      new EvaluationJobService(
+        repositoriesPlugin.decorator.evaluationRepository,
+        repositoriesPlugin.decorator.evaluationJobRepository,
+        riskEvaluationService,
+        outboxPublisherService,
+        cooldownSeconds,
       ),
   );
 
@@ -50,7 +63,9 @@ export const createServicesPlugin = (
       .use(clientsPlugin)
       .decorate('outboxPublisherService', outboxPublisherService)
       .decorate('inboxConsumerService', inboxConsumerService)
-      .decorate('riskEvaluationService', riskEvaluationService),
+      .decorate('riskEvaluationService', riskEvaluationService)
+      .decorate('evaluationJobService', evaluationJobService)
+      .decorate('evaluationJobRepository', repositoriesPlugin.decorator.evaluationJobRepository),
   );
 
   return plugin;

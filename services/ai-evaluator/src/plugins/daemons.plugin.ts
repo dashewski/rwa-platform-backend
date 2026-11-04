@@ -1,20 +1,16 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
-import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
+import { EvaluationWorkerDaemon } from '../daemons/evaluationWorker.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
-  const inboxConsumerDaemon = withTraceSync(
-    'ai-evaluator.init.daemons.inbox_consumer',
+  const evaluationWorkerDaemon = withTraceSync(
+    'ai-evaluator.init.daemons.evaluation_worker',
     () =>
-      new InboxConsumerDaemon(
-        clientsPlugin.decorator.rabbitMQClient,
-        servicesPlugin.decorator.inboxConsumerService,
-        servicesPlugin.decorator.riskEvaluationService,
-      ),
+      new EvaluationWorkerDaemon(servicesPlugin.decorator.evaluationJobService),
   );
 
   const outboxPublisherDaemon = withTraceSync(
@@ -29,7 +25,7 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
   await withTraceAsync('ai-evaluator.init.daemons.initialize', async () => {
     logger.debug('Initializing daemons');
     await outboxPublisherDaemon.initialize();
-    await inboxConsumerDaemon.initialize();
+    await evaluationWorkerDaemon.initialize();
     logger.info('Daemons initialized');
   });
 
@@ -38,11 +34,11 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
       .use(clientsPlugin)
       .use(servicesPlugin)
       .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
-      .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
+      .decorate('evaluationWorkerDaemon', evaluationWorkerDaemon)
       .onStop(async () => {
         await withTraceAsync('ai-evaluator.stop.daemons_plugin', async () => {
           await outboxPublisherDaemon.stop();
-          await inboxConsumerDaemon.stop();
+          await evaluationWorkerDaemon.stop();
           logger.info('Daemons stopped');
         });
       }),

@@ -40,6 +40,7 @@ export type FakeBusiness = {
   businessType?: string;
   country?: string;
   tags?: string[];
+  tokenAddress?: string;
 };
 
 export type FakeDocumentFile = {
