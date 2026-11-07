@@ -12,9 +12,9 @@ const app = await withTraceAsync('testnet-faucet.init.main', async () => {
     Number(process.env.GAS_TOKEN_AMOUNT),
     Number(process.env.HOLD_TOKEN_AMOUNT),
     Number(process.env.PLATFORM_TOKEN_AMOUNT),
-    Number(process.env.REQUEST_GAS_DELAY_MS),
-    Number(process.env.REQUEST_HOLD_DELAY_MS),
-    Number(process.env.REQUEST_PLATFORM_DELAY_MS),
+    Number(process.env.REQUEST_GAS_DELAY_SEC),
+    Number(process.env.REQUEST_HOLD_DELAY_SEC),
+    Number(process.env.REQUEST_PLATFORM_DELAY_SEC),
   );
 
 });

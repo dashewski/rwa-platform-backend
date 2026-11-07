@@ -90,11 +90,11 @@ const businessSchemaDefinition = {
   },
   createdAt: {
     type: Number,
-    default: Math.floor(Date.now() / 1000),
+    default: () => Math.floor(Date.now() / 1000),
   },
   updatedAt: {
     type: Number,
-    default: Math.floor(Date.now() / 1000),
+    default: () => Math.floor(Date.now() / 1000),
   },
 } as const;
 

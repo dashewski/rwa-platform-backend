@@ -27,7 +27,7 @@ const deliveryLogSchemaDefinition = {
   attempts: {
     type: [
       {
-        timestamp: { type: Number, default: Math.floor(Date.now() / 1000) },
+        timestamp: { type: Number, default: () => Math.floor(Date.now() / 1000) },
         statusCode: { type: Number },
         responseBody: { type: String, default: '' },
         error: { type: String, default: '' },
@@ -41,7 +41,7 @@ const deliveryLogSchemaDefinition = {
   },
   createdAt: {
     type: Number,
-    default: Math.floor(Date.now() / 1000),
+    default: () => Math.floor(Date.now() / 1000),
   },
 } as const;
 

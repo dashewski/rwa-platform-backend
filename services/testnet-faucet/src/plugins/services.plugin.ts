@@ -12,24 +12,25 @@ export const createServicesPlugin = (
   gasTokenAmount: number,
   holdTokenAmount: number,
   platformTokenAmount: number,
-  requestGasDelay: number,
-  requestHoldDelay: number,
-  requestPlatformDelay: number,
+  requestGasDelaySec: number,
+  requestHoldDelaySec: number,
+  requestPlatformDelaySec: number,
 ) => {
   const faucetService = withTraceSync(
     'testnet-faucet.init.services.faucet',
     () =>
       new FaucetService(
         repositoriesPlugin.decorator.faucetRequestRepository,
+        repositoriesPlugin.decorator.faucetCooldownRepository,
         clientsPlugin.decorator.blockchainClient,
         holdTokenAddress,
         platformTokenAddress,
         gasTokenAmount,
         holdTokenAmount,
         platformTokenAmount,
-        requestGasDelay,
-        requestHoldDelay,
-        requestPlatformDelay,
+        requestGasDelaySec,
+        requestHoldDelaySec,
+        requestPlatformDelaySec,
       ),
   );
 

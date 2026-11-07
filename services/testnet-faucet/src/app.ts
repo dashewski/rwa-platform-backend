@@ -18,9 +18,9 @@ export async function createApp(
   gasTokenAmount: number,
   holdTokenAmount: number,
   platformTokenAmount: number,
-  requestGasDelay: number,
-  requestHoldDelay: number,
-  requestPlatformDelay: number,
+  requestGasDelaySec: number,
+  requestHoldDelaySec: number,
+  requestPlatformDelaySec: number,
 ) {
   const repositoriesPlugin = await withTraceAsync(
     'testnet-faucet.init.repositories_plugin',
@@ -41,9 +41,9 @@ export async function createApp(
       gasTokenAmount,
       holdTokenAmount,
       platformTokenAmount,
-      requestGasDelay,
-      requestHoldDelay,
-      requestPlatformDelay,
+      requestGasDelaySec,
+      requestHoldDelaySec,
+      requestPlatformDelaySec,
     ),
   );
 

@@ -1,5 +1,7 @@
 import { AppError } from '@shared/errors/app-errors';
 import { FaucetRequestRepository } from '../repositories/faucetRequest.repository';
+import { FaucetCooldownRepository } from '../repositories/faucetCooldown.repository';
+import type { FaucetTokenType } from '../models/shared/enums.model';
 import { BlockchainClient } from '../clients/blockchain.client';
 import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
@@ -9,15 +11,16 @@ import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 export class FaucetService {
   constructor(
     private readonly faucetRequestRepository: FaucetRequestRepository,
+    private readonly faucetCooldownRepository: FaucetCooldownRepository,
     private readonly blockchainClient: BlockchainClient,
     private readonly holdTokenAddress: string,
     private readonly platformTokenAddress: string,
     private readonly gasTokenAmount: number,
     private readonly holdTokenAmount: number,
     private readonly platformTokenAmount: number,
-    private readonly requestGasDelay: number,
-    private readonly requestHoldDelay: number,
-    private readonly requestPlatformDelay: number,
+    private readonly requestGasDelaySec: number,
+    private readonly requestHoldDelaySec: number,
+    private readonly requestPlatformDelaySec: number,
   ) {}
 
   /**
@@ -74,27 +77,16 @@ export class FaucetService {
   })
   async getTokenUnlockTime(data: { userId: string }) {
     setSpanAttributes({ userId: data.userId });
-    const [lastGasRequest, lastHoldRequest, lastPlatformRequest] = await Promise.all([
-      this.faucetRequestRepository.findAll(
-        { userId: data.userId, tokenType: 'gas' },
-        { limit: 1, sort: { createdAt: 'asc' } },
-      ),
-      this.faucetRequestRepository.findAll(
-        { userId: data.userId, tokenType: 'hold' },
-        { limit: 1, sort: { createdAt: 'asc' } },
-      ),
-      this.faucetRequestRepository.findAll(
-        { userId: data.userId, tokenType: 'platform' },
-        { limit: 1, sort: { createdAt: 'asc' } },
-      ),
+    const [gasUnlockTime, holdUnlockTime, platformUnlockTime] = await Promise.all([
+      this.faucetCooldownRepository.findUnlockAt(this.cooldownKey(data.userId, 'gas')),
+      this.faucetCooldownRepository.findUnlockAt(this.cooldownKey(data.userId, 'hold')),
+      this.faucetCooldownRepository.findUnlockAt(this.cooldownKey(data.userId, 'platform')),
     ]);
 
-    const currentTime = Math.floor(Date.now() / 1000);
-
     return {
-      gasUnlockTime: lastGasRequest[0] ? currentTime + this.requestGasDelay : 0,
-      holdUnlockTime: lastHoldRequest[0] ? currentTime + this.requestHoldDelay : 0,
-      platformUnlockTime: lastPlatformRequest[0] ? currentTime + this.requestPlatformDelay : 0,
+      gasUnlockTime: gasUnlockTime ?? 0,
+      holdUnlockTime: holdUnlockTime ?? 0,
+      platformUnlockTime: platformUnlockTime ?? 0,
     };
   }
 
@@ -115,26 +107,28 @@ export class FaucetService {
     });
     const transferAmount = data.amount > this.gasTokenAmount ? this.gasTokenAmount : data.amount;
 
-    // Use configured gas amount
-    const txHash = await this.blockchainClient.transferToken(data.wallet, `${transferAmount}`);
+    return this.runWithCooldown(this.cooldownKey(data.userId, 'gas'), this.requestGasDelaySec, async () => {
+      // Use configured gas amount
+      const txHash = await this.blockchainClient.transferToken(data.wallet, `${transferAmount}`);
 
-    const result = await this.faucetRequestRepository.create({
-      userId: data.userId,
-      wallet: data.wallet,
-      tokenType: 'gas',
-      amount: transferAmount,
-      transactionHash: txHash,
+      const result = await this.faucetRequestRepository.create({
+        userId: data.userId,
+        wallet: data.wallet,
+        tokenType: 'gas',
+        amount: transferAmount,
+        transactionHash: txHash,
+      });
+
+      return {
+        id: result._id.toString(),
+        userId: result.userId,
+        wallet: result.wallet,
+        tokenType: result.tokenType,
+        amount: result.amount,
+        transactionHash: result.transactionHash,
+        createdAt: (result as any).createdAt as number,
+      };
     });
-
-    return {
-      id: result._id.toString(),
-      userId: result.userId,
-      wallet: result.wallet,
-      tokenType: result.tokenType,
-      amount: result.amount,
-      transactionHash: result.transactionHash,
-      createdAt: (result as any).createdAt as number,
-    };
   }
 
   /**
@@ -154,30 +148,32 @@ export class FaucetService {
     });
     const transferAmount = data.amount > this.holdTokenAmount ? this.holdTokenAmount : data.amount;
 
-    // Use configured hold token address and amount
-    const txHash = await this.blockchainClient.transferERC20Token(
-      this.holdTokenAddress,
-      data.wallet,
-      `${transferAmount}`,
-    );
+    return this.runWithCooldown(this.cooldownKey(data.userId, 'hold'), this.requestHoldDelaySec, async () => {
+      // Use configured hold token address and amount
+      const txHash = await this.blockchainClient.transferERC20Token(
+        this.holdTokenAddress,
+        data.wallet,
+        `${transferAmount}`,
+      );
 
-    const result = await this.faucetRequestRepository.create({
-      userId: data.userId,
-      wallet: data.wallet,
-      tokenType: 'hold',
-      amount: transferAmount,
-      transactionHash: txHash,
+      const result = await this.faucetRequestRepository.create({
+        userId: data.userId,
+        wallet: data.wallet,
+        tokenType: 'hold',
+        amount: transferAmount,
+        transactionHash: txHash,
+      });
+
+      return {
+        id: result._id.toString(),
+        userId: result.userId,
+        wallet: result.wallet,
+        tokenType: result.tokenType,
+        amount: result.amount,
+        transactionHash: result.transactionHash,
+        createdAt: (result as any).createdAt as number,
+      };
     });
-
-    return {
-      id: result._id.toString(),
-      userId: result.userId,
-      wallet: result.wallet,
-      tokenType: result.tokenType,
-      amount: result.amount,
-      transactionHash: result.transactionHash,
-      createdAt: (result as any).createdAt as number,
-    };
   }
 
   /**
@@ -197,29 +193,55 @@ export class FaucetService {
     });
     const transferAmount = data.amount > this.platformTokenAmount ? this.platformTokenAmount : data.amount;
 
-    // Use configured platform token address and amount
-    const txHash = await this.blockchainClient.transferERC20Token(
-      this.platformTokenAddress,
-      data.wallet,
-      `${transferAmount}`,
-    );
+    return this.runWithCooldown(this.cooldownKey(data.userId, 'platform'), this.requestPlatformDelaySec, async () => {
+      // Use configured platform token address and amount
+      const txHash = await this.blockchainClient.transferERC20Token(
+        this.platformTokenAddress,
+        data.wallet,
+        `${transferAmount}`,
+      );
 
-    const result = await this.faucetRequestRepository.create({
-      userId: data.userId,
-      wallet: data.wallet,
-      tokenType: 'platform',
-      amount: transferAmount,
-      transactionHash: txHash,
+      const result = await this.faucetRequestRepository.create({
+        userId: data.userId,
+        wallet: data.wallet,
+        tokenType: 'platform',
+        amount: transferAmount,
+        transactionHash: txHash,
+      });
+
+      return {
+        id: result._id.toString(),
+        userId: result.userId,
+        wallet: result.wallet,
+        tokenType: result.tokenType,
+        amount: result.amount,
+        transactionHash: result.transactionHash,
+        createdAt: (result as any).createdAt as number,
+      };
     });
+  }
 
-    return {
-      id: result._id.toString(),
-      userId: result.userId,
-      wallet: result.wallet,
-      tokenType: result.tokenType,
-      amount: result.amount,
-      transactionHash: result.transactionHash,
-      createdAt: (result as any).createdAt as number,
-    };
+  private cooldownKey(userId: string, tokenType: FaucetTokenType) {
+    return `${userId}:${tokenType}`;
+  }
+
+  private async runWithCooldown<T>(key: string, delaySec: number, action: () => Promise<T>) {
+    const now = Math.floor(Date.now() / 1000);
+    const claim = await this.faucetCooldownRepository.claim({ key, now, unlockAt: now + delaySec });
+
+    if (!claim.claimed) {
+      throw new AppError({
+        message: `Token request is locked for ${claim.unlockAt - now} seconds`,
+        statusCode: 429,
+        code: 'LIMIT_EXCEEDED',
+      });
+    }
+
+    try {
+      return await action();
+    } catch (error) {
+      await this.faucetCooldownRepository.release({ key, previousUnlockAt: claim.previousUnlockAt });
+      throw error;
+    }
   }
 }

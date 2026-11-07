@@ -10,12 +10,17 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { AppError } from '@shared/errors/app-errors';
 import { FaucetService } from '../src/services/faucet.service';
 import type { FaucetRequestRepository } from '../src/repositories/faucetRequest.repository';
+import type { FaucetCooldownRepository } from '../src/repositories/faucetCooldown.repository';
 import type { BlockchainClient } from '../src/clients/blockchain.client';
 import {
   createFakeFaucetRequestRepository,
   type FakeFaucetRequestRepository,
 } from './fakes/faucetRequest.repository.fake';
 import { createFakeBlockchainClient, type FakeBlockchainClient } from './fakes/blockchain.client.fake';
+import {
+  createFakeFaucetCooldownRepository,
+  type FakeFaucetCooldownRepository,
+} from './fakes/faucetCooldown.repository.fake';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 
@@ -26,9 +31,9 @@ const GAS_TOKEN_AMOUNT = 1;
 const HOLD_TOKEN_AMOUNT = 100;
 const PLATFORM_TOKEN_AMOUNT = 250;
 
-const REQUEST_GAS_DELAY = 60;
-const REQUEST_HOLD_DELAY = 120;
-const REQUEST_PLATFORM_DELAY = 180;
+const REQUEST_GAS_DELAY_SEC = 60;
+const REQUEST_HOLD_DELAY_SEC = 120;
+const REQUEST_PLATFORM_DELAY_SEC = 180;
 
 const REQUEST = {
   userId: 'user-1',
@@ -36,30 +41,37 @@ const REQUEST = {
   amount: 0.5,
 };
 
-function buildService(faucetRequests: FakeFaucetRequestRepository, blockchainClient: FakeBlockchainClient) {
+function buildService(
+  faucetRequests: FakeFaucetRequestRepository,
+  faucetCooldowns: FakeFaucetCooldownRepository,
+  blockchainClient: FakeBlockchainClient,
+) {
   return new FaucetService(
     faucetRequests as unknown as FaucetRequestRepository,
+    faucetCooldowns as unknown as FaucetCooldownRepository,
     blockchainClient as unknown as BlockchainClient,
     HOLD_TOKEN_ADDRESS,
     PLATFORM_TOKEN_ADDRESS,
     GAS_TOKEN_AMOUNT,
     HOLD_TOKEN_AMOUNT,
     PLATFORM_TOKEN_AMOUNT,
-    REQUEST_GAS_DELAY,
-    REQUEST_HOLD_DELAY,
-    REQUEST_PLATFORM_DELAY,
+    REQUEST_GAS_DELAY_SEC,
+    REQUEST_HOLD_DELAY_SEC,
+    REQUEST_PLATFORM_DELAY_SEC,
   );
 }
 
 describe('FaucetService (unit, fake repository + fake blockchain client)', () => {
   let faucetRequests: FakeFaucetRequestRepository;
+  let faucetCooldowns: FakeFaucetCooldownRepository;
   let blockchainClient: FakeBlockchainClient;
   let service: FaucetService;
 
   beforeEach(() => {
     faucetRequests = createFakeFaucetRequestRepository();
+    faucetCooldowns = createFakeFaucetCooldownRepository();
     blockchainClient = createFakeBlockchainClient();
-    service = buildService(faucetRequests, blockchainClient);
+    service = buildService(faucetRequests, faucetCooldowns, blockchainClient);
   });
 
   test('requestGasToken: forwards the wallet and amount to the client and records a mapped request', async () => {
@@ -282,56 +294,52 @@ describe('FaucetService (unit, fake repository + fake blockchain client)', () =>
     expect(faucetRequests.findAll).toHaveBeenCalledTimes(0);
   });
 
-  test('getTokenUnlockTime: queries every token type and returns zeros when the user has no requests', async () => {
+  test('getTokenUnlockTime: reads the cooldown of every token type and returns zeros when the user has none', async () => {
     const unlockTime = await service.getTokenUnlockTime({ userId: REQUEST.userId });
 
     expect(unlockTime).toEqual({ gasUnlockTime: 0, holdUnlockTime: 0, platformUnlockTime: 0 });
-    expect(faucetRequests.findAll).toHaveBeenCalledTimes(3);
-    expect(faucetRequests.findAll).toHaveBeenNthCalledWith(
-      1,
-      { userId: REQUEST.userId, tokenType: 'gas' },
-      { limit: 1, sort: { createdAt: 'asc' } },
-    );
-    expect(faucetRequests.findAll).toHaveBeenNthCalledWith(
-      2,
-      { userId: REQUEST.userId, tokenType: 'hold' },
-      { limit: 1, sort: { createdAt: 'asc' } },
-    );
-    expect(faucetRequests.findAll).toHaveBeenNthCalledWith(
-      3,
-      { userId: REQUEST.userId, tokenType: 'platform' },
-      { limit: 1, sort: { createdAt: 'asc' } },
-    );
+    expect(faucetCooldowns.findUnlockAt).toHaveBeenCalledTimes(3);
+    expect(faucetCooldowns.findUnlockAt).toHaveBeenNthCalledWith(1, 'user-1:gas');
+    expect(faucetCooldowns.findUnlockAt).toHaveBeenNthCalledWith(2, 'user-1:hold');
+    expect(faucetCooldowns.findUnlockAt).toHaveBeenNthCalledWith(3, 'user-1:platform');
   });
 
-  test('getTokenUnlockTime: reports the delay only for the token types that were already requested', async () => {
+  test('getTokenUnlockTime: reports the cooldown only for the token types that were already requested', async () => {
     await service.requestGasToken({ ...REQUEST });
 
-    const before = Math.floor(Date.now() / 1000);
     const unlockTime = await service.getTokenUnlockTime({ userId: REQUEST.userId });
-    const after = Math.floor(Date.now() / 1000);
 
-    expect(unlockTime.gasUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_GAS_DELAY);
-    expect(unlockTime.gasUnlockTime).toBeLessThanOrEqual(after + REQUEST_GAS_DELAY);
+    expect(unlockTime.gasUnlockTime).toBe(faucetCooldowns.store.get('user-1:gas') as number);
+    expect(unlockTime.gasUnlockTime).toBeGreaterThan(0);
     expect(unlockTime.holdUnlockTime).toBe(0);
     expect(unlockTime.platformUnlockTime).toBe(0);
   });
 
+  test('getTokenUnlockTime: the unlock time does not move between calls', async () => {
+    await service.requestGasToken({ ...REQUEST });
+
+    const first = await service.getTokenUnlockTime({ userId: REQUEST.userId });
+    const second = await service.getTokenUnlockTime({ userId: REQUEST.userId });
+
+    expect(second.gasUnlockTime).toBe(first.gasUnlockTime);
+  });
+
   test('getTokenUnlockTime: every requested token type gets its own configured delay', async () => {
+    const before = Math.floor(Date.now() / 1000);
+
     await service.requestGasToken({ ...REQUEST });
     await service.requestHoldToken({ ...REQUEST, amount: 25 });
     await service.requestPlatformToken({ ...REQUEST, amount: 30 });
 
-    const before = Math.floor(Date.now() / 1000);
-    const unlockTime = await service.getTokenUnlockTime({ userId: REQUEST.userId });
     const after = Math.floor(Date.now() / 1000);
+    const unlockTime = await service.getTokenUnlockTime({ userId: REQUEST.userId });
 
-    expect(unlockTime.gasUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_GAS_DELAY);
-    expect(unlockTime.gasUnlockTime).toBeLessThanOrEqual(after + REQUEST_GAS_DELAY);
-    expect(unlockTime.holdUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_HOLD_DELAY);
-    expect(unlockTime.holdUnlockTime).toBeLessThanOrEqual(after + REQUEST_HOLD_DELAY);
-    expect(unlockTime.platformUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_PLATFORM_DELAY);
-    expect(unlockTime.platformUnlockTime).toBeLessThanOrEqual(after + REQUEST_PLATFORM_DELAY);
+    expect(unlockTime.gasUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_GAS_DELAY_SEC);
+    expect(unlockTime.gasUnlockTime).toBeLessThanOrEqual(after + REQUEST_GAS_DELAY_SEC);
+    expect(unlockTime.holdUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_HOLD_DELAY_SEC);
+    expect(unlockTime.holdUnlockTime).toBeLessThanOrEqual(after + REQUEST_HOLD_DELAY_SEC);
+    expect(unlockTime.platformUnlockTime).toBeGreaterThanOrEqual(before + REQUEST_PLATFORM_DELAY_SEC);
+    expect(unlockTime.platformUnlockTime).toBeLessThanOrEqual(after + REQUEST_PLATFORM_DELAY_SEC);
   });
 
   test('getTokenUnlockTime: other users requests do not unlock the caller', async () => {
@@ -340,5 +348,66 @@ describe('FaucetService (unit, fake repository + fake blockchain client)', () =>
     const unlockTime = await service.getTokenUnlockTime({ userId: REQUEST.userId });
 
     expect(unlockTime).toEqual({ gasUnlockTime: 0, holdUnlockTime: 0, platformUnlockTime: 0 });
+  });
+
+  test('requestGasToken: a second request within the cooldown is rejected with 429 and sends nothing', async () => {
+    await service.requestGasToken({ ...REQUEST });
+
+    await expect(service.requestGasToken({ ...REQUEST })).rejects.toMatchObject({
+      statusCode: 429,
+      code: 'LIMIT_EXCEEDED',
+    });
+
+    expect(blockchainClient.transferToken).toHaveBeenCalledTimes(1);
+    expect(faucetRequests.create).toHaveBeenCalledTimes(1);
+    expect(faucetRequests.store.size).toBe(1);
+  });
+
+  test('requestGasToken: the cooldown is scoped per token type and per user', async () => {
+    await service.requestGasToken({ ...REQUEST });
+
+    await service.requestHoldToken({ ...REQUEST, amount: 25 });
+    await service.requestGasToken({ ...REQUEST, userId: 'user-2' });
+
+    expect(blockchainClient.transferToken).toHaveBeenCalledTimes(2);
+    expect(blockchainClient.transferERC20Token).toHaveBeenCalledTimes(1);
+  });
+
+  test('requestGasToken: a request after the cooldown expired goes through', async () => {
+    await service.requestGasToken({ ...REQUEST });
+
+    faucetCooldowns.store.set('user-1:gas', Math.floor(Date.now() / 1000) - 1);
+
+    await service.requestGasToken({ ...REQUEST });
+
+    expect(blockchainClient.transferToken).toHaveBeenCalledTimes(2);
+    expect(faucetRequests.store.size).toBe(2);
+  });
+
+  test('requestGasToken: a failed transfer releases the cooldown', async () => {
+    blockchainClient.transferToken.mockImplementationOnce(async () => {
+      throw new AppError({ message: 'RPC unavailable', statusCode: 502, code: 'BLOCKCHAIN_ERROR' });
+    });
+
+    await expect(service.requestGasToken({ ...REQUEST })).rejects.toMatchObject({ code: 'BLOCKCHAIN_ERROR' });
+
+    expect(faucetCooldowns.store.has('user-1:gas')).toBe(false);
+
+    await service.requestGasToken({ ...REQUEST });
+
+    expect(blockchainClient.transferToken).toHaveBeenCalledTimes(2);
+    expect(faucetRequests.store.size).toBe(1);
+  });
+
+  test('requestHoldToken: a failed write releases the cooldown', async () => {
+    faucetRequests.create.mockImplementationOnce(async () => {
+      throw new AppError({ message: 'Faucet request write failed', statusCode: 500, code: 'INTERNAL_ERROR' });
+    });
+
+    await expect(service.requestHoldToken({ ...REQUEST, amount: 25 })).rejects.toMatchObject({
+      code: 'INTERNAL_ERROR',
+    });
+
+    expect(faucetCooldowns.store.has('user-1:hold')).toBe(false);
   });
 });

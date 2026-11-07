@@ -148,6 +148,32 @@ describe("Testnet Faucet Flow Tests", () => {
     expect(typeof result.data.getUnlockTime.gasUnlockTime).toBe("number");
     expect(typeof result.data.getUnlockTime.holdUnlockTime).toBe("number");
     expect(typeof result.data.getUnlockTime.platformUnlockTime).toBe("number");
+
+    // All three token types were requested above, so every cooldown is armed.
+    expect(result.data.getUnlockTime.gasUnlockTime).toBeGreaterThan(0);
+    expect(result.data.getUnlockTime.holdUnlockTime).toBeGreaterThan(0);
+    expect(result.data.getUnlockTime.platformUnlockTime).toBeGreaterThan(0);
+
+    // The cooldown is an absolute timestamp and must not move between calls.
+    const second = await makeGraphQLRequest(GET_UNLOCK_TIME, {}, accessToken);
+    expect(second.data.getUnlockTime.gasUnlockTime).toBe(result.data.getUnlockTime.gasUnlockTime);
+    expect(second.data.getUnlockTime.holdUnlockTime).toBe(result.data.getUnlockTime.holdUnlockTime);
+    expect(second.data.getUnlockTime.platformUnlockTime).toBe(result.data.getUnlockTime.platformUnlockTime);
+  });
+
+  test("should reject a repeated request within the cooldown", async () => {
+    const result = await makeGraphQLRequest(
+      REQUEST_GAS,
+      {
+        input: {
+          amount: 0.0001,
+        },
+      },
+      accessToken
+    );
+
+    expect(result.errors).toBeDefined();
+    expect(result.data?.requestGas).toBeFalsy();
   });
 
   test("should fail operations without auth", async () => {

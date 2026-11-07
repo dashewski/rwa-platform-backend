@@ -20,6 +20,10 @@ import {
   type FakeFaucetRequestRepository,
 } from './fakes/faucetRequest.repository.fake';
 import { createFakeBlockchainClient, type FakeBlockchainClient } from './fakes/blockchain.client.fake';
+import {
+  createFakeFaucetCooldownRepository,
+  type FakeFaucetCooldownRepository,
+} from './fakes/faucetCooldown.repository.fake';
 
 const WALLET = '0x1111111111111111111111111111111111111111';
 
@@ -30,9 +34,9 @@ const GAS_TOKEN_AMOUNT = 1;
 const HOLD_TOKEN_AMOUNT = 100;
 const PLATFORM_TOKEN_AMOUNT = 250;
 
-const REQUEST_GAS_DELAY = 60;
-const REQUEST_HOLD_DELAY = 120;
-const REQUEST_PLATFORM_DELAY = 180;
+const REQUEST_GAS_DELAY_SEC = 60;
+const REQUEST_HOLD_DELAY_SEC = 120;
+const REQUEST_PLATFORM_DELAY_SEC = 180;
 
 const REQUEST = {
   userId: 'user-1',
@@ -40,11 +44,14 @@ const REQUEST = {
   amount: 0.5,
 };
 
-function buildApp(faucetRequests: FakeFaucetRequestRepository, blockchainClient: FakeBlockchainClient) {
-  const repositoriesPlugin = new Elysia({ name: 'Repositories' }).decorate(
-    'faucetRequestRepository',
-    faucetRequests,
-  );
+function buildApp(
+  faucetRequests: FakeFaucetRequestRepository,
+  faucetCooldowns: FakeFaucetCooldownRepository,
+  blockchainClient: FakeBlockchainClient,
+) {
+  const repositoriesPlugin = new Elysia({ name: 'Repositories' })
+    .decorate('faucetRequestRepository', faucetRequests)
+    .decorate('faucetCooldownRepository', faucetCooldowns);
   const clientsPlugin = new Elysia({ name: 'Clients' }).decorate('blockchainClient', blockchainClient);
 
   const servicesPlugin = createServicesPlugin(
@@ -55,9 +62,9 @@ function buildApp(faucetRequests: FakeFaucetRequestRepository, blockchainClient:
     GAS_TOKEN_AMOUNT,
     HOLD_TOKEN_AMOUNT,
     PLATFORM_TOKEN_AMOUNT,
-    REQUEST_GAS_DELAY,
-    REQUEST_HOLD_DELAY,
-    REQUEST_PLATFORM_DELAY,
+    REQUEST_GAS_DELAY_SEC,
+    REQUEST_HOLD_DELAY_SEC,
+    REQUEST_PLATFORM_DELAY_SEC,
   );
 
   return new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
@@ -79,13 +86,15 @@ async function post(app: App, path: string, body: unknown) {
 
 describe('testnet-faucet HTTP layer (component, fake repository + fake blockchain client)', () => {
   let faucetRequests: FakeFaucetRequestRepository;
+  let faucetCooldowns: FakeFaucetCooldownRepository;
   let blockchainClient: FakeBlockchainClient;
   let app: App;
 
   beforeEach(() => {
     faucetRequests = createFakeFaucetRequestRepository();
+    faucetCooldowns = createFakeFaucetCooldownRepository();
     blockchainClient = createFakeBlockchainClient();
-    app = buildApp(faucetRequests, blockchainClient);
+    app = buildApp(faucetRequests, faucetCooldowns, blockchainClient);
   });
 
   test('requestGas → getHistory round-trip', async () => {
@@ -249,5 +258,26 @@ describe('testnet-faucet HTTP layer (component, fake repository + fake blockchai
       error: { code: 'INTERNAL_ERROR', message: 'Faucet request write failed' },
     });
     expect(blockchainClient.transferERC20Token).toHaveBeenCalledTimes(1);
+  });
+
+  test('requestGas: a second request within the cooldown maps to 429 LIMIT_EXCEEDED and sends nothing', async () => {
+    await post(app, '/requestGas', REQUEST);
+
+    const response = await post(app, '/requestGas', REQUEST);
+
+    expect(response.status).toBe(429);
+    expect(response.body.error.code).toBe('LIMIT_EXCEEDED');
+    expect(blockchainClient.transferToken).toHaveBeenCalledTimes(1);
+    expect(faucetRequests.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('getUnlockTime: the cooldown does not move between calls to the endpoint', async () => {
+    await post(app, '/requestGas', REQUEST);
+
+    const first = await post(app, '/getUnlockTime', { userId: REQUEST.userId });
+    const second = await post(app, '/getUnlockTime', { userId: REQUEST.userId });
+
+    expect(first.body.gasUnlockTime).toBe(faucetCooldowns.store.get('user-1:gas') as number);
+    expect(second.body.gasUnlockTime).toBe(first.body.gasUnlockTime);
   });
 });
