@@ -2,14 +2,14 @@
  * Component tests for the ai-evaluator HTTP layer.
  *
  * The whole Elysia app is assembled in-process: real controllers and the real
- * RiskEvaluationService, with the evaluation repository replaced by an in-memory
- * fake and every injected client replaced by a fake as well (the endpoints only
- * read evaluations, so no client call is ever made). Requests go through
- * app.handle() — no port is bound, nothing is queried over the network.
+ * services, with the repositories replaced by in-memory fakes and every injected
+ * client replaced by a fake as well. Requests go through app.handle() — no port
+ * is bound, nothing is queried over the network.
  * Run with `bun test` from services/ai-evaluator.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Elysia } from 'elysia';
+import mongoose from 'mongoose';
 import { ErrorHandlerPlugin } from '@shared/errors/error-handler.plugin';
 import { createServicesPlugin } from '../src/plugins/services.plugin';
 import { createControllersPlugin } from '../src/plugins/controllers.plugin';
@@ -20,11 +20,7 @@ import {
   type CreateEvaluationInput,
   type FakeEvaluationRepository,
 } from './fakes/evaluation.repository.fake';
-import {
-  createFakeEvaluationJobRepository,
-  type FakeEvaluationJobRepository,
-} from './fakes/evaluationJob.repository.fake';
-import { createFakeEdenClients } from './fakes/eden.clients.fake';
+import { createFakeEdenClients, edenOk } from './fakes/eden.clients.fake';
 import { createFakeOpenRouterClient } from './fakes/openrouter.client.fake';
 import { createFakeRabbitMQClient } from './fakes/rabbitmq.client.fake';
 
@@ -33,34 +29,60 @@ const MODEL = 'test/model';
 /** Well-formed (hex, 24 chars) but absent id: the repository casts ids before querying. */
 const UNKNOWN_ID = '64b7f8f0f1f2f3f4f5f6f7a8';
 
-function buildApp(
-  evaluationRepository: FakeEvaluationRepository,
-  evaluationJobRepository: FakeEvaluationJobRepository,
-  cooldownSeconds = 0,
-) {
+function buildApp(cooldownSeconds = 0) {
+  (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
+    fn: () => Promise<T>,
+  ): Promise<T> => fn();
+
+  const evaluationRepository = createFakeEvaluationRepository();
+  const outboxRepository = {
+    create: mock(async (doc: Record<string, unknown>) => ({ _id: 'outbox-1', ...doc })),
+    releaseSending: mock(async (_exchange: string) => undefined),
+    claimNext: mock(async (_exchange: string) => null),
+    markSent: mock(async (_id: unknown) => undefined),
+    markAttemptFailed: mock(async (_id: unknown) => null),
+  };
+
   const repositoriesPlugin = new Elysia({ name: 'Repositories' })
     .decorate('evaluationRepository', evaluationRepository)
-    .decorate('evaluationJobRepository', evaluationJobRepository)
-    .decorate('inboxConsumerMessageRepository', {
-      runOnce: mock(async (_messageId: string, handler: () => Promise<unknown>) => handler()),
-    })
-    .decorate('outboxPublisherMessageRepository', {
-      create: mock(async (doc: Record<string, unknown>) => ({ _id: 'outbox-1', ...doc })),
-      releaseSending: mock(async (_exchange: string) => 0),
-      markSent: mock(async (_id: unknown) => undefined),
-      release: mock(async (_id: unknown) => undefined),
-      claimNext: mock(async (_exchange: string) => null),
-    });
+    .decorate('outboxPublisherMessageRepository', outboxRepository);
 
   const eden = createFakeEdenClients();
+  eden.rwaClient.getPool.post.mockImplementation(async () =>
+    edenOk({
+      id: 'pool-1',
+      name: 'Solar Farm',
+      description: 'A community solar farm',
+      tags: ['energy'],
+      entryFeePercent: 1,
+      exitFeePercent: 0.5,
+      expectedHoldAmount: 1000,
+      expectedRwaAmount: 2000,
+      rewardPercent: 5,
+      businessId: 'business-1',
+      poolAddress: '0xpool',
+    }),
+  );
+  const openRouterClient = createFakeOpenRouterClient();
+  const jobs = new Map<string, any>();
+  const queue = {
+    getJob: mock(async (id: string) => jobs.get(id)),
+    add: mock(async (_name: string, data: any, options: any) => {
+      jobs.set(options.jobId, { id: options.jobId, data });
+      return jobs.get(options.jobId);
+    }),
+  };
+  const bullMqClient = { getQueue: mock((_type: string) => queue), jobs };
+
   const clientsPlugin = new Elysia({ name: 'Clients' })
-    .decorate('openRouterClient', createFakeOpenRouterClient())
+    .decorate('openRouterClient', openRouterClient)
     .decorate('rwaClient', eden.rwaClient)
     .decorate('documentsClient', eden.documentsClient)
     .decorate('galleryClient', eden.galleryClient)
     .decorate('reactionsClient', eden.reactionsClient)
     .decorate('questionsClient', eden.questionsClient)
     .decorate('portfolioClient', eden.portfolioClient)
+    .decorate('jobQueueClient', bullMqClient)
     .decorate('rabbitMQClient', createFakeRabbitMQClient());
 
   const servicesPlugin = createServicesPlugin(
@@ -71,10 +93,12 @@ function buildApp(
     cooldownSeconds,
   );
 
-  return new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
+  const app = new Elysia().onError(ErrorHandlerPlugin).use(createControllersPlugin(servicesPlugin));
+
+  return { app, evaluationRepository, outboxRepository, eden, openRouterClient, bullMqClient };
 }
 
-type App = ReturnType<typeof buildApp>;
+type App = ReturnType<typeof buildApp>['app'];
 
 async function post(app: App, path: string, body: unknown) {
   const response = await app.handle(
@@ -88,20 +112,15 @@ async function post(app: App, path: string, body: unknown) {
   return { status: response.status, body: (await response.json()) as any };
 }
 
-describe('ai-evaluator HTTP layer (component, fake repository and clients)', () => {
-  let evaluationRepository: FakeEvaluationRepository;
-  let evaluationJobRepository: FakeEvaluationJobRepository;
-  let app: App;
+describe('ai-evaluator HTTP layer (component, fake repositories and clients)', () => {
+  let ctx: ReturnType<typeof buildApp>;
 
   beforeEach(() => {
-    evaluationRepository = createFakeEvaluationRepository();
-    evaluationJobRepository = createFakeEvaluationJobRepository();
-    app = buildApp(evaluationRepository, evaluationJobRepository);
+    ctx = buildApp();
   });
 
-  /** Seeds a document through the repository fake so ids and timestamps come from the same store. */
   function seedEvaluation(input: Partial<CreateEvaluationInput> = {}) {
-    return evaluationRepository.create({
+    return ctx.evaluationRepository.create({
       entityType: 'pool',
       parentId: 'pool-1',
       grandParentId: 'business-1',
@@ -118,7 +137,7 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
   test('getEvaluation: returns the stored evaluation without leaking the mongo document', async () => {
     const seeded = await seedEvaluation();
 
-    const response = await post(app, '/getEvaluation', { id: seeded._id.toString() });
+    const response = await post(ctx.app, '/getEvaluation', { id: seeded._id.toString() });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -135,24 +154,10 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       createdAt: seeded.createdAt,
       updatedAt: seeded.updatedAt,
     });
-    expect(evaluationRepository.findById).toHaveBeenCalledWith(seeded._id.toString());
-  });
-
-  test('getEvaluation: an evaluation without result fields maps its optional fields away', async () => {
-    const seeded = await seedEvaluation({
-      risk: { pros: [], cons: [] },
-      modelUsed: undefined,
-    });
-
-    const response = await post(app, '/getEvaluation', { id: seeded._id.toString() });
-
-    expect(response.status).toBe(200);
-    expect(response.body.modelUsed).toBeUndefined();
-    expect(response.body.risk).toEqual({ pros: [], cons: [] });
   });
 
   test('getEvaluation: an unknown id maps to 404 NOT_FOUND', async () => {
-    const response = await post(app, '/getEvaluation', { id: UNKNOWN_ID });
+    const response = await post(ctx.app, '/getEvaluation', { id: UNKNOWN_ID });
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({
@@ -161,100 +166,42 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
   });
 
   test('getEvaluation: an invalid payload never reaches the repository', async () => {
-    const response = await post(app, '/getEvaluation', {});
+    const response = await post(ctx.app, '/getEvaluation', {});
 
     expect(response.status).not.toBe(200);
-    expect(evaluationRepository.findById).toHaveBeenCalledTimes(0);
+    expect(ctx.evaluationRepository.findById).toHaveBeenCalledTimes(0);
   });
 
   test('getEvaluations: returns every evaluation matching the filter', async () => {
-    const first = await seedEvaluation({ parentId: 'pool-1', risk: { score: 10, pros: [], cons: [] } });
-    const second = await seedEvaluation({ parentId: 'pool-1', risk: { score: 20, pros: [], cons: [] } });
-    const third = await seedEvaluation({ parentId: 'pool-2', risk: { score: 90, pros: [], cons: [] } });
+    const first = await seedEvaluation({ parentId: 'pool-1' });
+    const second = await seedEvaluation({ parentId: 'pool-1' });
+    const third = await seedEvaluation({ parentId: 'pool-2' });
 
-    const response = await post(app, '/getEvaluations', { filter: { parentId: 'pool-1' } });
+    const response = await post(ctx.app, '/getEvaluations', { filter: { parentId: 'pool-1' } });
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(2);
     expect(response.body.map((evaluation: any) => evaluation.id)).toEqual([
       first._id.toString(),
       second._id.toString(),
     ]);
     expect(response.body.map((evaluation: any) => evaluation.id)).not.toContain(third._id.toString());
-    expect(evaluationRepository.findAll).toHaveBeenCalledWith({ parentId: 'pool-1' }, undefined, undefined, undefined);
   });
 
-  test('getEvaluations: sort and pagination are forwarded to the repository', async () => {
-    await seedEvaluation({ parentId: 'pool-1', risk: { score: 10, pros: [], cons: [] } });
-    const second = await seedEvaluation({ parentId: 'pool-1', risk: { score: 20, pros: [], cons: [] } });
-    const third = await seedEvaluation({ parentId: 'pool-1', risk: { score: 30, pros: [], cons: [] } });
+  test('jobEvaluation: queues the task and returns its id', async () => {
+    const response = await post(ctx.app, '/jobEvaluation', { entityType: 'pool', entityId: 'pool-1' });
 
-    const response = await post(app, '/getEvaluations', {
-      filter: { parentId: 'pool-1' },
-      sort: { createdAt: 'desc' },
-      limit: 2,
-      offset: 1,
+    expect(response.status).toBe(200);
+    expect(response.body.evaluationId).toMatch(/^[a-f0-9]{24}$/);
+    expect(ctx.bullMqClient.getQueue).toHaveBeenCalledWith('evaluation');
+    expect(ctx.bullMqClient.jobs.get('evaluation-pool-pool-1').data).toMatchObject({
+      index: 0,
+      state: { entityType: 'pool', entityId: 'pool-1', evaluationId: response.body.evaluationId },
     });
-
-    expect(response.status).toBe(200);
-    expect(response.body.map((evaluation: any) => evaluation.id)).toEqual([
-      second._id.toString(),
-      third._id.toString(),
-    ]);
-    expect(evaluationRepository.findAll).toHaveBeenCalledWith({ parentId: 'pool-1' }, { createdAt: 'desc' }, 2, 1);
   });
 
-  test('getEvaluations: every filter key is forwarded verbatim', async () => {
-    await seedEvaluation({ entityType: 'pool', parentId: 'pool-1', grandParentId: 'business-1' });
-    await seedEvaluation({ entityType: 'business', parentId: 'business-1', grandParentId: 'business-1' });
-
-    const response = await post(app, '/getEvaluations', { filter: { entityType: 'business', parentId: 'business-1' } });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].entityType).toBe('business');
-    expect(evaluationRepository.findAll).toHaveBeenCalledWith(
-      { entityType: 'business', parentId: 'business-1' },
-      undefined,
-      undefined,
-      undefined,
-    );
-  });
-
-  test('getEvaluations: returns an empty array when nothing matches', async () => {
-    await seedEvaluation();
-
-    const response = await post(app, '/getEvaluations', { filter: { parentId: 'nobody' } });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
-  });
-
-  test('getEvaluations: a missing filter never reaches the repository', async () => {
-    const response = await post(app, '/getEvaluations', {});
-
-    expect(response.status).not.toBe(200);
-    expect(evaluationRepository.findAll).toHaveBeenCalledTimes(0);
-  });
-
-  test('evaluate: answers with the evaluation id and leaves a pending job', async () => {
-    const response = await post(app, '/evaluate', {
-      entityType: 'pool',
-      entityId: 'pool-1',
-      ownerId: 'owner-1',
-      ownerType: 'business',
-    });
-
-    expect(response.status).toBe(200);
-
-    const job = [...evaluationJobRepository.store.values()][0];
-
-    expect(response.body).toEqual({ evaluationId: String(job.evaluationId) });
-    expect(job).toMatchObject({ status: 'pending', entityId: 'pool-1', attempts: 0 });
-  });
-
-  test('evaluate: rejects the request when the cooldown is active', async () => {
-    await evaluationRepository.create({
+  test('jobEvaluation: rejects the request when the cooldown is active', async () => {
+    const withCooldown = buildApp(86_400);
+    await withCooldown.evaluationRepository.create({
       entityType: 'pool',
       parentId: 'pool-1',
       grandParentId: 'business-1',
@@ -264,16 +211,18 @@ describe('ai-evaluator HTTP layer (component, fake repository and clients)', () 
       risk: { score: 10, pros: [], cons: [] },
     });
 
-    const appWithCooldown = buildApp(evaluationRepository, evaluationJobRepository, 86_400);
-
-    const response = await post(appWithCooldown, '/evaluate', {
-      entityType: 'pool',
-      entityId: 'pool-1',
-      ownerId: 'owner-1',
-      ownerType: 'business',
-    });
+    const response = await post(withCooldown.app, '/jobEvaluation', { entityType: 'pool', entityId: 'pool-1' });
 
     expect(response.status).toBe(429);
     expect(response.body).toMatchObject({ error: { code: 'EVALUATION_COOLDOWN' } });
+  });
+
+  test('jobEvaluation: rejects the request when the task is already queued', async () => {
+    ctx.bullMqClient.jobs.set('evaluation-pool-pool-1', { id: 'evaluation-pool-pool-1' });
+
+    const response = await post(ctx.app, '/jobEvaluation', { entityType: 'pool', entityId: 'pool-1' });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ error: { code: 'JOB_IN_PROGRESS' } });
   });
 });

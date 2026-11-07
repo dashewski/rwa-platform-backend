@@ -1,5 +1,4 @@
 import { BusinessRepository } from '../repositories/business.repository';
-import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import type { BlockchainEvent } from '@shared/blockchain';
 import { AppError } from '@shared/errors/app-errors';
 import type { IBusinessEntity } from '../models/entity/business.entity';
@@ -14,7 +13,6 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { buildFileUrl } from '@shared/files/src/index';
-import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 interface NetworkConfig {
   chainId: string;
@@ -30,7 +28,6 @@ export class BusinessService {
     private readonly businessRepository: BusinessRepository,
     private readonly openRouterClient: OpenRouterClient,
     private readonly signersManagerClient: SignersManagerClient,
-    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly supportedNetworks: NetworkConfig[],
     private readonly openRouterModel: string,
     private readonly filesBaseUrl: string,

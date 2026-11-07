@@ -1,6 +1,5 @@
 import { Elysia } from 'elysia';
 import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
-import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
 import type { ServicesPlugin } from './services.plugin';
 import type { ClientsPlugin } from './clients.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
@@ -18,18 +17,8 @@ export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, client
       ),
   );
 
-  const outboxPublisherDaemon = withTraceSync(
-    'rwa.init.daemons.outbox_publisher',
-    () =>
-      new OutboxPublisherDaemon(
-        servicesPlugin.decorator.outboxPublisherService,
-        clientsPlugin.decorator.rabbitMQClient,
-      ),
-  );
-
   await withTraceAsync('rwa.init.daemons_plugin.start', async () => {
     await inboxConsumerDaemon.initialize();
-    await outboxPublisherDaemon.initialize();
     logger.info('Daemons started');
   });
 
@@ -38,11 +27,9 @@ export const createDaemonsPlugin = async (servicesPlugin: ServicesPlugin, client
       .use(servicesPlugin)
       .use(clientsPlugin)
       .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
-      .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
       .onStop(async () => {
         await withTraceAsync('rwa.stop.daemons_plugin', async () => {
           await inboxConsumerDaemon.stop();
-          outboxPublisherDaemon.stop();
           logger.info('Daemons stopped');
         });
       }),

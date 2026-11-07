@@ -4,7 +4,7 @@
  * The real client performs HTTP calls to OpenRouter. Tests use this fake to keep
  * the service layer isolated: no network, no API key, deterministic completions.
  * It mirrors the chatCompletion() method used by
- * src/services/riskEvaluation.service.ts, and the mock is wrapped in bun:test
+ * src/services/evaluation.service.ts, and the mock is wrapped in bun:test
  * mock() so the request payloads (model, messages) can be asserted.
  *
  * Responses are queued raw: the service parses the assistant content as JSON, so

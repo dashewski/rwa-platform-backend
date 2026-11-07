@@ -17,8 +17,8 @@ import { edenError, edenOk } from '../fakes/clients.fake';
 import { getEvaluations } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluations';
 import { getEvaluation } from '../../src/graphql/modules/ai-evaluator/resolvers/queries/getEvaluation';
 import type { Evaluation } from '../../src/graphql/generated/types';
-import { updateBusinessRiskScore } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/updateBusinessRiskScore';
-import { updatePoolRiskScore } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/updatePoolRiskScore';
+import { requestBusinessEvaluation } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/requestBusinessEvaluation';
+import { requestPoolEvaluation } from '../../src/graphql/modules/ai-evaluator/resolvers/mutations/requestPoolEvaluation';
 
 const INFO = {} as GraphQLResolveInfo;
 const asContext = (fake: FakeContext) => fake as unknown as GraphQLContext;
@@ -157,58 +157,28 @@ describe('risk score mutations (unit, fake clients)', () => {
   const POOL = { id: 'pool-1', ownerId: 'owner-1', ownerType: 'business', poolAddress: '0xpool' };
   const BUSINESS = { id: 'business-1', ownerId: 'owner-1', ownerType: 'business', tokenAddress: '0xtoken' };
 
-  test('updatePoolRiskScore queues an evaluation for a deployed pool', async () => {
+  test('requestPoolEvaluation queues an evaluation task for a deployed pool', async () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
-    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'eval-1' }));
+    fake.clients.aiEvaluatorClient.jobEvaluation.post.mockImplementation(async () => edenOk({ evaluationId: 'task-1' }));
 
-    const result = await updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO);
+    const result = await requestPoolEvaluation!(null as never, { id: 'pool-1' }, asContext(fake), INFO);
 
-    expect(result).toBe('eval-1');
-    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledWith({
+    expect(result).toBe('task-1');
+    expect(fake.clients.aiEvaluatorClient.jobEvaluation.post).toHaveBeenCalledWith({
       entityType: 'pool',
       entityId: 'pool-1',
-      ownerId: 'owner-1',
-      ownerType: 'business',
     });
   });
 
-  test('updatePoolRiskScore rejects a pool that is not deployed', async () => {
-    const fake = createFakeContext({ user: fakeUser });
-    fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk({ ...POOL, poolAddress: undefined }));
-
-    const error: any = await Promise.resolve(
-      updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO),
-    ).catch((thrown) => thrown);
-
-    expect(error.statusCode).toBe(409);
-    expect(error.code).toBe('NOT_DEPLOYED');
-    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledTimes(0);
-  });
-
-  test('updateBusinessRiskScore queues an evaluation for a deployed business', async () => {
+  test('requestBusinessEvaluation queues an evaluation task for a deployed business', async () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
-    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'eval-2' }));
+    fake.clients.aiEvaluatorClient.jobEvaluation.post.mockImplementation(async () => edenOk({ evaluationId: 'task-2' }));
 
-    const result = await updateBusinessRiskScore!(null as never, { id: 'business-1' }, asContext(fake), INFO);
+    const result = await requestBusinessEvaluation!(null as never, { id: 'business-1' }, asContext(fake), INFO);
 
-    expect(result).toBe('eval-2');
-  });
-
-  test('updateBusinessRiskScore rejects a business that is not deployed', async () => {
-    const fake = createFakeContext({ user: fakeUser });
-    fake.clients.rwaClient.getBusiness.post.mockImplementation(async () =>
-      edenOk({ ...BUSINESS, tokenAddress: undefined }),
-    );
-
-    const error: any = await Promise.resolve(
-      updateBusinessRiskScore!(null as never, { id: 'business-1' }, asContext(fake), INFO),
-    ).catch((thrown) => thrown);
-
-    expect(error.statusCode).toBe(409);
-    expect(error.code).toBe('NOT_DEPLOYED');
-    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledTimes(0);
+    expect(result).toBe('task-2');
   });
 
   test('both mutations require an authenticated user', async () => {
@@ -216,7 +186,7 @@ describe('risk score mutations (unit, fake clients)', () => {
     fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
 
     const error: any = await Promise.resolve(
-      updatePoolRiskScore!(null as never, { id: 'pool-1' }, asContext(fake), INFO),
+      requestPoolEvaluation!(null as never, { id: 'pool-1' }, asContext(fake), INFO),
     ).catch((thrown) => thrown);
 
     expect(error.statusCode).toBe(401);

@@ -6,8 +6,8 @@ import { getEvaluationsRequest, getEvaluationsResponse } from '../models/validat
 export const getEvaluationsController = (servicesPlugin: ServicesPlugin) => {
   return new Elysia({ name: 'GetEvaluationsController' }).use(servicesPlugin).post(
     '/getEvaluations',
-    async ({ body, riskEvaluationService }) => {
-      return await riskEvaluationService.getEvaluations(body);
+    async ({ body, evaluationService }) => {
+      return await evaluationService.getEvaluations(body);
     },
     {
       body: getEvaluationsRequest,

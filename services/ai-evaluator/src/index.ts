@@ -14,6 +14,7 @@ const app = await withTraceAsync('ai-evaluator.init.main', async () => {
     String(process.env.QUESTIONS_SERVICE_URL),
     String(process.env.PORTFOLIO_SERVICE_URL),
     String(process.env.RABBITMQ_URL),
+    String(process.env.REDIS_URL),
     Number(process.env.AI_EVALUATOR_MAX_FILES_PER_REQUEST) || 20,
     Number(process.env.AI_EVALUATOR_COOLDOWN_SECONDS) || 86400,
   );

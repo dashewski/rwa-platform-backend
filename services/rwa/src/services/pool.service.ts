@@ -1,5 +1,4 @@
 import type { BlockchainEvent } from '@shared/blockchain';
-import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import { AppError } from '@shared/errors/app-errors';
 import { PoolRepository } from '../repositories/pool.repository';
 import { OpenRouterClient } from '@shared/openrouter/client';
@@ -13,7 +12,6 @@ import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
 import { buildFileUrl } from '@shared/files/src/index';
-import type { RabbitMQClient } from '../clients/rabbitmq.client';
 
 // An evaluation stuck "in progress" longer than this (seconds) is considered
 // stale - its request or result was lost on the way - and may be requested again.
@@ -25,7 +23,6 @@ export class PoolService {
     private readonly openRouterClient: OpenRouterClient,
     private readonly signersManagerClient: SignersManagerClient,
     private readonly poolEventsClient: PoolEventsClient,
-    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly supportedNetworks: {
       chainId: string;
       factoryAddress: string;

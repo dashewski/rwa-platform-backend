@@ -1,16 +1,19 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
-import { EvaluationWorkerDaemon } from '../daemons/evaluationWorker.daemon';
+import { JobQueueDaemon } from '../daemons/jobQueue.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
-  const evaluationWorkerDaemon = withTraceSync(
-    'ai-evaluator.init.daemons.evaluation_worker',
+  const jobQueueDaemon = withTraceSync(
+    'ai-evaluator.init.daemons.evaluation_job',
     () =>
-      new EvaluationWorkerDaemon(servicesPlugin.decorator.evaluationJobService),
+      new JobQueueDaemon(
+        clientsPlugin.decorator.jobQueueClient,
+        servicesPlugin.decorator.evaluationService,
+      ),
   );
 
   const outboxPublisherDaemon = withTraceSync(
@@ -25,7 +28,7 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
   await withTraceAsync('ai-evaluator.init.daemons.initialize', async () => {
     logger.debug('Initializing daemons');
     await outboxPublisherDaemon.initialize();
-    await evaluationWorkerDaemon.initialize();
+    await jobQueueDaemon.initialize();
     logger.info('Daemons initialized');
   });
 
@@ -34,11 +37,11 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
       .use(clientsPlugin)
       .use(servicesPlugin)
       .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
-      .decorate('evaluationWorkerDaemon', evaluationWorkerDaemon)
+      .decorate('jobQueueDaemon', jobQueueDaemon)
       .onStop(async () => {
         await withTraceAsync('ai-evaluator.stop.daemons_plugin', async () => {
           await outboxPublisherDaemon.stop();
-          await evaluationWorkerDaemon.stop();
+          await jobQueueDaemon.stop();
           logger.info('Daemons stopped');
         });
       }),

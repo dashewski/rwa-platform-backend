@@ -5,7 +5,6 @@ import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
 import { TokenService } from '../services/token.service';
 import { InboxConsumerService } from '@shared/inbox-consumer';
-import { OutboxPublisherService } from '@shared/outbox-publisher';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
 export const createServicesPlugin = (
@@ -21,15 +20,6 @@ export const createServicesPlugin = (
     () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
-  const outboxPublisherService = withTraceSync(
-    'rwa.init.services.outbox_publisher',
-    () =>
-      new OutboxPublisherService(
-        clientsPlugin.decorator.rabbitMQClient,
-        repositoriesPlugin.decorator.outboxPublisherMessageRepository,
-      ),
-  );
-
   const businessService = withTraceSync(
     'rwa.init.services.business',
     () =>
@@ -37,7 +27,6 @@ export const createServicesPlugin = (
         repositoriesPlugin.decorator.businessRepository,
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.signersManagerClient,
-        outboxPublisherService,
         supportedNetworks,
         openRouterModel,
         filesBaseUrl,
@@ -52,7 +41,6 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.signersManagerClient,
         clientsPlugin.decorator.poolEventsClient,
-        outboxPublisherService,
         supportedNetworks,
         openRouterModel,
         filesBaseUrl,
@@ -75,7 +63,6 @@ export const createServicesPlugin = (
       .use(repositoriesPlugin)
       .use(clientsPlugin)
       .decorate('inboxConsumerService', inboxConsumerService)
-      .decorate('outboxPublisherService', outboxPublisherService)
       .decorate('businessService', businessService)
       .decorate('poolService', poolService)
       .decorate('tokenService', tokenService),

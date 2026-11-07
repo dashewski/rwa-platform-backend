@@ -17,8 +17,9 @@
  *   bun --env-file=infrastructure/docker/.env test --timeout=180000 \
  *     tests/rabbitmq/scenarios/evaluation.scenario.test.ts
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { connect } from 'amqplib';
+import { Types } from 'mongoose';
 import type { ChannelModel, ConfirmChannel } from 'amqplib';
 import {
   RABBIT_URI,
@@ -37,19 +38,13 @@ import { InboxConsumerMessageEntity } from '@shared/inbox-consumer/src/models/en
 import { OutboxPublisherService } from '@shared/outbox-publisher/src/services/outboxPublisher.service';
 import { OutboxPublisherMessageRepository } from '@shared/outbox-publisher/src/repositories/outboxPublisherMessage.repository';
 import { OutboxPublisherMessageEntity } from '@shared/outbox-publisher/src/models/entity/outboxPublisherMessage.entity';
-import { EvaluationJobService } from '@services/ai-evaluator/src/services/evaluationJob.service';
-import { RiskEvaluationService } from '../../../services/ai-evaluator/src/services/riskEvaluation.service';
-import { EvaluationJobRepository } from '../../../services/ai-evaluator/src/repositories/evaluationJob.repository';
-import { EvaluationJobEntity } from '../../../services/ai-evaluator/src/models/entity/evaluationJob.entity';
+import { EvaluationService } from '../../../services/ai-evaluator/src/services/evaluation.service';
 import { EvaluationRepository } from '../../../services/ai-evaluator/src/repositories/evaluation.repository';
 import { EvaluationEntity } from '../../../services/ai-evaluator/src/models/entity/evaluation.entity';
 import { RabbitMQClient as AiEvaluatorClient } from '../../../services/ai-evaluator/src/clients/rabbitmq.client';
 import { RabbitMQClient as RwaClient } from '../../../services/rwa/src/clients/rabbitmq.client';
 import { InboxConsumerDaemon as RwaInbox } from '../../../services/rwa/src/daemons/inboxConsumer.daemon';
-import {
-  createFakeEdenClients,
-  edenOk,
-} from '../../../services/ai-evaluator/tests/fakes/eden.clients.fake';
+import { createFakeEdenClients, edenOk } from '../../../services/ai-evaluator/tests/fakes/eden.clients.fake';
 import { createFakeOpenRouterClient } from '../../../services/ai-evaluator/tests/fakes/openrouter.client.fake';
 
 const PREFIX = scenarioPrefix('evaluation');
@@ -77,8 +72,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
   let daemon: RwaInbox;
   let raw: { connection: ChannelModel; channel: ConfirmChannel };
   let outbox: OutboxPublisherService<AiEvaluatorClient>;
-  let risk: RiskEvaluationService;
-  let jobs: EvaluationJobService;
+  let risk: EvaluationService;
   let evaluationId: string;
   let published: { evaluationId: string; entityType: string; entityId: string; riskScore: number };
 
@@ -107,8 +101,10 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
       new OutboxPublisherMessageRepository(),
     );
 
-    risk = new RiskEvaluationService(
+    risk = new EvaluationService(
       new EvaluationRepository(),
+      { start: async () => undefined } as never,
+      { getEvaluationQueue: () => 'evaluation' } as never,
       openRouter as never,
       eden.rwaClient as never,
       eden.documentsClient as never,
@@ -116,17 +112,11 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
       eden.reactionsClient as never,
       eden.questionsClient as never,
       eden.portfolioClient as never,
+      outbox as never,
       'test/model',
       20,
-      false,
-    );
-
-    jobs = new EvaluationJobService(
-      new EvaluationRepository(),
-      new EvaluationJobRepository(),
-      risk,
-      outbox,
       0,
+      false,
     );
   });
 
@@ -145,7 +135,7 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
 
   test('the evaluator stores the result and queues exactly one outbox row in the same transaction', async () => {
     eden.rwaClient.getBusiness.setDefaultResponse(
-      edenOk({ id: BUSINESS_ID, name: 'Acme', businessType: 'energy', country: 'DE', tags: [] }),
+      edenOk({ id: BUSINESS_ID, name: 'Acme', businessType: 'energy', country: 'DE', tags: [], tokenAddress: '0xtoken' } as never),
     );
     eden.rwaClient.getPools.setDefaultResponse(edenOk([]));
     eden.documentsClient.getDocuments.setDefaultResponse(edenOk([]));
@@ -158,15 +148,28 @@ describe('scenario: ai-evaluator → evaluation → rwa', () => {
     openRouter.queueResponse('Acme is an energy business in Germany.');
     openRouter.queueJsonResponse({ score: 42, pros: ['clear business'], cons: ['no documents'] });
 
-    const startedEvaluationId = await jobs.start({ entityType: 'business', entityId: BUSINESS_ID, ...OWNER });
+    evaluationId = new Types.ObjectId().toString();
 
-    await jobs.processNext();
+    const context = await risk.collectContext({ entityType: 'business', entityId: BUSINESS_ID });
+    const summarized = await risk.summarize({ context: context.context, selectedFiles: [] });
+    const scored = await risk.score({ summary: summarized.summary });
+
+    await risk.save({
+      evaluationId,
+      entityType: 'business',
+      entityId: BUSINESS_ID,
+      ownerId: context.ownerId,
+      ownerType: context.ownerType,
+      grandParentId: context.grandParentId,
+      summary: summarized.summary,
+      selectedFiles: [],
+      risk: scored.risk,
+    });
 
     const evaluations = await EvaluationEntity.find({ parentId: BUSINESS_ID }).lean();
     expect(evaluations).toHaveLength(1);
     expect(evaluations[0].risk?.score).toBe(42);
-    expect(evaluations[0]._id.toString()).toBe(startedEvaluationId);
-    evaluationId = evaluations[0]._id.toString();
+    expect(evaluations[0]._id.toString()).toBe(evaluationId);
 
     const rows = await OutboxPublisherMessageEntity.find({ exchange: EXCHANGE }).lean();
     expect(rows).toHaveLength(1);

@@ -6,7 +6,7 @@
  * reactions, questions and portfolio services. Tests use these fakes to keep
  * the service layer isolated: no network, deterministic responses.
  *
- * Only the `.post` routes actually called by src/services/riskEvaluation.service.ts
+ * Only the `.post` routes actually called by src/services/evaluation.service.ts
  * are implemented, with the eden result shape ({ data, error }) that the service
  * reads: `error` is null on success, `data` is null when the upstream call fails.
  * Every route is wrapped in bun:test mock() so payloads can be asserted.

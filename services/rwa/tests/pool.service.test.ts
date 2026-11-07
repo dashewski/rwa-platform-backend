@@ -21,10 +21,7 @@ import {
   type FakeSignersManagerClient,
 } from './fakes/signers-manager.client.fake';
 import { createFakePoolEventsClient, type FakePoolEventsClient } from './fakes/pool-events.client.fake';
-import { createFakeOutboxPublisher, type FakeOutboxPublisher } from './fakes/outbox-publisher.fake';
-import type { OutboxPublisherService } from '@shared/outbox-publisher';
 import type { FakePoolService } from './fakes/pool.service.fake';
-import type { RabbitMQClient } from '../src/clients/rabbitmq.client';
 
 const OWNER_ID = 'owner-1';
 const OWNER_TYPE = 'business';
@@ -218,7 +215,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
   let openRouter: FakeOpenRouterClient;
   let signersManager: FakeSignersManagerClient;
   let poolEvents: FakePoolEventsClient;
-  let outbox: FakeOutboxPublisher;
   let commitInbox: ReturnType<typeof mock<() => Promise<void>>>;
   // The proxy appends the commit closure, so the call sites keep one argument.
   let service: any;
@@ -228,7 +224,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
     openRouter = createFakeOpenRouterClient(POOL_AI_CONTENT);
     signersManager = createFakeSignersManagerClient();
     poolEvents = createFakePoolEventsClient();
-    outbox = createFakeOutboxPublisher();
 
     // The service writes its rows (and the inbox marker) in one transaction.
     (mongoose.connection as unknown as { transaction: unknown }).transaction = async <T>(
@@ -241,7 +236,6 @@ describe('PoolService (unit, fake repositories and clients)', () => {
       openRouter as unknown as OpenRouterClient,
       signersManager as unknown as SignersManagerClient,
       poolEvents as unknown as PoolEventsClient,
-      outbox as unknown as OutboxPublisherService<RabbitMQClient>,
       SUPPORTED_NETWORKS,
       OPEN_ROUTER_MODEL,
       FILES_BASE_URL,

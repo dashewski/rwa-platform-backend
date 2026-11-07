@@ -9,8 +9,8 @@ COPY shared/errors/package.json ./shared/errors/
 COPY shared/openrouter/package.json ./shared/openrouter/
 COPY shared/files/package.json ./shared/files/
 COPY shared/rabbitmq/package.json ./shared/rabbitmq/
-COPY shared/inbox-consumer/package.json ./shared/inbox-consumer/
 COPY shared/outbox-publisher/package.json ./shared/outbox-publisher/
+COPY shared/job-queue/package.json ./shared/job-queue/
 COPY shared/redis-events/package.json ./shared/redis-events/
 
 COPY bun.lockb .

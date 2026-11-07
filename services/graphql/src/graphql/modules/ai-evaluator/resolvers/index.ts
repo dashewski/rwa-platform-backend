@@ -1,8 +1,8 @@
 import type { Resolvers } from '../../../generated/types';
 import { getEvaluation } from './queries/getEvaluation';
 import { getEvaluations } from './queries/getEvaluations';
-import { updateBusinessRiskScore } from './mutations/updateBusinessRiskScore';
-import { updatePoolRiskScore } from './mutations/updatePoolRiskScore';
+import { requestBusinessEvaluation } from './mutations/requestBusinessEvaluation';
+import { requestPoolEvaluation } from './mutations/requestPoolEvaluation';
 
 export const aiEvaluatorResolvers: Resolvers = {
   Query: {
@@ -10,7 +10,7 @@ export const aiEvaluatorResolvers: Resolvers = {
     getEvaluations,
   },
   Mutation: {
-    updateBusinessRiskScore,
-    updatePoolRiskScore,
+    requestBusinessEvaluation,
+    requestPoolEvaluation,
   },
 };

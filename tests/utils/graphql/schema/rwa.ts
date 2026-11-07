@@ -154,7 +154,7 @@ export const EDIT_BUSINESS = gql`
 
 export const UPDATE_BUSINESS_RISK_SCORE = gql`
   mutation UpdateBusinessRiskScore($id: ID!) {
-    updateBusinessRiskScore(id: $id)
+    requestBusinessEvaluation(id: $id)
   }
 `;
 
@@ -595,7 +595,7 @@ export const EDIT_POOL = gql`
 
 export const UPDATE_POOL_RISK_SCORE = gql`
   mutation UpdatePoolRiskScore($id: ID!) {
-    updatePoolRiskScore(id: $id)
+    requestPoolEvaluation(id: $id)
   }
 `;
 

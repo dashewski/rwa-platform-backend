@@ -445,7 +445,7 @@ describe("RWA Flow", () => {
       );
 
       expect(result.errors).toBeUndefined();
-      expect(typeof result.data.updateBusinessRiskScore).toBe('string');
+      expect(typeof result.data.requestBusinessEvaluation).toBe('string');
 
       // Wait for async evaluation to complete — poll until riskScore appears
       // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s
@@ -832,7 +832,7 @@ describe("RWA Flow", () => {
       );
 
       expect(result.errors).toBeUndefined();
-      expect(typeof result.data.updatePoolRiskScore).toBe('string');
+      expect(typeof result.data.requestPoolEvaluation).toBe('string');
 
       // Wait for async evaluation to complete — poll until riskScore appears
       // LLM evaluation via OpenRouter takes 40-60s+ (upstream retries): allow up to 120s

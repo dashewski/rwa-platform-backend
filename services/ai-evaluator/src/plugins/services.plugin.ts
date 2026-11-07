@@ -1,9 +1,8 @@
 import { Elysia } from 'elysia';
-import { RiskEvaluationService } from '../services/riskEvaluation.service';
-import { EvaluationJobService } from '../services/evaluationJob.service';
+import { EvaluationService } from '../services/evaluation.service';
+import { JobQueueService } from '@shared/job-queue/src/services/jobQueue.service';
 import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
-import { InboxConsumerService } from '@shared/inbox-consumer';
 import { OutboxPublisherService } from '@shared/outbox-publisher';
 import { withTraceSync } from '@shared/monitoring/src/tracing';
 
@@ -23,16 +22,18 @@ export const createServicesPlugin = (
       ),
   );
 
-  const inboxConsumerService = withTraceSync(
-    'ai-evaluator.init.services.inbox_consumer',
-    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
+  const jobQueueService = withTraceSync(
+    'ai-evaluator.init.services.job_runner',
+    () => new JobQueueService(clientsPlugin.decorator.jobQueueClient),
   );
 
-  const riskEvaluationService = withTraceSync(
-    'ai-evaluator.init.services.risk_evaluation',
+  const evaluationService = withTraceSync(
+    'ai-evaluator.init.services.evaluation',
     () =>
-      new RiskEvaluationService(
+      new EvaluationService(
         repositoriesPlugin.decorator.evaluationRepository,
+        jobQueueService,
+        clientsPlugin.decorator.jobQueueClient,
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.rwaClient,
         clientsPlugin.decorator.documentsClient,
@@ -40,19 +41,9 @@ export const createServicesPlugin = (
         clientsPlugin.decorator.reactionsClient,
         clientsPlugin.decorator.questionsClient,
         clientsPlugin.decorator.portfolioClient,
+        outboxPublisherService,
         openRouterModel,
         maxFilesPerRequest,
-      ),
-  );
-
-  const evaluationJobService = withTraceSync(
-    'ai-evaluator.init.services.evaluation_job',
-    () =>
-      new EvaluationJobService(
-        repositoriesPlugin.decorator.evaluationRepository,
-        repositoriesPlugin.decorator.evaluationJobRepository,
-        riskEvaluationService,
-        outboxPublisherService,
         cooldownSeconds,
       ),
   );
@@ -62,10 +53,8 @@ export const createServicesPlugin = (
       .use(repositoriesPlugin)
       .use(clientsPlugin)
       .decorate('outboxPublisherService', outboxPublisherService)
-      .decorate('inboxConsumerService', inboxConsumerService)
-      .decorate('riskEvaluationService', riskEvaluationService)
-      .decorate('evaluationJobService', evaluationJobService)
-      .decorate('evaluationJobRepository', repositoriesPlugin.decorator.evaluationJobRepository),
+      .decorate('jobQueueService', jobQueueService)
+      .decorate('evaluationService', evaluationService),
   );
 
   return plugin;

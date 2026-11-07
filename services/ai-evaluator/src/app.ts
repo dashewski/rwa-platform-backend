@@ -21,6 +21,7 @@ export async function createApp(
   questionsServiceUrl: string,
   portfolioServiceUrl: string,
   rabbitMqUri: string,
+  redisUrl: string,
   maxFilesPerRequest: number,
   cooldownSeconds: number,
 ) {
@@ -39,6 +40,7 @@ export async function createApp(
     questionsServiceUrl,
     portfolioServiceUrl,
     rabbitMqUri,
+    redisUrl,
   );
 
   const servicesPlugin = withTraceSync('ai-evaluator.init.services_plugin', () =>

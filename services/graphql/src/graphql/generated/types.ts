@@ -792,17 +792,18 @@ export type Mutation = {
   rejectPoolApprovalSignatures: Scalars['Boolean']['output'];
   removeMember: Scalars['ID']['output'];
   requestBusinessApprovalSignatures: ApprovalSignaturesResponse;
+  requestBusinessEvaluation: Scalars['ID']['output'];
   requestGas: FaucetRequest;
   requestHold: FaucetRequest;
   requestPlatform: FaucetRequest;
   requestPoolApprovalSignatures: ApprovalSignaturesResponse;
+  requestPoolEvaluation: Scalars['ID']['output'];
   resetReaction?: Maybe<Reaction>;
   revokePermission: Scalars['ID']['output'];
   setReaction: Reaction;
   toggleQuestionLike: Scalars['Boolean']['output'];
   updateAssistant: Assistant;
   updateBlog: Blog;
-  updateBusinessRiskScore: Scalars['ID']['output'];
   updateCompany: Company;
   updateDocument: Document;
   updateFaqAnswer: FaqAnswer;
@@ -811,7 +812,6 @@ export type Mutation = {
   updateGallery: Gallery;
   updateImage: Image;
   updateMessage: Message;
-  updatePoolRiskScore: Scalars['ID']['output'];
   updatePost: Post;
   updateQuestionAnswer: Question;
   updateQuestionText: Question;
@@ -1014,6 +1014,11 @@ export type MutationRequestBusinessApprovalSignaturesArgs = {
 };
 
 
+export type MutationRequestBusinessEvaluationArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRequestGasArgs = {
   input: RequestTokenInput;
 };
@@ -1031,6 +1036,11 @@ export type MutationRequestPlatformArgs = {
 
 export type MutationRequestPoolApprovalSignaturesArgs = {
   input: RequestPoolApprovalSignaturesInput;
+};
+
+
+export type MutationRequestPoolEvaluationArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -1061,11 +1071,6 @@ export type MutationUpdateAssistantArgs = {
 
 export type MutationUpdateBlogArgs = {
   input: UpdateBlogInput;
-};
-
-
-export type MutationUpdateBusinessRiskScoreArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -1106,11 +1111,6 @@ export type MutationUpdateImageArgs = {
 
 export type MutationUpdateMessageArgs = {
   input: UpdateMessageInput;
-};
-
-
-export type MutationUpdatePoolRiskScoreArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -2823,17 +2823,18 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   rejectPoolApprovalSignatures?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRejectPoolApprovalSignaturesArgs, 'id'>>;
   removeMember?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRemoveMemberArgs, 'input'>>;
   requestBusinessApprovalSignatures?: Resolver<ResolversTypes['ApprovalSignaturesResponse'], ParentType, ContextType, RequireFields<MutationRequestBusinessApprovalSignaturesArgs, 'input'>>;
+  requestBusinessEvaluation?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRequestBusinessEvaluationArgs, 'id'>>;
   requestGas?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestGasArgs, 'input'>>;
   requestHold?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestHoldArgs, 'input'>>;
   requestPlatform?: Resolver<ResolversTypes['FaucetRequest'], ParentType, ContextType, RequireFields<MutationRequestPlatformArgs, 'input'>>;
   requestPoolApprovalSignatures?: Resolver<ResolversTypes['ApprovalSignaturesResponse'], ParentType, ContextType, RequireFields<MutationRequestPoolApprovalSignaturesArgs, 'input'>>;
+  requestPoolEvaluation?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRequestPoolEvaluationArgs, 'id'>>;
   resetReaction?: Resolver<Maybe<ResolversTypes['Reaction']>, ParentType, ContextType, RequireFields<MutationResetReactionArgs, 'input'>>;
   revokePermission?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationRevokePermissionArgs, 'input'>>;
   setReaction?: Resolver<ResolversTypes['Reaction'], ParentType, ContextType, RequireFields<MutationSetReactionArgs, 'input'>>;
   toggleQuestionLike?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationToggleQuestionLikeArgs, 'questionId'>>;
   updateAssistant?: Resolver<ResolversTypes['Assistant'], ParentType, ContextType, RequireFields<MutationUpdateAssistantArgs, 'input'>>;
   updateBlog?: Resolver<ResolversTypes['Blog'], ParentType, ContextType, RequireFields<MutationUpdateBlogArgs, 'input'>>;
-  updateBusinessRiskScore?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationUpdateBusinessRiskScoreArgs, 'id'>>;
   updateCompany?: Resolver<ResolversTypes['Company'], ParentType, ContextType, RequireFields<MutationUpdateCompanyArgs, 'input'>>;
   updateDocument?: Resolver<ResolversTypes['Document'], ParentType, ContextType, RequireFields<MutationUpdateDocumentArgs, 'input'>>;
   updateFaqAnswer?: Resolver<ResolversTypes['FaqAnswer'], ParentType, ContextType, RequireFields<MutationUpdateFaqAnswerArgs, 'input'>>;
@@ -2842,7 +2843,6 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   updateGallery?: Resolver<ResolversTypes['Gallery'], ParentType, ContextType, RequireFields<MutationUpdateGalleryArgs, 'input'>>;
   updateImage?: Resolver<ResolversTypes['Image'], ParentType, ContextType, RequireFields<MutationUpdateImageArgs, 'input'>>;
   updateMessage?: Resolver<ResolversTypes['Message'], ParentType, ContextType, RequireFields<MutationUpdateMessageArgs, 'input'>>;
-  updatePoolRiskScore?: Resolver<ResolversTypes['ID'], ParentType, ContextType, RequireFields<MutationUpdatePoolRiskScoreArgs, 'id'>>;
   updatePost?: Resolver<ResolversTypes['Post'], ParentType, ContextType, RequireFields<MutationUpdatePostArgs, 'input'>>;
   updateQuestionAnswer?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationUpdateQuestionAnswerArgs, 'input'>>;
   updateQuestionText?: Resolver<ResolversTypes['Question'], ParentType, ContextType, RequireFields<MutationUpdateQuestionTextArgs, 'input'>>;

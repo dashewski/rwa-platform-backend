@@ -1,7 +1,10 @@
+import mongoose, { Types } from 'mongoose';
 import type { SortOrder } from 'mongoose';
 import { AppError } from '@shared/errors/app-errors';
 import { OpenRouterClient } from '@shared/openrouter/client';
 import type { FileContentPart, ImageContentPart } from '@shared/openrouter/types';
+import type { OutboxPublisherService } from '@shared/outbox-publisher';
+import type { RabbitMQClient } from '../clients/rabbitmq.client';
 import type { EvaluationRepository } from '../repositories/evaluation.repository';
 import type {
   RwaClient,
@@ -15,6 +18,8 @@ import { TraceDecorator } from '@shared/monitoring/src/traceDecorator';
 import { MetricsDecorator } from '@shared/monitoring/src/metricsDecorator';
 import { LogDecorator } from '@shared/monitoring/src/logDecorator';
 import { setSpanAttributes } from '@shared/monitoring/src/tracing';
+import type { JobQueueService } from '@shared/job-queue/src/services/jobQueue.service';
+import type { JobQueueClient } from '../clients/jobQueue.client';
 
 const SCORE_SYSTEM_PROMPT = `You assess the investment risk of an RWA project from its summary. Return JSON only:
 {
@@ -31,24 +36,11 @@ type FileMeta = {
   url: string;
 };
 
-type EvaluationSource = {
-  type: 'document' | 'image';
-  id: string;
-  name: string;
-  mimeType: string;
-};
-
-export type EvaluationPayload = {
-  grandParentId: string;
-  summary: string;
-  sources: EvaluationSource[];
-  risk: { score: number; pros: string[]; cons: string[] };
-  modelUsed: string;
-};
-
-export class RiskEvaluationService {
+export class EvaluationService {
   constructor(
     private readonly evaluationRepository: EvaluationRepository,
+    private readonly jobQueueService: JobQueueService,
+    private readonly jobQueueClient: JobQueueClient,
     private readonly openRouterClient: OpenRouterClient,
     private readonly rwaClient: RwaClient,
     private readonly documentsClient: DocumentsClient,
@@ -56,107 +48,178 @@ export class RiskEvaluationService {
     private readonly reactionsClient: ReactionsClient,
     private readonly questionsClient: QuestionsClient,
     private readonly portfolioClient: PortfolioClient,
+    private readonly outboxPublisher: OutboxPublisherService<RabbitMQClient>,
     private readonly openRouterModel: string,
     private readonly maxFilesPerRequest: number,
+    private readonly cooldownSeconds: number,
     private readonly useBase64Files: boolean = true,
-  ) {}
+  ) {
+    mongoose.set('transactionAsyncLocalStorage', true);
+  }
 
   @TraceDecorator()
   @MetricsDecorator()
   @LogDecorator({
     args: (a) => ({ entityType: a[0].entityType, entityId: a[0].entityId }),
   })
-  async evaluate(params: { entityType: 'pool' | 'business'; entityId: string }): Promise<EvaluationPayload> {
+  async request(params: { entityType: 'pool' | 'business'; entityId: string }) {
     setSpanAttributes({ entityId: params.entityId, entityType: params.entityType });
 
-    const { grandParentId, blocks } = await this.collectContext(params.entityType, params.entityId);
+    const availability = await this.getAvailability(params);
+
+    if (!availability.available) {
+      throw new AppError({
+        message: `Evaluation is available in ${availability.cooldownLeft} seconds`,
+        statusCode: 429,
+        code: 'EVALUATION_COOLDOWN',
+      });
+    }
+
+    const evaluationId = new Types.ObjectId().toString();
+
+    await this.jobQueueService.start(
+      this.jobQueueClient.getEvaluationQueue(),
+      `evaluation-${params.entityType}-${params.entityId}`,
+      { ...params, evaluationId },
+    );
+
+    return { evaluationId };
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({ entityType: a[0].entityType, entityId: a[0].entityId }),
+  })
+  async getAvailability(params: { entityType: 'pool' | 'business'; entityId: string }) {
+    setSpanAttributes({ entityId: params.entityId, entityType: params.entityType });
+
+    if (params.entityType === 'pool') {
+      const pool = await this.fetchPool({ poolId: params.entityId });
+
+      if (!pool.poolAddress) {
+        throw new AppError({
+          message: 'Pool is not deployed yet',
+          statusCode: 409,
+          code: 'NOT_DEPLOYED',
+        });
+      }
+    } else {
+      const business = await this.fetchBusiness({ businessId: params.entityId });
+
+      if (!business.tokenAddress) {
+        throw new AppError({
+          message: 'Business is not deployed yet',
+          statusCode: 409,
+          code: 'NOT_DEPLOYED',
+        });
+      }
+    }
+
+    const [lastEvaluation] = await this.evaluationRepository.findAll({ parentId: params.entityId }, { createdAt: 'desc' }, 1);
+    const cooldownLeft = lastEvaluation
+      ? lastEvaluation.createdAt + this.cooldownSeconds - Math.floor(Date.now() / 1000)
+      : 0;
+
+    return { available: cooldownLeft <= 0, cooldownLeft: Math.max(cooldownLeft, 0) };
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({ entityType: a[0].entityType, entityId: a[0].entityId }),
+  })
+  async collectContext(params: { entityType: 'pool' | 'business'; entityId: string }) {
+    setSpanAttributes({ entityId: params.entityId, entityType: params.entityType });
+
+    const { grandParentId, ownerId, ownerType, blocks } =
+      params.entityType === 'pool'
+        ? await this.poolContext(params.entityId)
+        : await this.businessContext(params.entityId);
     const context = blocks.map((block) => block.text).join('\n\n');
     const files = blocks.flatMap((block) => block.files ?? []);
-    const selectedFiles = files.length > 0 ? await this.selectFiles(context, files) : [];
-    const summary = await this.summarize(context, selectedFiles);
-    const risk = await this.score(summary);
+
+    return { context, files, ownerId, ownerType, grandParentId };
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({ files: a[0].files.length }),
+  })
+  async selectFiles(params: { context: string; files: FileMeta[] }) {
+    const documents = params.files.filter((file) => !file.mimeType.startsWith('image/'));
+    const images = params.files.filter((file) => file.mimeType.startsWith('image/'));
+
+    if (params.files.length === 0) {
+      return { selectedFiles: [] };
+    }
+
+    const hasDocuments = documents.length > 0;
+    const hasImages = images.length > 0;
+    const fileTypes = hasDocuments && hasImages ? 'documents and images' : hasDocuments ? 'documents' : 'images';
+
+    const systemMessage = `You are a risk assessment expert. Analyze the following summary and decide which ${fileTypes} you need to study for a detailed risk evaluation.
+
+${params.context}
+
+Available documents:
+${documents.map((d) => `- id=${d.id}, name=${d.name}, mimeType=${d.mimeType}`).join('\n')}
+
+Available images:
+${images.map((i) => `- id=${i.id}, name=${i.name}`).join('\n')}
+
+Return JSON with the IDs of ${fileTypes} you want to examine:
+{
+${hasDocuments ? `  "requestedDocuments": ["docId1", "docId3"],\n` : ''}${hasImages ? `  "requestedImages": ["imgId2"]\n` : ''}}
+If you don't need any ${fileTypes}, return empty arrays.`;
+
+    const completion = await this.openRouterClient.chatCompletion({
+      model: this.openRouterModel,
+      messages: [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `Which ${fileTypes} do you need for risk evaluation? Return JSON only.` },
+      ],
+    });
+
+    const parsed = this.parseLLMJsonResponse(completion.choices[0]?.message?.content ?? '');
+    const requestedDocIds: string[] = parsed.requestedDocuments ?? [];
+    const requestedImgIds: string[] = parsed.requestedImages ?? [];
+
+    for (const docId of requestedDocIds) {
+      if (!documents.find((d) => d.id === docId)) {
+        throw new AppError({
+          message: `LLM requested document ${docId} but it was not found`,
+          statusCode: 400,
+          code: 'NOT_FOUND',
+        });
+      }
+    }
+
+    for (const imgId of requestedImgIds) {
+      if (!images.find((i) => i.id === imgId)) {
+        throw new AppError({
+          message: `LLM requested image ${imgId} but it was not found`,
+          statusCode: 400,
+          code: 'NOT_FOUND',
+        });
+      }
+    }
 
     return {
-      grandParentId,
-      summary,
-      sources: selectedFiles.map((file) => ({
-        type: file.mimeType.startsWith('image/') ? 'image' : 'document',
-        id: file.id,
-        name: file.name,
-        mimeType: file.mimeType,
-      })),
-      risk,
-      modelUsed: this.openRouterModel,
+      selectedFiles: params.files.filter((f) => requestedDocIds.includes(f.id) || requestedImgIds.includes(f.id)),
     };
   }
 
-  private async collectContext(entityType: 'pool' | 'business', entityId: string) {
-    const modules =
-      entityType === 'pool'
-        ? await this.poolContext(entityId)
-        : await this.businessContext(entityId);
-
-    return { grandParentId: modules.grandParentId, blocks: modules.blocks };
-  }
-
-  private async poolContext(poolId: string) {
-    const pool = await this.fetchPool({ poolId });
-
-    if (!pool.poolAddress) {
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({ files: a[0].selectedFiles.length }),
+  })
+  async summarize(params: { context: string; selectedFiles: FileMeta[] }) {
+    if (params.selectedFiles.length > this.maxFilesPerRequest) {
       throw new AppError({
-        message: 'Pool is not deployed yet',
-        statusCode: 409,
-        code: 'NOT_DEPLOYED',
-      });
-    }
-
-    const business = await this.fetchBusiness({ businessId: pool.businessId });
-
-    const blocks = (
-      await Promise.all([
-        this.poolModule(pool),
-        this.businessModule(business),
-        this.siblingPoolsModule({ businessId: pool.businessId, excludeId: poolId }),
-        this.documentsModule({ parentId: poolId }),
-        this.galleryModule({ parentId: poolId }),
-        this.reactionsModule({ parentId: poolId, parentType: 'pool' }),
-        this.questionsModule({ parentId: poolId }),
-        pool.poolAddress ? this.portfolioModule({ poolAddress: pool.poolAddress }) : null,
-      ])
-    ).filter(Boolean) as { text: string; files?: FileMeta[] }[];
-
-    return { grandParentId: pool.businessId, blocks };
-  }
-
-  private async businessContext(businessId: string) {
-    const business = await this.fetchBusiness({ businessId });
-
-    if (!business.tokenAddress) {
-      throw new AppError({
-        message: 'Business is not deployed yet',
-        statusCode: 409,
-        code: 'NOT_DEPLOYED',
-      });
-    }
-
-    const blocks = (
-      await Promise.all([
-        this.businessModule(business),
-        this.poolsModule({ businessId }),
-        this.documentsModule({ parentId: businessId }),
-        this.galleryModule({ parentId: businessId }),
-        this.reactionsModule({ parentId: businessId, parentType: 'business' }),
-        this.questionsModule({ parentId: businessId }),
-      ])
-    ).filter(Boolean) as { text: string; files?: FileMeta[] }[];
-
-    return { grandParentId: businessId, blocks };
-  }
-
-  private async summarize(context: string, files: FileMeta[]) {
-    if (files.length > this.maxFilesPerRequest) {
-      throw new AppError({
-        message: `Too many files for OpenRouter request: ${files.length}. Maximum allowed: ${this.maxFilesPerRequest}`,
+        message: `Too many files for OpenRouter request: ${params.selectedFiles.length}. Maximum allowed: ${this.maxFilesPerRequest}`,
         statusCode: 400,
         code: 'VALIDATION_ERROR',
       });
@@ -164,7 +227,12 @@ export class RiskEvaluationService {
 
     const completion = await this.openRouterClient.chatCompletion({
       model: this.openRouterModel,
-      messages: [{ role: 'user', content: [{ type: 'text', text: context }, ...(await this.fileParts(files))] }],
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: params.context }, ...(await this.fileParts(params.selectedFiles))],
+        },
+      ],
     });
 
     const summary = (completion.choices[0]?.message?.content ?? '').trim();
@@ -177,30 +245,101 @@ export class RiskEvaluationService {
       });
     }
 
-    return summary;
+    return { summary };
   }
 
-  private async fileParts(files: FileMeta[]) {
-    const parts: Array<FileContentPart | ImageContentPart> = [];
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator()
+  async score(params: { summary: string }) {
+    const completion = await this.openRouterClient.chatCompletion({
+      model: this.openRouterModel,
+      messages: [
+        { role: 'system', content: SCORE_SYSTEM_PROMPT },
+        { role: 'user', content: params.summary },
+      ],
+    });
 
-    for (const file of files) {
-      if (file.mimeType.startsWith('image/')) {
-        parts.push({
-          type: 'image_url',
-          imageUrl: { url: this.useBase64Files ? await this.urlToBase64(file.url) : file.url },
-        });
-      } else {
-        parts.push({
-          type: 'file',
-          file: {
-            filename: file.name,
-            fileData: this.useBase64Files ? await this.urlToBase64(file.url) : file.url,
-          },
-        });
-      }
+    const parsed = this.parseLLMJsonResponse(completion.choices[0]?.message?.content ?? '');
+    const riskScore = Number(parsed.score);
+
+    if (!Number.isInteger(riskScore) || riskScore < 1 || riskScore > 100) {
+      throw new AppError({
+        message: `LLM returned invalid score: ${parsed.score}. Must be integer 1-100.`,
+        statusCode: 502,
+        code: 'AI_ERROR',
+      });
     }
 
-    return parts;
+    const toItems = (value: unknown) =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+        : [];
+
+    return { risk: { score: riskScore, pros: toItems(parsed.pros), cons: toItems(parsed.cons) } };
+  }
+
+  @TraceDecorator()
+  @MetricsDecorator()
+  @LogDecorator({
+    args: (a) => ({ evaluationId: a[0].evaluationId, entityType: a[0].entityType, entityId: a[0].entityId }),
+  })
+  async save(params: {
+    evaluationId: string;
+    entityType: 'pool' | 'business';
+    entityId: string;
+    ownerId: string;
+    ownerType: string;
+    grandParentId: string;
+    summary: string;
+    selectedFiles: FileMeta[];
+    risk: { score: number; pros: string[]; cons: string[] };
+  }) {
+    setSpanAttributes({ evaluationId: params.evaluationId, entityId: params.entityId, entityType: params.entityType });
+
+    const [existing] = await this.evaluationRepository.findAll({ _id: params.evaluationId }, undefined, 1);
+
+    if (existing) {
+      return { evaluationId: params.evaluationId };
+    }
+
+    const sources = params.selectedFiles.map((file) => ({
+      type: file.mimeType.startsWith('image/') ? 'image' : 'document',
+      id: file.id,
+      name: file.name,
+      mimeType: file.mimeType,
+    }));
+
+    const routingKey = params.entityType === 'pool' ? 'poolResult' : 'businessResult';
+
+    await mongoose.connection.transaction(async () => {
+      await this.evaluationRepository.create({
+        _id: new Types.ObjectId(params.evaluationId),
+        entityType: params.entityType,
+        parentId: params.entityId,
+        grandParentId: params.grandParentId,
+        ownerId: params.ownerId,
+        ownerType: params.ownerType,
+        summary: params.summary,
+        sources,
+        risk: params.risk,
+        modelUsed: this.openRouterModel,
+      });
+
+      await this.outboxPublisher.publish(
+        this.outboxPublisher.rabbitClient.getEvaluationExchange(),
+        routingKey,
+        {
+          evaluationId: params.evaluationId,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          riskScore: params.risk.score,
+        },
+        params.evaluationId,
+      );
+    });
+
+    return { evaluationId: params.evaluationId };
   }
 
   @TraceDecorator()
@@ -242,95 +381,91 @@ export class RiskEvaluationService {
     return evaluations.map((e) => this.mapEvaluation(e));
   }
 
-  private async selectFiles(summary: string, files: FileMeta[]) {
-    const documents = files.filter((f) => !f.mimeType.startsWith('image/'));
-    const images = files.filter((f) => f.mimeType.startsWith('image/'));
+  private async poolContext(poolId: string) {
+    const pool = await this.fetchPool({ poolId });
 
-    const hasDocuments = documents.length > 0;
-    const hasImages = images.length > 0;
-    const fileTypes = hasDocuments && hasImages ? 'documents and images' : hasDocuments ? 'documents' : 'images';
-
-    const systemMessage = `You are a risk assessment expert. Analyze the following summary and decide which ${fileTypes} you need to study for a detailed risk evaluation.
-
-${summary}
-
-Available documents:
-${documents.map((d) => `- id=${d.id}, name=${d.name}, mimeType=${d.mimeType}`).join('\n')}
-
-Available images:
-${images.map((i) => `- id=${i.id}, name=${i.name}`).join('\n')}
-
-Return JSON with the IDs of ${fileTypes} you want to examine:
-{
-${hasDocuments ? `  "requestedDocuments": ["docId1", "docId3"],\n` : ''}${hasImages ? `  "requestedImages": ["imgId2"]\n` : ''}}
-If you don't need any ${fileTypes}, return empty arrays.`;
-
-    const completion = await this.openRouterClient.chatCompletion({
-      model: this.openRouterModel,
-      messages: [
-        { role: 'system', content: systemMessage },
-        { role: 'user', content: `Which ${fileTypes} do you need for risk evaluation? Return JSON only.` },
-      ],
-    });
-
-    const llmResponse = completion.choices[0]?.message?.content ?? '';
-    const parsed = this.parseLLMJsonResponse(llmResponse);
-
-    const requestedDocIds: string[] = parsed.requestedDocuments ?? [];
-    const requestedImgIds: string[] = parsed.requestedImages ?? [];
-
-    for (const docId of requestedDocIds) {
-      if (!documents.find((d) => d.id === docId)) {
-        throw new AppError({
-          message: `LLM requested document ${docId} but it was not found`,
-          statusCode: 400,
-          code: 'NOT_FOUND',
-        });
-      }
-    }
-
-    for (const imgId of requestedImgIds) {
-      if (!images.find((i) => i.id === imgId)) {
-        throw new AppError({
-          message: `LLM requested image ${imgId} but it was not found`,
-          statusCode: 400,
-          code: 'NOT_FOUND',
-        });
-      }
-    }
-
-    const selectedFiles = files.filter((f) => requestedDocIds.includes(f.id) || requestedImgIds.includes(f.id));
-
-    return selectedFiles;
-  }
-
-  private async score(summary: string) {
-    const completion = await this.openRouterClient.chatCompletion({
-      model: this.openRouterModel,
-      messages: [
-        { role: 'system', content: SCORE_SYSTEM_PROMPT },
-        { role: 'user', content: summary },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? '';
-    const parsed = this.parseLLMJsonResponse(raw);
-    const riskScore = Number(parsed.score);
-
-    if (!Number.isInteger(riskScore) || riskScore < 1 || riskScore > 100) {
+    if (!pool.poolAddress) {
       throw new AppError({
-        message: `LLM returned invalid score: ${parsed.score}. Must be integer 1-100.`,
-        statusCode: 502,
-        code: 'AI_ERROR',
+        message: 'Pool is not deployed yet',
+        statusCode: 409,
+        code: 'NOT_DEPLOYED',
       });
     }
 
-    const toItems = (value: unknown) =>
-      Array.isArray(value)
-        ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-        : [];
+    const business = await this.fetchBusiness({ businessId: pool.businessId });
 
-    return { score: riskScore, pros: toItems(parsed.pros), cons: toItems(parsed.cons) };
+    const blocks = (
+      await Promise.all([
+        this.poolModule(pool),
+        this.businessModule(business),
+        this.siblingPoolsModule({ businessId: pool.businessId, excludeId: poolId }),
+        this.documentsModule({ parentId: poolId }),
+        this.galleryModule({ parentId: poolId }),
+        this.reactionsModule({ parentId: poolId, parentType: 'pool' }),
+        this.questionsModule({ parentId: poolId }),
+        this.portfolioModule({ poolAddress: pool.poolAddress }),
+      ])
+    ).filter(Boolean) as { text: string; files?: FileMeta[] }[];
+
+    return {
+      grandParentId: pool.businessId,
+      ownerId: pool.ownerId,
+      ownerType: pool.ownerType,
+      blocks,
+    };
+  }
+
+  private async businessContext(businessId: string) {
+    const business = await this.fetchBusiness({ businessId });
+
+    if (!business.tokenAddress) {
+      throw new AppError({
+        message: 'Business is not deployed yet',
+        statusCode: 409,
+        code: 'NOT_DEPLOYED',
+      });
+    }
+
+    const blocks = (
+      await Promise.all([
+        this.businessModule(business),
+        this.poolsModule({ businessId }),
+        this.documentsModule({ parentId: businessId }),
+        this.galleryModule({ parentId: businessId }),
+        this.reactionsModule({ parentId: businessId, parentType: 'business' }),
+        this.questionsModule({ parentId: businessId }),
+      ])
+    ).filter(Boolean) as { text: string; files?: FileMeta[] }[];
+
+    return {
+      grandParentId: businessId,
+      ownerId: business.ownerId,
+      ownerType: business.ownerType,
+      blocks,
+    };
+  }
+
+  private async fileParts(files: FileMeta[]) {
+    const parts: Array<FileContentPart | ImageContentPart> = [];
+
+    for (const file of files) {
+      if (file.mimeType.startsWith('image/')) {
+        parts.push({
+          type: 'image_url',
+          imageUrl: { url: this.useBase64Files ? await this.urlToBase64(file.url) : file.url },
+        });
+      } else {
+        parts.push({
+          type: 'file',
+          file: {
+            filename: file.name,
+            fileData: this.useBase64Files ? await this.urlToBase64(file.url) : file.url,
+          },
+        });
+      }
+    }
+
+    return parts;
   }
 
   private async poolModule(pool: any) {

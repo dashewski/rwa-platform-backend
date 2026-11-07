@@ -83,6 +83,7 @@ services:
       REACTIONS_SERVICE_URL: ${REACTIONS_SERVICE_URL}
       QUESTIONS_SERVICE_URL: ${QUESTIONS_SERVICE_URL}
       PORTFOLIO_SERVICE_URL: ${PORTFOLIO_SERVICE_URL}
+      REDIS_URL: ${REDIS_JOBS_URL}
     volumes: *monitoring-volumes
     networks:
       - app-network
@@ -90,6 +91,8 @@ services:
       mongodb:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis-jobs:
         condition: service_healthy
 
   auth:
@@ -794,6 +797,21 @@ services:
     networks:
       - app-network
 
+  redis-jobs:
+    restart: unless-stopped
+    image: redis:8.10.2
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    volumes:
+      - redis_jobs_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app-network
+
   redis-exporter:
     image: oliver006/redis_exporter:v1.93.0
     container_name: redis-exporter
@@ -1038,6 +1056,7 @@ services:
 
 volumes:
   redis_data:
+  redis_jobs_data:
   redisinsight_data:
   docs_data:
   service_logs:

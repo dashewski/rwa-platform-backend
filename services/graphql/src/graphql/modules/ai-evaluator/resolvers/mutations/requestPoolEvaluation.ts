@@ -1,7 +1,7 @@
 import { AppError } from '@shared/errors/app-errors';
 import type { MutationResolvers } from '../../../../generated/types';
 
-export const updatePoolRiskScore: MutationResolvers['updatePoolRiskScore'] = async (
+export const requestPoolEvaluation: MutationResolvers['requestPoolEvaluation'] = async (
   _parent,
   { id },
   { services, clients, user },
@@ -35,22 +35,22 @@ export const updatePoolRiskScore: MutationResolvers['updatePoolRiskScore'] = asy
     permission: 'content',
   });
 
-  if (!pool.poolAddress) {
-    throw new AppError({
-      message: 'Pool is not deployed yet',
-      statusCode: 409,
-      code: 'NOT_DEPLOYED',
-    });
-  }
-
-  const response = await clients.aiEvaluatorClient.evaluate.post({
+  const response = await clients.aiEvaluatorClient.jobEvaluation.post({
     entityType: 'pool',
     entityId: id,
-    ownerId: pool.ownerId,
-    ownerType: pool.ownerType,
   });
 
-  if (response.error) {
+  if (!response.data || response.error) {
+    const error = response.error as { error?: { code?: string; message?: string } };
+
+    if (response.status === 429 || response.status === 409) {
+      throw new AppError({
+        message: error.error?.message ?? 'Evaluation is not available',
+        statusCode: response.status,
+        code: error.error?.code ?? 'EVALUATION_UNAVAILABLE',
+      });
+    }
+
     throw new AppError({
       message: 'Failed to request pool evaluation',
       statusCode: 502,

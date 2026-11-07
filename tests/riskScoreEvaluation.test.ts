@@ -236,7 +236,7 @@ describe("Risk Score Evaluation", () => {
     // ── Evaluate ──
     const result = await makeGraphQLRequest(UPDATE_BUSINESS_RISK_SCORE, { id: businessId }, accessToken);
     expect(result.errors).toBeUndefined();
-    expect(typeof result.data.updateBusinessRiskScore).toBe('string');
+    expect(typeof result.data.requestBusinessEvaluation).toBe('string');
 
     const riskScore = await waitForRiskScore({ businessId, accessToken });
     console.log(`\n  [GOOD BUSINESS - Coffee Shop]  riskScore = ${riskScore}\n`);
@@ -357,7 +357,7 @@ describe("Risk Score Evaluation", () => {
     // ── Evaluate ──
     const result = await makeGraphQLRequest(UPDATE_BUSINESS_RISK_SCORE, { id: businessId }, accessToken);
     expect(result.errors).toBeUndefined();
-    expect(typeof result.data.updateBusinessRiskScore).toBe('string');
+    expect(typeof result.data.requestBusinessEvaluation).toBe('string');
 
     const riskScore = await waitForRiskScore({ businessId, accessToken });
     console.log(`\n  [BAD BUSINESS - Crypto Pyramid]  riskScore = ${riskScore}\n`);

@@ -27,22 +27,17 @@ export const evaluationSchema = t.Object({
   updatedAt: t.Number(),
 });
 
-/* Start evaluation */
-export const startEvaluationRequest = t.Object({
+export const jobEvaluationRequest = t.Object({
   entityType: entityTypeSchema,
-  entityId: t.String(),
-  ownerId: t.String(),
-  ownerType: t.String(),
+  entityId: t.String({ minLength: 1 }),
 });
-export const startEvaluationResponse = t.Object({
+export const jobEvaluationResponse = t.Object({
   evaluationId: t.String(),
 });
 
-/* Get evaluation */
 export const getEvaluationRequest = t.Pick(evaluationSchema, ['id']);
 export const getEvaluationResponse = evaluationSchema;
 
-/* Get evaluations list */
 export const getEvaluationsRequest = t.Object({
   filter: t.Record(t.String(), t.Any()),
   sort: t.Optional(t.Record(t.String(), t.Union([t.Literal('asc'), t.Literal('desc')]))),

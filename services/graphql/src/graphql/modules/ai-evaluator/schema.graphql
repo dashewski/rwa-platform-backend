@@ -56,6 +56,6 @@ extend type Query {
 }
 
 extend type Mutation {
-  updateBusinessRiskScore(id: ID!): ID!
-  updatePoolRiskScore(id: ID!): ID!
+  requestBusinessEvaluation(id: ID!): ID!
+  requestPoolEvaluation(id: ID!): ID!
 }

@@ -48,6 +48,10 @@ export function createFakeRabbitMQClient() {
 
     isExchangeRegistered: mock((_exchange: string) => true),
 
+    getEvaluationExchange: () => 'evaluation',
+
+    getEvaluationRequestsQueue: () => 'evaluation.requests',
+
     getExchange: mock((name: string) => name),
 
     getQueue: mock((name: string) => name),
@@ -105,8 +109,6 @@ export function createConsumeMessage(body: unknown, routingKey = 'requests'): Co
   const content = typeof body === 'string' ? body : JSON.stringify(body);
 
   return {
-    getEvaluationRequestsQueue: () => 'evaluation.requests',
-
     content: Buffer.from(content),
     fields: {
       routingKey,
