@@ -107,6 +107,7 @@ describe('RabbitMQ topology over the real broker', () => {
       'blockchain.events.portfolio',
     ];
     const finite = [
+      'evaluation.requests',
       'evaluation.results',
       'sign.responses',
       ...SIGNER_NAMES.map((name) => `sign.requests.${name}`),
@@ -206,11 +207,11 @@ describe('RabbitMQ topology over the real broker', () => {
     };
     const consumerTopology = consumer.getTopologyDefinition() as unknown as typeof producerTopology;
 
-    const producerExchange = producerTopology.exchanges.evaluation;
-    const consumerExchange = consumerTopology.exchanges.evaluation;
+    const producerExchange = producerTopology.exchanges['evaluation.results'];
+    const consumerExchange = consumerTopology.exchanges['evaluation.results'];
 
     expect(producerExchange).toEqual(consumerExchange);
-    expect(consumerTopology.queues['evaluation.results'].bindings.evaluation).toEqual([
+    expect(consumerTopology.queues['evaluation.results'].bindings['evaluation.results']).toEqual([
       'poolResult',
       'businessResult',
     ]);

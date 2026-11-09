@@ -9,6 +9,7 @@ export class OutboxPublisherDaemon extends BaseOutboxPublisherDaemon {
         isSync: false,
         concurrency: 5,
         maxAttempts: 5,
+        retryDelaySeconds: 30,
       },
     });
   }

@@ -5,20 +5,42 @@ export class RabbitMQClient extends BaseRabbitMQClient {
     super(uri, 'ai-evaluator');
   }
 
-  getEvaluationExchange() {
-    return 'evaluation';
+  getEvaluationRequestsExchange() {
+    return 'evaluation.requests';
+  }
+
+  getEvaluationResultsExchange() {
+    return 'evaluation.results';
+  }
+
+  getEvaluationRequestsQueue() {
+    return 'evaluation.requests';
   }
 
   getTopologyDefinition() {
     return {
       exchanges: {
-        [this.getEvaluationExchange()]: {
+        [this.getEvaluationRequestsExchange()]: {
+          type: 'direct' as const,
+          options: { durable: true },
+          allowUnrouted: false,
+        },
+        [this.getEvaluationResultsExchange()]: {
           type: 'direct' as const,
           options: { durable: true },
           allowUnrouted: false,
         },
       },
-      queues: {},
+      queues: {
+        [this.getEvaluationRequestsQueue()]: {
+          options: { durable: true },
+          deferAfterAttempts: 3,
+          parkAfterCycles: 3,
+          bindings: {
+            [this.getEvaluationRequestsExchange()]: ['evaluate'],
+          },
+        },
+      },
     };
   }
 }

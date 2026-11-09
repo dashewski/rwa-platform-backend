@@ -46,13 +46,17 @@ const outboxPublisherMessageSchemaDefinition = {
     required: true,
     default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   },
+  nextAttemptAt: {
+    type: Date,
+    default: () => new Date(),
+  },
 } as const;
 
 export const outboxPublisherMessageSchema = new Schema(outboxPublisherMessageSchemaDefinition, {
   timestamps: { currentTime: () => Math.floor(Date.now() / 1000) },
 });
 
-outboxPublisherMessageSchema.index({ exchange: 1, status: 1, _id: 1 });
+outboxPublisherMessageSchema.index({ exchange: 1, status: 1, nextAttemptAt: 1, _id: 1 });
 outboxPublisherMessageSchema.index({ exchange: 1, messageId: 1 }, { unique: true });
 outboxPublisherMessageSchema.index({ ttlDate: 1 }, { expireAfterSeconds: 0 });
 

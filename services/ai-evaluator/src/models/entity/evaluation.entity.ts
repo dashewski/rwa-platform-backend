@@ -15,24 +15,52 @@ const evaluationSchemaDefinition = {
   },
   grandParentId: {
     type: String,
-    required: true,
     trim: true,
+    default: null,
   },
   ownerId: {
     type: String,
-    required: true,
     trim: true,
+    default: null,
   },
   ownerType: {
     type: String,
-    required: true,
     trim: true,
+    default: null,
+  },
+  context: {
+    type: {
+      text: { type: String, required: true },
+      files: [
+        {
+          id: { type: String, required: true },
+          name: { type: String, required: true },
+          mimeType: { type: String, required: true },
+          url: { type: String, required: true },
+        },
+      ],
+    },
+    default: null,
+  },
+  selection: {
+    type: {
+      files: [
+        {
+          id: { type: String, required: true },
+          name: { type: String, required: true },
+          mimeType: { type: String, required: true },
+          url: { type: String, required: true },
+        },
+      ],
+    },
+    default: null,
   },
   risk: {
     score: {
       type: Number,
       min: 1,
       max: 100,
+      default: null,
     },
     pros: {
       type: [String],
@@ -45,7 +73,7 @@ const evaluationSchemaDefinition = {
   },
   summary: {
     type: String,
-    required: true,
+    default: null,
   },
   sources: {
     type: [
@@ -68,6 +96,10 @@ const evaluationSchemaDefinition = {
   updatedAt: {
     type: Number,
     default: () => Math.floor(Date.now() / 1000),
+  },
+  completed: {
+    type: Boolean,
+    default: false,
   },
 } as const;
 

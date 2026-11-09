@@ -8,8 +8,8 @@ export class RabbitMQClient extends BaseRabbitMQClient {
     super(uri, 'rwa');
   }
 
-  getEvaluationExchange() {
-    return 'evaluation';
+  getEvaluationResultsExchange() {
+    return 'evaluation.results';
   }
 
   getEvaluationResultsQueue() {
@@ -31,7 +31,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
   getTopologyDefinition() {
     return {
       exchanges: {
-        [this.getEvaluationExchange()]: {
+        [this.getEvaluationResultsExchange()]: {
           type: 'direct' as const,
           options: { durable: true },
           allowUnrouted: false,
@@ -49,7 +49,7 @@ export class RabbitMQClient extends BaseRabbitMQClient {
           deferAfterAttempts: 3,
           parkAfterCycles: 3,
           bindings: {
-            [this.getEvaluationExchange()]: ['poolResult', 'businessResult'],
+            [this.getEvaluationResultsExchange()]: ['poolResult', 'businessResult'],
           },
         },
         ...Object.fromEntries(

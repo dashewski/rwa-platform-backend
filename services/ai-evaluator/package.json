@@ -12,7 +12,7 @@
     "@shared/errors": "workspace:*",
     "@shared/rabbitmq": "workspace:*",
     "@shared/outbox-publisher": "workspace:*",
-    "@shared/job-queue": "workspace:*",
+    "@shared/inbox-consumer": "workspace:*",
     "@shared/openrouter": "workspace:*",
     "@services/rwa": "workspace:*",
     "@services/documents": "workspace:*",

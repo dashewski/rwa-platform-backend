@@ -5,15 +5,15 @@ export const evaluationSchema = t.Object({
   id: t.String(),
   entityType: entityTypeSchema,
   parentId: t.String(),
-  grandParentId: t.String(),
-  ownerId: t.String(),
-  ownerType: t.String(),
+  grandParentId: t.Optional(t.String()),
+  ownerId: t.Optional(t.String()),
+  ownerType: t.Optional(t.String()),
   risk: t.Object({
     score: t.Optional(t.Number()),
     pros: t.Array(t.String()),
     cons: t.Array(t.String()),
   }),
-  summary: t.String(),
+  summary: t.Optional(t.String()),
   sources: t.Array(
     t.Object({
       type: t.String(),
@@ -23,15 +23,17 @@ export const evaluationSchema = t.Object({
     }),
   ),
   modelUsed: t.Optional(t.String()),
+  completed: t.Boolean(),
+  completedAt: t.Optional(t.Number()),
   createdAt: t.Number(),
   updatedAt: t.Number(),
 });
 
-export const jobEvaluationRequest = t.Object({
+export const evaluateRequest = t.Object({
   entityType: entityTypeSchema,
   entityId: t.String({ minLength: 1 }),
 });
-export const jobEvaluationResponse = t.Object({
+export const evaluateResponse = t.Object({
   evaluationId: t.String(),
 });
 

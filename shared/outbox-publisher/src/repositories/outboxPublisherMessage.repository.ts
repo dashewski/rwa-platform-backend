@@ -28,7 +28,11 @@ export class OutboxPublisherMessageRepository {
   async claimNext(exchange: string) {
     return await this.model
       .findOneAndUpdate(
-        { status: 'pending', exchange },
+        {
+          status: 'pending',
+          exchange,
+          $or: [{ nextAttemptAt: { $exists: false } }, { nextAttemptAt: { $lte: new Date() } }],
+        },
         { $set: { status: 'sending' } },
         { sort: { _id: 1 }, new: true },
       )
@@ -49,13 +53,20 @@ export class OutboxPublisherMessageRepository {
   }
 
   @TraceDecorator()
-  async markAttemptFailed(id: Types.ObjectId | string, maxAttempts: number) {
+  async markAttemptFailed(id: Types.ObjectId | string, maxAttempts: number, retryDelaySeconds: number) {
+    const nextAttemptAt = new Date(Date.now() + retryDelaySeconds * 1000);
+
     return await this.model
       .findOneAndUpdate(
         { _id: id },
         [
           { $set: { attempts: { $add: ['$attempts', 1] } } },
-          { $set: { status: { $cond: [{ $gte: ['$attempts', maxAttempts] }, 'failed', 'sending'] } } },
+          {
+            $set: {
+              status: { $cond: [{ $gte: ['$attempts', maxAttempts] }, 'failed', 'sending'] },
+              nextAttemptAt,
+            },
+          },
         ],
         { new: true },
       )

@@ -1,17 +1,18 @@
 import { Elysia } from 'elysia';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { OutboxPublisherDaemon } from '../daemons/outboxPublisher.daemon';
-import { JobQueueDaemon } from '../daemons/jobQueue.daemon';
+import { InboxConsumerDaemon } from '../daemons/inboxConsumer.daemon';
 import type { ClientsPlugin } from './clients.plugin';
 import type { ServicesPlugin } from './services.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 
 export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, servicesPlugin: ServicesPlugin) => {
-  const jobQueueDaemon = withTraceSync(
-    'ai-evaluator.init.daemons.evaluation_job',
+  const inboxConsumerDaemon = withTraceSync(
+    'ai-evaluator.init.daemons.inbox_consumer',
     () =>
-      new JobQueueDaemon(
-        clientsPlugin.decorator.jobQueueClient,
+      new InboxConsumerDaemon(
+        clientsPlugin.decorator.rabbitMQClient,
+        servicesPlugin.decorator.inboxConsumerService,
         servicesPlugin.decorator.evaluationService,
       ),
   );
@@ -28,7 +29,7 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
   await withTraceAsync('ai-evaluator.init.daemons.initialize', async () => {
     logger.debug('Initializing daemons');
     await outboxPublisherDaemon.initialize();
-    await jobQueueDaemon.initialize();
+    await inboxConsumerDaemon.initialize();
     logger.info('Daemons initialized');
   });
 
@@ -37,11 +38,11 @@ export const createDaemonsPlugin = async (clientsPlugin: ClientsPlugin, services
       .use(clientsPlugin)
       .use(servicesPlugin)
       .decorate('outboxPublisherDaemon', outboxPublisherDaemon)
-      .decorate('jobQueueDaemon', jobQueueDaemon)
+      .decorate('inboxConsumerDaemon', inboxConsumerDaemon)
       .onStop(async () => {
         await withTraceAsync('ai-evaluator.stop.daemons_plugin', async () => {
           await outboxPublisherDaemon.stop();
-          await jobQueueDaemon.stop();
+          await inboxConsumerDaemon.stop();
           logger.info('Daemons stopped');
         });
       }),

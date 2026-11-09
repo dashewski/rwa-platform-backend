@@ -10,7 +10,7 @@ COPY shared/openrouter/package.json ./shared/openrouter/
 COPY shared/files/package.json ./shared/files/
 COPY shared/rabbitmq/package.json ./shared/rabbitmq/
 COPY shared/outbox-publisher/package.json ./shared/outbox-publisher/
-COPY shared/job-queue/package.json ./shared/job-queue/
+COPY shared/inbox-consumer/package.json ./shared/inbox-consumer/
 COPY shared/redis-events/package.json ./shared/redis-events/
 
 COPY bun.lockb .

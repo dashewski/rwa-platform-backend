@@ -34,6 +34,7 @@ const EVALUATION: Evaluation = {
   summary: 'summary text',
   sources: [],
   modelUsed: 'gpt-x',
+  completed: false,
   createdAt: 1700000000,
   updatedAt: 1700000001,
 };
@@ -160,12 +161,12 @@ describe('risk score mutations (unit, fake clients)', () => {
   test('requestPoolEvaluation queues an evaluation task for a deployed pool', async () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.rwaClient.getPool.post.mockImplementation(async () => edenOk(POOL));
-    fake.clients.aiEvaluatorClient.jobEvaluation.post.mockImplementation(async () => edenOk({ evaluationId: 'task-1' }));
+    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'task-1' }));
 
     const result = await requestPoolEvaluation!(null as never, { id: 'pool-1' }, asContext(fake), INFO);
 
     expect(result).toBe('task-1');
-    expect(fake.clients.aiEvaluatorClient.jobEvaluation.post).toHaveBeenCalledWith({
+    expect(fake.clients.aiEvaluatorClient.evaluate.post).toHaveBeenCalledWith({
       entityType: 'pool',
       entityId: 'pool-1',
     });
@@ -174,7 +175,7 @@ describe('risk score mutations (unit, fake clients)', () => {
   test('requestBusinessEvaluation queues an evaluation task for a deployed business', async () => {
     const fake = createFakeContext({ user: fakeUser });
     fake.clients.rwaClient.getBusiness.post.mockImplementation(async () => edenOk(BUSINESS));
-    fake.clients.aiEvaluatorClient.jobEvaluation.post.mockImplementation(async () => edenOk({ evaluationId: 'task-2' }));
+    fake.clients.aiEvaluatorClient.evaluate.post.mockImplementation(async () => edenOk({ evaluationId: 'task-2' }));
 
     const result = await requestBusinessEvaluation!(null as never, { id: 'business-1' }, asContext(fake), INFO);
 

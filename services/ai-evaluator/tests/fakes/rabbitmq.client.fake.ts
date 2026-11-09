@@ -48,7 +48,9 @@ export function createFakeRabbitMQClient() {
 
     isExchangeRegistered: mock((_exchange: string) => true),
 
-    getEvaluationExchange: () => 'evaluation',
+    getEvaluationRequestsExchange: () => 'evaluation.requests',
+
+    getEvaluationResultsExchange: () => 'evaluation.results',
 
     getEvaluationRequestsQueue: () => 'evaluation.requests',
 
@@ -105,7 +107,7 @@ export type FakeRabbitMQClient = ReturnType<typeof createFakeRabbitMQClient>;
  * sends it as the raw body (useful for malformed-payload tests), any other value
  * is JSON stringified like the producers of evaluation.requests do.
  */
-export function createConsumeMessage(body: unknown, routingKey = 'requests'): ConsumeMessage {
+export function createConsumeMessage(body: unknown, routingKey = 'evaluate'): ConsumeMessage {
   const content = typeof body === 'string' ? body : JSON.stringify(body);
 
   return {
@@ -114,7 +116,7 @@ export function createConsumeMessage(body: unknown, routingKey = 'requests'): Co
       routingKey,
       redelivered: false,
       deliveryTag: 1,
-      exchange: 'evaluation',
+      exchange: 'evaluation.requests',
       consumerTag: 'ctag',
     },
     properties: { messageId: 'msg-1' },

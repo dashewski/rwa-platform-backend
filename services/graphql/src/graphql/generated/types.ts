@@ -319,17 +319,19 @@ export type EntityReactionsResponse = {
 
 export type Evaluation = {
   __typename?: 'Evaluation';
+  completed: Scalars['Boolean']['output'];
+  completedAt?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['Float']['output'];
   entityType: EvaluationEntityType;
-  grandParentId: Scalars['String']['output'];
+  grandParentId?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   modelUsed?: Maybe<Scalars['String']['output']>;
-  ownerId: Scalars['String']['output'];
-  ownerType: Scalars['String']['output'];
+  ownerId?: Maybe<Scalars['String']['output']>;
+  ownerType?: Maybe<Scalars['String']['output']>;
   parentId: Scalars['String']['output'];
   risk: EvaluationRisk;
   sources: Array<EvaluationSource>;
-  summary: Scalars['String']['output'];
+  summary?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['Float']['output'];
 };
 
@@ -2612,17 +2614,19 @@ export type EntityReactionsResponseResolvers<ContextType = GraphQLContext, Paren
 }>;
 
 export type EvaluationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Evaluation'] = ResolversParentTypes['Evaluation']> = ResolversObject<{
+  completed?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  completedAt?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   entityType?: Resolver<ResolversTypes['EvaluationEntityType'], ParentType, ContextType>;
-  grandParentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  grandParentId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   modelUsed?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  ownerId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  ownerType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  ownerId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  ownerType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   parentId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   risk?: Resolver<ResolversTypes['EvaluationRisk'], ParentType, ContextType>;
   sources?: Resolver<Array<ResolversTypes['EvaluationSource']>, ParentType, ContextType>;
-  summary?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  summary?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   updatedAt?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;

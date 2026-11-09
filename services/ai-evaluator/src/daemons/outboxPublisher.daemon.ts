@@ -5,10 +5,17 @@ import type { RabbitMQClient } from '../clients/rabbitmq.client';
 export class OutboxPublisherDaemon extends BaseOutboxPublisherDaemon {
   constructor(publisherService: OutboxPublisherService, rabbitClient: RabbitMQClient) {
     super(publisherService, 500, {
-      [rabbitClient.getEvaluationExchange()]: {
+      [rabbitClient.getEvaluationRequestsExchange()]: {
         isSync: false,
         concurrency: 5,
         maxAttempts: 10,
+        retryDelaySeconds: 30,
+      },
+      [rabbitClient.getEvaluationResultsExchange()]: {
+        isSync: false,
+        concurrency: 5,
+        maxAttempts: 10,
+        retryDelaySeconds: 30,
       },
     });
   }

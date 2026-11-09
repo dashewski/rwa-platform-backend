@@ -34,7 +34,13 @@ export class OutboxPublisherService<TRabbitMQClient extends BaseRabbitMQClient =
   }
 
   @TraceDecorator()
-  async processOutbox(exchange: string, isSync: boolean, concurrency: number, maxAttempts: number): Promise<void> {
+  async processOutbox(
+    exchange: string,
+    isSync: boolean,
+    concurrency: number,
+    maxAttempts: number,
+    retryDelaySeconds: number,
+  ): Promise<void> {
     await this.outboxPublisherMessageRepository.releaseSending(exchange);
 
     const inFlight = new Set<Promise<boolean>>();
@@ -47,7 +53,7 @@ export class OutboxPublisherService<TRabbitMQClient extends BaseRabbitMQClient =
       const message = await this.claimNext(exchange);
       if (!message) break;
 
-      const sending = this.send(exchange, message, maxAttempts);
+      const sending = this.send(exchange, message, maxAttempts, retryDelaySeconds);
 
       if (isSync) {
         if (!(await sending)) break;
@@ -67,6 +73,7 @@ export class OutboxPublisherService<TRabbitMQClient extends BaseRabbitMQClient =
     exchange: string,
     message: NonNullable<Awaited<ReturnType<OutboxPublisherMessageRepository['claimNext']>>>,
     maxAttempts: number,
+    retryDelaySeconds: number,
   ): Promise<boolean> {
     try {
       await this.rabbitClient.publish(exchange, message.routingKey, message.payload, {
@@ -80,7 +87,7 @@ export class OutboxPublisherService<TRabbitMQClient extends BaseRabbitMQClient =
       logger.error(`Outbox publisher "${exchange}": outbox send failed; the next pass retries it:`, error);
 
       const failedAttempt = await this.outboxPublisherMessageRepository
-        .markAttemptFailed(message._id, maxAttempts)
+        .markAttemptFailed(message._id, maxAttempts, retryDelaySeconds)
         .catch(() => null);
 
       if (failedAttempt?.status === 'failed') {

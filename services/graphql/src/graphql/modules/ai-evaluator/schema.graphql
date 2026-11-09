@@ -20,13 +20,15 @@ type Evaluation {
   id: ID!
   entityType: EvaluationEntityType!
   parentId: String!
-  grandParentId: String!
-  ownerId: String!
-  ownerType: String!
+  grandParentId: String
+  ownerId: String
+  ownerType: String
   risk: EvaluationRisk!
-  summary: String!
+  summary: String
   sources: [EvaluationSource!]!
   modelUsed: String
+  completed: Boolean!
+  completedAt: Float
   createdAt: Float!
   updatedAt: Float!
 }

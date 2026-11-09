@@ -185,7 +185,7 @@ describe('inbox + outbox over the real stack', () => {
     }, { prefetch: 1 });
 
     await outbox.publish(EXCHANGE, 'task', { n: 2 }, 'io-sent-1');
-    await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY);
+    await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY, 0);
 
     await waitFor(() => received.includes('io-sent-1'), 10_000);
 
@@ -200,8 +200,8 @@ describe('inbox + outbox over the real stack', () => {
   test('an unroutable outbox message burns its attempts and ends up failed', async () => {
     await outbox.publish(EXCHANGE, 'nobody_binds_this', { n: 3 }, 'io-failed-1');
 
-    await outbox.processOutbox(EXCHANGE, true, 1, 2);
-    await outbox.processOutbox(EXCHANGE, true, 1, 2);
+    await outbox.processOutbox(EXCHANGE, true, 1, 2, 0);
+    await outbox.processOutbox(EXCHANGE, true, 1, 2, 0);
 
     const row = await OutboxPublisherMessageEntity.findOne({ exchange: EXCHANGE, messageId: 'io-failed-1' }).lean();
 
@@ -328,7 +328,7 @@ describe('inbox + outbox over the real stack', () => {
     await Bun.sleep(3_000);
 
     // the publish fails, the row stays sending and is retried on the next pass
-    await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY);
+    await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY, 0);
 
     const during = await OutboxPublisherMessageEntity.findOne({ messageId: 'io-outage-1' }).lean();
     expect(during?.status).toBe('sending');
@@ -346,7 +346,7 @@ describe('inbox + outbox over the real stack', () => {
 
     await waitFor(async () => {
       try {
-        await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY);
+        await outbox.processOutbox(EXCHANGE, true, 1, Number.POSITIVE_INFINITY, 0);
         return received.includes('io-outage-1');
       } catch {
         return false;

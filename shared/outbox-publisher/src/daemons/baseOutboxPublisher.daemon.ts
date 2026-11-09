@@ -14,6 +14,7 @@ export abstract class BaseOutboxPublisherDaemon {
         isSync: boolean;
         concurrency: number;
         maxAttempts: number;
+        retryDelaySeconds: number;
       }
     >,
   ) {}
@@ -42,7 +43,13 @@ export abstract class BaseOutboxPublisherDaemon {
     const config = this.exchangesConfig[exchange]!;
 
     try {
-      await this.publisherService.processOutbox(exchange, config.isSync, config.concurrency, config.maxAttempts);
+      await this.publisherService.processOutbox(
+        exchange,
+        config.isSync,
+        config.concurrency,
+        config.maxAttempts,
+        config.retryDelaySeconds,
+      );
     } catch (error) {
       logger.error(`Outbox publisher daemon "${exchange}": outbox pass failed`, error);
     }

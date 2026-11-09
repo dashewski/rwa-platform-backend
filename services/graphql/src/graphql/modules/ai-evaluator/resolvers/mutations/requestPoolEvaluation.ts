@@ -35,7 +35,7 @@ export const requestPoolEvaluation: MutationResolvers['requestPoolEvaluation'] =
     permission: 'content',
   });
 
-  const response = await clients.aiEvaluatorClient.jobEvaluation.post({
+  const response = await clients.aiEvaluatorClient.evaluate.post({
     entityType: 'pool',
     entityId: id,
   });

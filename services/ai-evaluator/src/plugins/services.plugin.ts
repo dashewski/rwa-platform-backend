@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { EvaluationService } from '../services/evaluation.service';
-import { JobQueueService } from '@shared/job-queue/src/services/jobQueue.service';
+import { InboxConsumerService } from '@shared/inbox-consumer';
 import type { RepositoriesPlugin } from './repositories.plugin';
 import type { ClientsPlugin } from './clients.plugin';
 import { OutboxPublisherService } from '@shared/outbox-publisher';
@@ -11,7 +11,6 @@ export const createServicesPlugin = (
   clientsPlugin: ClientsPlugin,
   openRouterModel: string,
   maxFilesPerRequest: number,
-  cooldownSeconds: number,
 ) => {
   const outboxPublisherService = withTraceSync(
     'ai-evaluator.init.services.outbox_publisher',
@@ -22,9 +21,9 @@ export const createServicesPlugin = (
       ),
   );
 
-  const jobQueueService = withTraceSync(
-    'ai-evaluator.init.services.job_runner',
-    () => new JobQueueService(clientsPlugin.decorator.jobQueueClient),
+  const inboxConsumerService = withTraceSync(
+    'ai-evaluator.init.services.inbox_consumer',
+    () => new InboxConsumerService(repositoriesPlugin.decorator.inboxConsumerMessageRepository),
   );
 
   const evaluationService = withTraceSync(
@@ -32,8 +31,7 @@ export const createServicesPlugin = (
     () =>
       new EvaluationService(
         repositoriesPlugin.decorator.evaluationRepository,
-        jobQueueService,
-        clientsPlugin.decorator.jobQueueClient,
+        repositoriesPlugin.decorator.evaluationLockRepository,
         clientsPlugin.decorator.openRouterClient,
         clientsPlugin.decorator.rwaClient,
         clientsPlugin.decorator.documentsClient,
@@ -44,7 +42,6 @@ export const createServicesPlugin = (
         outboxPublisherService,
         openRouterModel,
         maxFilesPerRequest,
-        cooldownSeconds,
       ),
   );
 
@@ -53,7 +50,7 @@ export const createServicesPlugin = (
       .use(repositoriesPlugin)
       .use(clientsPlugin)
       .decorate('outboxPublisherService', outboxPublisherService)
-      .decorate('jobQueueService', jobQueueService)
+      .decorate('inboxConsumerService', inboxConsumerService)
       .decorate('evaluationService', evaluationService),
   );
 

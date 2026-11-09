@@ -1,7 +1,6 @@
 import { Elysia } from 'elysia';
 import { OpenRouterClient } from '@shared/openrouter/client';
 import { RabbitMQClient } from '../clients/rabbitmq.client';
-import { JobQueueClient } from '../clients/jobQueue.client';
 import { logger } from '@shared/monitoring/src/monitoring.plugin';
 import { withTraceSync, withTraceAsync } from '@shared/monitoring/src/tracing';
 import {
@@ -23,7 +22,6 @@ export const createClientsPlugin = async (
   questionsServiceUrl: string,
   portfolioServiceUrl: string,
   rabbitMqUri: string,
-  redisUrl: string,
 ) => {
   const openRouterClient = withTraceSync(
     'ai-evaluator.init.clients.openrouter',
@@ -60,14 +58,6 @@ export const createClientsPlugin = async (
     logger.info('RabbitMQ client initialized');
   });
 
-  const jobQueueClient = withTraceSync('ai-evaluator.init.clients.job_queue', () => new JobQueueClient(redisUrl));
-
-  await withTraceAsync('ai-evaluator.init.clients.bullmq_connect', async () => {
-    logger.debug('Initializing BullMQ client');
-    await jobQueueClient.initialize();
-    logger.info('BullMQ client initialized');
-  });
-
   const plugin = withTraceSync('ai-evaluator.init.clients.plugin', () =>
     new Elysia({ name: 'Clients' })
       .decorate('openRouterClient', openRouterClient)
@@ -78,10 +68,8 @@ export const createClientsPlugin = async (
       .decorate('questionsClient', questionsClient)
       .decorate('portfolioClient', portfolioClient)
       .decorate('rabbitMQClient', rabbitMQClient)
-      .decorate('jobQueueClient', jobQueueClient)
       .onStop(async () => {
         await withTraceAsync('ai-evaluator.stop.clients', async () => {
-          await jobQueueClient.disconnect();
           await rabbitMQClient.disconnect();
           logger.info('Clients disconnected');
         });
